@@ -2,6 +2,7 @@ package com.jpcottin.drifttank.ui.tank
 
 import android.view.Surface
 import com.jpcottin.drifttank.engine.EngineStats
+import com.jpcottin.drifttank.engine.FoodKind
 import com.jpcottin.drifttank.engine.TankEngine
 import com.jpcottin.drifttank.engine.VulkanState
 import com.jpcottin.drifttank.world.Camera
@@ -22,6 +23,8 @@ class FakeEngine : TankEngine {
     var lastQuality: QualityTier? = null
     var deterministic: Pair<Boolean, Long>? = null
     val taps = mutableListOf<Vec2>()
+    data class Drop(val at: Vec2, val kind: FoodKind, val count: Int)
+    val drops = mutableListOf<Drop>()
     var surfaces = 0
     var closed = false
     var stats = EngineStats(vulkan = VulkanState.RENDERING, fps = 60f)
@@ -36,6 +39,7 @@ class FakeEngine : TankEngine {
     override fun remove(id: EntityId) { creatures.remove(id) }
     override fun clear() = creatures.clear()
     override fun tap(at: Vec2) { taps += at }
+    override fun dropFood(at: Vec2, kind: FoodKind, count: Int) { drops += Drop(at, kind, count) }
     override fun stats(): EngineStats = stats
     override fun gpuName(): String = "Fake GPU"
     override fun close() { closed = true }

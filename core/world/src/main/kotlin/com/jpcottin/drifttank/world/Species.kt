@@ -42,6 +42,18 @@ data class Species(
     val bodyWidth: Float,
     /** Tail beats per second at one body length per second. */
     val tailBeatHz: Float,
+    /** How far food is smelled, relative to the others (1 = a keen nose). */
+    val smell: Float,
+    /** Food taken in one bite, in mg. */
+    val biteMg: Float,
+    /** Fraction of what is left of a piece that breaks off as crumbs at each bite. */
+    val messiness: Float,
+    /** Food that takes it from starving (hunger 1) to full (hunger 0), in mg. */
+    val stomachMg: Float,
+    /** Hunger gained per second; 0 = full, 1 = starving. */
+    val hungerPerSecond: Float,
+    /** Eats what has sunk to the sand, not only what drifts in the water. */
+    val bottomFeeder: Boolean,
     /** How many come with a new tank, and how many one "add" releases. */
     val defaultCount: Int,
     val addBatch: Int,
@@ -54,6 +66,7 @@ data class Species(
         require(schooling in 0f..1f && shyness in 0f..1f)
         require(bodyWidth in 0.05f..1f)
         require(addBatch >= 1 && defaultCount >= 0)
+        require(smell >= 0f && biteMg > 0f && messiness in 0f..1f && stomachMg > 0f && hungerPerSecond >= 0f)
     }
 
     /** The parameters handed to the native simulation, in [NativeParam] order. */
@@ -67,6 +80,12 @@ data class Species(
         it[NativeParam.TURN_RATE] = turnRateRadPerS
         it[NativeParam.BODY_WIDTH] = bodyWidth
         it[NativeParam.TAIL_BEAT] = tailBeatHz
+        it[NativeParam.SMELL] = smell
+        it[NativeParam.BITE_MG] = biteMg
+        it[NativeParam.MESSINESS] = messiness
+        it[NativeParam.STOMACH_MG] = stomachMg
+        it[NativeParam.HUNGER_PER_S] = hungerPerSecond
+        it[NativeParam.BOTTOM_FEEDER] = if (bottomFeeder) 1f else 0f
     }
 
     /** A creature's length, picked from the range by its seed so every device agrees. */
@@ -87,7 +106,13 @@ object NativeParam {
     const val TURN_RATE = 6
     const val BODY_WIDTH = 7
     const val TAIL_BEAT = 8
-    const val COUNT = 9
+    const val SMELL = 9
+    const val BITE_MG = 10
+    const val MESSINESS = 11
+    const val STOMACH_MG = 12
+    const val HUNGER_PER_S = 13
+    const val BOTTOM_FEEDER = 14
+    const val COUNT = 15
 }
 
 /** Every species the app knows. Visual ids match `Visual` in sim/species.h. */
@@ -110,6 +135,12 @@ object SpeciesCatalog {
         turnRateRadPerS = 3.0f,
         bodyWidth = 0.24f,
         tailBeatHz = 2.6f,
+        smell = 1f,
+        biteMg = 0.45f,
+        messiness = 0.35f,
+        stomachMg = 4f,
+        hungerPerSecond = 1f / 150f,
+        bottomFeeder = false,
         defaultCount = 22,
         addBatch = 6,
     )
@@ -132,6 +163,12 @@ object SpeciesCatalog {
         turnRateRadPerS = 0.55f,
         bodyWidth = 0.62f,
         tailBeatHz = 0.32f,
+        smell = 0.8f,
+        biteMg = 3.5f,
+        messiness = 0.6f,
+        stomachMg = 40f,
+        hungerPerSecond = 1f / 400f,
+        bottomFeeder = true,
         defaultCount = 1,
         addBatch = 1,
     )

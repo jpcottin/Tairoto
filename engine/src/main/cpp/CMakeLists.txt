@@ -31,6 +31,8 @@ add_custom_target(shaders DEPENDS ${SHADER_HEADERS})
 # --- The engine library ---------------------------------------------------------
 add_library(drifttank SHARED
     sim/world.cpp
+    sim/feeding.cpp
+    sim/current.cpp
     render/mesh.cpp
     render/renderer.cpp
     engine/engine.cpp

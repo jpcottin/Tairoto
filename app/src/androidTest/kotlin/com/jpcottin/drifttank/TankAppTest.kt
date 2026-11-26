@@ -10,6 +10,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.geometry.Offset
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -135,6 +137,31 @@ class TankAppTest {
             compose.onNodeWithTag(SettingsTags.RESET_CONFIRM).performClick()
             compose.onNodeWithTag(SettingsTags.BACK).performClick()
             compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+        }
+    }
+
+    @Test fun aDragSprinklesFoodAndTheFishEatIt() {
+        AppLauncher.launch(stats = true).use {
+            compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+            compose.onNodeWithTag(TankTags.GESTURES).performTouchInput {
+                swipe(start = center - Offset(200f, 0f), end = center + Offset(200f, 100f), durationMillis = 800)
+            }
+            compose.waitForText(TankTags.STATS) { text ->
+                Regex("food (\\d+)").find(text)?.groupValues?.get(1)?.toInt()?.let { it > 0 } == true
+            }
+            compose.waitForText(TankTags.STATS, timeoutMs = 60_000) { text ->
+                Regex("eaten ([0-9.]+) mg").find(text)?.groupValues?.get(1)?.toFloat()?.let { it > 0f } == true
+            }
+        }
+    }
+
+    @Test fun aLongPressDropsAPellet() {
+        AppLauncher.launch(stats = true).use {
+            compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+            compose.onNodeWithTag(TankTags.GESTURES).performTouchInput { longClick(center, durationMillis = 900) }
+            compose.waitForText(TankTags.STATS) { text ->
+                Regex("food (\\d+)").find(text)?.groupValues?.get(1)?.toInt() == 1
+            }
         }
     }
 

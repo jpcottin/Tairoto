@@ -153,6 +153,57 @@ class TankViewModelTest {
         assertEquals(2, engine.taps.size)
     }
 
+    @Test fun `a drag sprinkles a pinch where it lands, then flakes along the way`() = runTest(dispatcher) {
+        val vm = vm()
+        attach(vm)
+        vm.sprinkle(Vec2(300f, 1000f), first = true)
+        assertEquals(TankViewModel.FIRST_PINCH, engine.drops.single().count)
+        assertEquals(com.jpcottin.drifttank.engine.FoodKind.FLAKE, engine.drops.single().kind)
+        // 1 mm further: not yet a flake.
+        val pxPerMm = engine.viewport!!.basePxPerMm
+        vm.sprinkle(Vec2(300f + pxPerMm, 1000f), first = false)
+        assertEquals(1, engine.drops.size)
+        // 10.5 mm further on: three more flakes at 3.5 mm spacing.
+        vm.sprinkle(Vec2(300f + pxPerMm * 11.5f, 1000f), first = false)
+        assertEquals(3, engine.drops.last().count)
+        assertEquals(TankScene.MAX_CREATURES, TankScene.MAX_CREATURES) // the scene is untouched by food
+        assertEquals(SpeciesCatalog.GreenChromis.defaultCount + 1, vm.ui.value.total)
+    }
+
+    @Test fun `food lands where the finger is, on the surface`() = runTest(dispatcher) {
+        val vm = vm()
+        attach(vm)
+        vm.sprinkle(Vec2(540f, 1200f), first = true)
+        val center = engine.camera!!.center
+        assertEquals(center.x, engine.drops[0].at.x, 0.01f)
+        assertEquals(center.y, engine.drops[0].at.y, 0.01f)
+    }
+
+    @Test fun `a very fast drag is capped per move`() = runTest(dispatcher) {
+        val vm = vm()
+        attach(vm)
+        vm.sprinkle(Vec2(100f, 300f), first = true)
+        vm.sprinkle(Vec2(1000f, 2300f), first = false)
+        assertEquals(TankViewModel.MAX_FLAKES_PER_MOVE, engine.drops.last().count)
+    }
+
+    @Test fun `a long press drops one pellet`() = runTest(dispatcher) {
+        val vm = vm()
+        attach(vm)
+        vm.dropPellet(Vec2(540f, 1200f))
+        assertEquals(com.jpcottin.drifttank.engine.FoodKind.PELLET, engine.drops.single().kind)
+        assertEquals(1, engine.drops.single().count)
+    }
+
+    @Test fun `a new drag starts with a new pinch`() = runTest(dispatcher) {
+        val vm = vm()
+        attach(vm)
+        vm.sprinkle(Vec2(300f, 1000f), first = true)
+        vm.endSprinkle()
+        vm.sprinkle(Vec2(310f, 1000f), first = false) // no drag in progress: treated as a new one
+        assertEquals(TankViewModel.FIRST_PINCH, engine.drops.last().count)
+    }
+
     @Test fun `pinching zooms within limits and panning stays in the tank`() = runTest(dispatcher) {
         val vm = vm()
         attach(vm)

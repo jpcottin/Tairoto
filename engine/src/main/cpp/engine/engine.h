@@ -36,6 +36,10 @@ struct EngineStats {
     int sceneWidth = 0, sceneHeight = 0;
     int width = 0, height = 0;
     float simTime = 0;
+    int food = 0;
+    float foodMg = 0;
+    float eatenMg = 0;
+    float hunger = 0;       // mean over the creatures
     std::string gpu;
 };
 
@@ -65,6 +69,8 @@ public:
     void clearCreatures();
     /** A tap on the glass at a point of the water surface. */
     void tap(Vec2 world);
+    /** Drops food at a point of the surface (kind: 0 flake, 1 pellet). */
+    void dropFood(Vec2 world, int kind, int count);
     void setTilt(Vec2 tilt);
 
     /** Advances the simulation without drawing, on the calling thread's behalf (tests). Blocks. */

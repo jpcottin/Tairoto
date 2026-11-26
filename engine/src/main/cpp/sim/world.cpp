@@ -29,6 +29,7 @@ void SpatialGrid::rebuild(const std::vector<Creature>& cs, const Tank& tank, flo
 
 void World::setTank(const Tank& t) {
     tank_ = t;
+    current_.resize(t.width, t.height);
     for (auto& c : creatures_) clampInside(c, c.length * 0.5f);
 }
 
@@ -53,6 +54,7 @@ bool World::spawn(int64_t id, Visual visual, Locomotion loco, const SpeciesParam
     c.breathPhase = hash01(seed ^ 0x44u) * kTau;
     c.wanderSeed = hash01(seed ^ 0x77u) * 1000.0f;
     c.segLen = c.length * 0.78f / (Creature::kJoints - 1);
+    c.hunger = 0.25f + 0.5f * hash01(seed ^ 0x99u);
     Vec2 back = -fromAngle(c.heading);
     for (int i = 0; i < Creature::kJoints; i++) c.joint[i] = at.xy() + back * (c.segLen * (float)i);
     if (loco == Locomotion::Paddle) {
@@ -102,6 +104,11 @@ void World::step(float dt) {
 }
 
 void World::startle(Vec2 at, float strength) {
+    // The tap sends a ring of water outwards.
+    for (int i = 0; i < 8; i++) {
+        Vec2 d = fromAngle(kTau * (float)i / 8.0f);
+        current_.push(at + d * 6.0f, d * (22.0f * strength), 10.0f);
+    }
     for (auto& c : creatures_) {
         float d = length(c.pos.xy() - at);
         float radius = c.loco == Locomotion::Paddle
@@ -116,6 +123,10 @@ void World::startle(Vec2 at, float strength) {
 
 void World::stepFixed(float h) {
     time_ += h;
+    if (current_.columns() == 0) current_.resize(tank_.width, tank_.height);
+    current_.step(h);
+    stepFood(h);
+    buildScents(h);
     float cell = 15.0f;
     for (auto& c : creatures_)
         if (c.loco == Locomotion::Swim) cell = std::max(cell, c.length * 5.0f);
@@ -125,6 +136,7 @@ void World::stepFixed(float h) {
         if (c.loco == Locomotion::Paddle) stepTurtle(c, h);
         else stepFish(c, h);
     }
+    settleFood();
 }
 
 Vec2 World::wallAvoidance(Vec2 p, Vec2 fwd, float lookAhead, float margin) const {
@@ -194,20 +206,32 @@ void World::stepFish(Creature& c, float h) {
         }
     });
 
+    // Food first: a feeding fish leaves the school's pace for the food's.
+    Vec3 foodAt;
+    const bool feeding = c.startleTimer <= 0 && forage(c, p, h, foodAt);
+    const float social = feeding ? 0.25f : 1.0f;
+
     Vec2 steer = fwd * 1.0f;
     steer += sep * 2.4f;
-    if (length2(ali) > 0) steer += normalize(ali) * (1.1f * c.sp.schooling);
+    const float foodDist = feeding ? length(foodAt.xy() - p) : 0.0f;
+    if (feeding) {
+        Vec2 toFood = foodAt.xy() - p;
+        steer += normalize(toFood, fwd) * 4.5f;
+        c.depthTarget = clamp(foodAt.z, 2.0f, tank_.depth - 4.0f);
+        c.depthTimer = 0.5f;
+    }
+    if (length2(ali) > 0) steer += normalize(ali) * (1.1f * c.sp.schooling * social);
     if (n > 0) {
         Vec2 toCenter = cohSum / (float)n - p;
         float dc = length(toCenter);
-        steer += normalize(toCenter) * (0.9f * c.sp.schooling * saturate(dc / (3.0f * L)));
+        steer += normalize(toCenter) * (0.9f * c.sp.schooling * social * saturate(dc / (3.0f * L)));
     }
     // A loose pull toward where the school is heading keeps it roaming the whole tank.
     Vec2 toAttractor = schoolAttractor(c.visual, time_) - p;
-    steer += normalize(toAttractor) * (0.35f * c.sp.schooling * smoothstep(5.0f, 45.0f, length(toAttractor)));
+    steer += normalize(toAttractor) * (0.35f * c.sp.schooling * social * smoothstep(5.0f, 45.0f, length(toAttractor)));
     // Wandering: each fish has its own slowly changing whim.
     float whim = noise1(c.age * 0.35f + c.wanderSeed, c.seed) * 1.1f;
-    steer += rotate(fwd, whim) * 0.55f;
+    steer += rotate(fwd, whim) * (feeding ? 0.15f : 0.55f);
     steer += avoid;
     float margin = std::max(3.0f * L, 9.0f);
     steer += wallAvoidance(p, fwd, 2.5f * L, margin) * 1.6f;
@@ -228,6 +252,8 @@ void World::stepFish(Creature& c, float h) {
     // Turning: limited, and quicker when going fast or frightened.
     float desired = angleOf(steer);
     float maxTurn = c.sp.turnRate * (0.55f + 0.6f * saturate(c.speed / cruise)) * (frightened ? 2.2f : 1.0f);
+    // Close to food a fish turns sharply and slows to snap it, rather than circling it.
+    if (feeding) maxTurn *= foodDist < 2.0f * L ? 3.0f : 1.5f;
     float before = c.heading;
     c.heading = approachAngle(c.heading, desired, maxTurn * h);
     c.turnRate = damp(c.turnRate, wrapAngle(c.heading - before) / h, 10.0f, h);
@@ -235,11 +261,12 @@ void World::stepFish(Creature& c, float h) {
     // Beat and glide: a few strong beats, then a coast.
     if (c.burstTimer > 0) c.burstTimer -= h;
     if (c.glideTimer > 0) c.glideTimer -= h;
-    else if (!frightened && rng_.chance(0.16f * h)) c.glideTimer = rng_.range(0.35f, 0.9f);
+    else if (!frightened && !feeding && rng_.chance(0.16f * h)) c.glideTimer = rng_.range(0.35f, 0.9f);
     if (c.burstTimer <= 0 && rng_.chance(0.02f * h)) c.burstTimer = rng_.range(0.15f, 0.3f);
 
     float target;
     if (c.burstTimer > 0) target = burst;
+    else if (feeding) target = cruise * (0.25f + 1.5f * saturate(foodDist / (4.0f * L)));
     else if (c.glideTimer > 0) target = cruise * 0.55f;
     else target = cruise * (0.85f + 0.3f * noise1(c.age * 0.2f, c.seed + 7));
 
@@ -266,7 +293,7 @@ void World::stepFish(Creature& c, float h) {
         c.depthTarget = want;
         c.depthTimer = rng_.range(4.0f, 12.0f);
     }
-    float vzWant = clamp((c.depthTarget - c.pos.z) * 0.6f, -0.35f * L, 0.35f * L);
+    float vzWant = clamp((c.depthTarget - c.pos.z) * (feeding ? 1.5f : 0.6f), -0.6f * L, 0.6f * L);
     if (frightened) vzWant -= 0.2f * L;  // a startled fish dives a little, then comes back
     c.vz = damp(c.vz, vzWant, 2.0f, h);
     c.pos.z = clamp(c.pos.z + c.vz * h, 2.0f, tank_.depth - 4.0f);
@@ -276,6 +303,11 @@ void World::stepFish(Creature& c, float h) {
     c.pos.y = np.y;
     clampInside(c, L * 0.6f);
     if (c.startleTimer <= 0) c.startleTimer = 0;
+
+    // The mouth is at the snout: a bite when it reaches the food.
+    if (feeding) tryBite(c, c.pos.xy() + fromAngle(c.heading) * (0.04f * L), c.pos.z, 0.3f * L);
+    // The tail pushes water back: a wake that stirs food and the current.
+    current_.push(c.joint[Creature::kJoints - 1], fromAngle(c.heading) * (-c.speed * 0.012f * (0.3f + c.thrust)), 5.0f);
 
     // Caudal fin: a damped spring lagging behind the tail's sideways motion.
     float finTarget = -0.55f * std::cos(c.tailPhase) * (0.3f + 0.7f * c.thrust) - c.turnRate * 0.08f;
@@ -357,6 +389,23 @@ void World::stepTurtle(Creature& c, float h) {
         }
     }
 
+    // Hungry and smelling food: go for it (a resting turtle only when very hungry).
+    Vec2 mouth = p + fwd * (0.52f * L);
+    Vec3 foodAt;
+    bool feeding = false;
+    bool mayFeed = c.behavior == Behavior::Cruise || c.behavior == Behavior::Forage || c.behavior == Behavior::Descend ||
+                   (c.behavior == Behavior::Rest && c.hunger > 0.7f);
+    if (mayFeed) {
+        feeding = forage(c, mouth, h, foodAt);
+        if (feeding && c.behavior != Behavior::Forage) {
+            c.behavior = Behavior::Forage;
+            c.stateTimer = 20.0f;
+        }
+    } else {
+        c.hunger = std::min(1.0f, c.hunger + c.sp.hungerPerS * h);
+        if (c.biteCooldown > 0) c.biteCooldown -= h;
+    }
+
     c.stateTimer -= h;
     float targetSpeed = cruise;
     float restWant = 0;
@@ -407,6 +456,18 @@ void World::stepTurtle(Creature& c, float h) {
             }
             break;
         }
+        case Behavior::Forage:
+            if (!feeding) {
+                c.behavior = Behavior::Cruise;
+                c.target.z = D * rng_.range(c.sp.depthMin, c.sp.depthMax);
+                c.stateTimer = rng_.range(8.0f, 16.0f);
+                break;
+            }
+            c.target = foodAt;
+            toTarget = foodAt.xy() - mouth;
+            steer = normalize(toTarget, fwd);
+            targetSpeed = cruise * (0.35f + 0.65f * saturate(length(toTarget) / L));
+            break;
         case Behavior::Flee: {
             targetSpeed = c.sp.burstBl * L;
             steer = normalize(p - c.startleFrom, fwd);
@@ -444,6 +505,7 @@ void World::stepTurtle(Creature& c, float h) {
 
     // Depth.
     float zWant = c.behavior == Behavior::Rest ? D - L * 0.085f : c.target.z;
+    if (c.behavior == Behavior::Forage) zWant = clamp(c.target.z, L * 0.04f, D - L * 0.085f);
     if (c.behavior == Behavior::Flee) zWant = clamp(c.pos.z - L * 0.2f, L * 0.1f, D - L * 0.2f);
     float vzMax = 0.14f * L * (c.behavior == Behavior::Flee ? 2.0f : 1.0f);
     c.vz = damp(c.vz, clamp((zWant - c.pos.z) * 0.45f, -vzMax, vzMax), 1.2f, h);
@@ -453,6 +515,10 @@ void World::stepTurtle(Creature& c, float h) {
     c.pos.x = np.x;
     c.pos.y = np.y;
     clampInside(c, L * 0.55f);
+
+    if (c.behavior == Behavior::Forage) tryBite(c, p + fromAngle(c.heading) * (0.52f * L), c.pos.z, 0.1f * L);
+    // Each power stroke shoves water back past the flippers.
+    if (pulse > 0.1f) current_.push(p - fromAngle(c.heading) * (0.2f * L), fromAngle(c.heading) * (-pulse * 4.0f), 0.35f * L);
 
     c.breathPhase = std::fmod(c.breathPhase + h * kTau * (0.2f + 0.05f * (1.0f - c.rest)), kTau * 64.0f);
     float swayWant = 0.25f * noise1(c.age * 0.25f, c.seed) + c.turnRate * 0.6f;

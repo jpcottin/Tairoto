@@ -86,6 +86,11 @@ JNIEXPORT void JNICALL Java_com_jpcottin_drifttank_engine_NativeTank_nativeTap(J
     engine(h)->tap({x, y});
 }
 
+JNIEXPORT void JNICALL Java_com_jpcottin_drifttank_engine_NativeTank_nativeDropFood(JNIEnv*, jclass, jlong h, jfloat x,
+                                                                                  jfloat y, jint kind, jint count) {
+    engine(h)->dropFood({x, y}, kind, count);
+}
+
 JNIEXPORT void JNICALL Java_com_jpcottin_drifttank_engine_NativeTank_nativeSetTilt(JNIEnv*, jclass, jlong h, jfloat x,
                                                                                  jfloat y) {
     engine(h)->setTilt({x, y});
@@ -96,15 +101,16 @@ JNIEXPORT void JNICALL Java_com_jpcottin_drifttank_engine_NativeTank_nativeStepF
     engine(h)->stepForTest(seconds);
 }
 
-/** Fills out with [fps, workMs, creatures, drawn, frames, quality, vulkan, sceneW, sceneH, w, h, simTime]. */
+/** Fills out with [fps, workMs, creatures, drawn, frames, quality, vulkan, sceneW, sceneH, w, h, simTime,
+ *  food, foodMg, eatenMg, hunger]. */
 JNIEXPORT void JNICALL Java_com_jpcottin_drifttank_engine_NativeTank_nativeStats(JNIEnv* env, jclass, jlong h,
                                                                                jfloatArray out) {
     EngineStats s = engine(h)->stats();
-    float v[12] = {s.fps, s.workMs, (float)s.creatures, (float)s.drawn, (float)s.frames, (float)s.quality,
+    float v[16] = {s.fps, s.workMs, (float)s.creatures, (float)s.drawn, (float)s.frames, (float)s.quality,
                    (float)s.vulkan, (float)s.sceneWidth, (float)s.sceneHeight, (float)s.width, (float)s.height,
-                   s.simTime};
+                   s.simTime, (float)s.food, s.foodMg, s.eatenMg, s.hunger};
     jsize n = env->GetArrayLength(out);
-    env->SetFloatArrayRegion(out, 0, n < 12 ? n : 12, v);
+    env->SetFloatArrayRegion(out, 0, n < 16 ? n : 16, v);
 }
 
 JNIEXPORT jstring JNICALL Java_com_jpcottin_drifttank_engine_NativeTank_nativeGpuName(JNIEnv* env, jclass, jlong h) {

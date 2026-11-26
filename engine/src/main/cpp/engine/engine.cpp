@@ -99,6 +99,18 @@ void Engine::tap(Vec2 world) {
     });
 }
 
+void Engine::dropFood(Vec2 world, int kind, int count) {
+    post([this, world, kind, count] {
+        world_.dropFood(world, kind == 1 ? FoodKind::Pellet : FoodKind::Flake, count);
+        // A small ring where it lands.
+        Ripple& r = ripples_[nextRipple_];
+        nextRipple_ = (nextRipple_ + 1) % Renderer::kMaxRipples;
+        r.at = world;
+        r.start = world_.time();
+        r.amplitude = kind == 1 ? 0.5f : 0.25f;
+    });
+}
+
 void Engine::stepForTest(float seconds) {
     runOnThread([this, seconds] {
         int steps = (int)(seconds * 60.0f + 0.5f);
@@ -113,6 +125,12 @@ EngineStats Engine::stats() {
         std::lock_guard<std::mutex> lock(statsMutex_);
         stats_.creatures = (int)world_.creatures().size();
         stats_.simTime = world_.time();
+        stats_.food = (int)world_.food().size();
+        stats_.foodMg = (float)world_.foodMass();
+        stats_.eatenMg = (float)world_.ledger().eaten;
+        float hunger = 0;
+        for (auto& c : world_.creatures()) hunger += c.hunger;
+        stats_.hunger = world_.creatures().empty() ? 0.0f : hunger / world_.creatures().size();
         stats_.quality = (int)quality_;
         stats_.vulkan = renderer_->unsupported() ? 2 : (renderer_->ready() ? 1 : 0);
     });
@@ -213,6 +231,9 @@ void Engine::frame() {
     stats_.quality = (int)quality_;
     stats_.vulkan = 1;
     stats_.simTime = world_.time();
+    stats_.food = (int)world_.food().size();
+    stats_.foodMg = (float)world_.foodMass();
+    stats_.eatenMg = (float)world_.ledger().eaten;
 }
 
 }  // namespace dt

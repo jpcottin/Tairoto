@@ -32,8 +32,8 @@ if [ ! -f "$out/gtest.o" ] || [ "$gtest/src/gtest-all.cc" -nt "$out/gtest.o" ]; 
 fi
 "$cxx" -std=c++17 -O2 -g -Wall -Wextra -Werror \
     -I"$cpp" -I"$gtest/include" \
-    "$cpp/test/sim_test.cpp" "$cpp/test/mesh_test.cpp" \
-    "$cpp/sim/world.cpp" "$cpp/render/mesh.cpp" \
+    "$cpp/test/sim_test.cpp" "$cpp/test/mesh_test.cpp" "$cpp/test/feeding_test.cpp" \
+    "$cpp/sim/world.cpp" "$cpp/sim/feeding.cpp" "$cpp/sim/current.cpp" "$cpp/render/mesh.cpp" \
     "$out/gtest.o" "$out/gtest_main.o" \
     -lpthread -o "$out/engine_tests"
 exec "$out/engine_tests" "$@"

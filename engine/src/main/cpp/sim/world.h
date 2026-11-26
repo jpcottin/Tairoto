@@ -5,8 +5,12 @@
 #include <cstdint>
 #include <vector>
 
+#include <unordered_map>
+
 #include "core/math.h"
 #include "sim/creature.h"
+#include "sim/current.h"
+#include "sim/food.h"
 
 namespace dt {
 
@@ -70,6 +74,19 @@ public:
     /** Where a school of this look is heading at time t: a slow loop over the tank. */
     Vec2 schoolAttractor(Visual v, float t) const;
 
+    // ---- food
+    /** Drops food at a point of the surface; returns how many pieces fitted under the cap. */
+    int dropFood(Vec2 at, FoodKind kind, int count);
+    const std::vector<Food>& food() const { return food_; }
+    std::vector<Food>& foodForTest() { return food_; }
+    const FoodLedger& ledger() const { return ledger_; }
+    const std::vector<Scent>& scents() const { return scents_; }
+    /** Mass of all the food still in the tank (mg). */
+    double foodMass() const;
+    const CurrentField& current() const { return current_; }
+    CurrentField& currentForTest() { return current_; }
+    const Food* findFood(uint32_t id) const;
+
 private:
     void stepFixed(float h);
     void stepFish(Creature& c, float h);
@@ -79,12 +96,35 @@ private:
     void clampInside(Creature& c, float margin) const;
     static void updateSpine(Creature& c, float h);
 
+    void stepFood(float h);
+    void settleFood();
+    void buildScents(float h);
+    /** Picks food to chase; true with its position when the creature is feeding. */
+    bool forage(Creature& c, Vec2 mouth, float h, Vec3& foodAt);
+    /** Eats from the food it is chasing if the mouth reaches it. */
+    void tryBite(Creature& c, Vec2 mouth, float mouthZ, float reach);
+    void bite(Creature& c, Food& f);
+    int scentCellOf(Vec2 p) const;
+    Food* findFoodMutable(uint32_t id);
+
     Tank tank_;
     std::vector<Creature> creatures_;
     SpatialGrid grid_;
     Rng rng_{1};
     float time_ = 0;
     float accumulator_ = 0;
+
+    std::vector<Food> food_;
+    std::vector<Food> pendingFood_;  // crumbs made during a step, added at its end
+    std::unordered_map<uint32_t, size_t> foodIndex_;
+    FoodLedger ledger_;
+    uint32_t nextFoodId_ = 1;
+    std::vector<Scent> scents_;
+    std::vector<int> scentOfCell_;
+    std::vector<float> activity_;
+    std::vector<int> foodCellStart_, foodCellItems_;
+    int scentCols_ = 0, scentRows_ = 0;
+    CurrentField current_;
 };
 
 }  // namespace dt

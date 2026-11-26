@@ -5,7 +5,7 @@
 namespace dt {
 
 /** What a turtle is doing. Fish only use Cruise and Flee. */
-enum class Behavior : int32_t { Cruise = 0, Descend = 1, Rest = 2, Surface = 3, Flee = 4 };
+enum class Behavior : int32_t { Cruise = 0, Descend = 1, Rest = 2, Surface = 3, Flee = 4, Forage = 5 };
 
 /**
  * One creature's whole dynamic state. Positions are in mm on the table plane,
@@ -56,6 +56,14 @@ struct Creature {
     float breathPhase = 0;
     float headSway = 0;
     float rest = 0;            // 0 swimming .. 1 settled on the sand (flippers tucked)
+
+    // Feeding
+    float hunger = 0.5f;       // 0 full .. 1 starving
+    float biteCooldown = 0;
+    uint32_t foodTarget = 0;   // id of the food being chased, 0 = none
+    int scentCell = -1;        // the patch it is feeding at
+    float retarget = 0;        // seconds until it looks for food again
+    float eatenMg = 0;
 
     float age = 0;
 };

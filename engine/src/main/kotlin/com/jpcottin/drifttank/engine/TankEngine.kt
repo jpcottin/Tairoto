@@ -23,6 +23,7 @@ interface TankEngine : Closeable {
     fun remove(id: EntityId)
     fun clear()
     fun tap(at: Vec2)
+    fun dropFood(at: Vec2, kind: FoodKind, count: Int)
     fun stats(): EngineStats
     fun gpuName(): String
 }

@@ -7,6 +7,7 @@ import com.jpcottin.drifttank.LaunchOptions
 import com.jpcottin.drifttank.data.AppSettings
 import com.jpcottin.drifttank.data.SettingsStore
 import com.jpcottin.drifttank.engine.EngineStats
+import com.jpcottin.drifttank.engine.FoodKind
 import com.jpcottin.drifttank.engine.SceneSync
 import com.jpcottin.drifttank.engine.TankEngine
 import com.jpcottin.drifttank.engine.VulkanState
@@ -90,6 +91,8 @@ class TankViewModel(
     private var statsJob: Job? = null
     private var lastTap: Pair<Long, Vec2>? = null
     private var firstRenderMs: Long? = null
+    private var lastSprinkle: Vec2? = null
+    private var sprinkleCarry = 0f
 
     init {
         if (options.deterministic) engine.setDeterministic(true, options.seed ?: 7L)
@@ -193,6 +196,42 @@ class TankViewModel(
         dismissHint()
     }
 
+    /**
+     * A finger dragging over the water sprinkles flakes along its path: a pinch
+     * where it lands, then one flake every [SPRINKLE_SPACING_MM] of the way.
+     */
+    fun sprinkle(screenPx: Vec2, first: Boolean) {
+        val vp = viewport ?: return
+        val cam = camera ?: return
+        val at = cam.screenToWorld(screenPx, 0f, vp)
+        val previous = lastSprinkle
+        if (first || previous == null) {
+            engine.dropFood(at, FoodKind.FLAKE, FIRST_PINCH)
+            sprinkleCarry = 0f
+        } else {
+            sprinkleCarry += (at - previous).length
+            val n = (sprinkleCarry / SPRINKLE_SPACING_MM).toInt()
+            if (n > 0) {
+                engine.dropFood(at, FoodKind.FLAKE, n.coerceAtMost(MAX_FLAKES_PER_MOVE))
+                sprinkleCarry -= n * SPRINKLE_SPACING_MM
+            }
+        }
+        lastSprinkle = at
+        dismissHint()
+    }
+
+    fun endSprinkle() {
+        lastSprinkle = null
+    }
+
+    /** A long press drops a pellet: it sinks fast, and the turtle loves it. */
+    fun dropPellet(screenPx: Vec2) {
+        val vp = viewport ?: return
+        val cam = camera ?: return
+        engine.dropFood(cam.screenToWorld(screenPx, 0f, vp), FoodKind.PELLET, 1)
+        dismissHint()
+    }
+
     fun dismissHint() {
         if (state.value.hintVisible) state.update { it.copy(hintVisible = false) }
     }
@@ -283,6 +322,9 @@ class TankViewModel(
         const val STATS_PERIOD_MS = 500L
         const val GOVERNOR_PERIOD_MS = 2_000L
         const val WARMUP_MS = 6_000L
+        const val SPRINKLE_SPACING_MM = 3.5f
+        const val FIRST_PINCH = 3
+        const val MAX_FLAKES_PER_MOVE = 6
         const val DOUBLE_TAP_MS = 300L
         const val DOUBLE_TAP_PX = 60f
     }

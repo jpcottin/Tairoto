@@ -20,7 +20,14 @@ enum Part : int32_t {
     kPartShell = 10,
     kPartHead = 11,
     kPartFlipper = 12,
+    // Food (visual 2)
+    kPartFlake = 0,
+    kPartPellet = 1,
+    kPartCrumb = 2,
 };
+
+/** The look of food, after the creatures' looks (Visual in sim/species.h). */
+constexpr int kVisualFood = 2;
 
 struct Vertex {
     float x, y;        // mm on the table plane
@@ -36,10 +43,12 @@ struct Mesh {
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
     int creaturesDrawn = 0;
+    int foodDrawn = 0;
     void clear() {
         vertices.clear();
         indices.clear();
         creaturesDrawn = 0;
+        foodDrawn = 0;
     }
 };
 
@@ -54,7 +63,13 @@ public:
 private:
     void fish(const Creature& c, Mesh& m);
     void turtle(const Creature& c, Mesh& m);
-    std::vector<int> order_;
+    void food(const Food& f, Mesh& m);
+    struct Item {
+        float z;
+        int index;  // >= 0 a creature, < 0 food (-1 - index)
+        int64_t key;
+    };
+    std::vector<Item> order_;
 };
 
 }  // namespace dt

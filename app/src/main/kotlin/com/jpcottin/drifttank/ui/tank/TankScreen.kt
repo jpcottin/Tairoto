@@ -79,6 +79,9 @@ fun TankScreen(viewModel: TankViewModel, state: TankUiState, onOpenSettings: () 
             override fun onTap(at: Vec2) = vm.tap(at)
             override fun onPan(delta: Vec2) = vm.pan(delta)
             override fun onZoom(focus: Vec2, factor: Float) = vm.zoom(focus, factor)
+            override fun onSprinkle(at: Vec2, first: Boolean) = vm.sprinkle(at, first)
+            override fun onSprinkleEnd() = vm.endSprinkle()
+            override fun onLongPress(at: Vec2) = vm.dropPellet(at)
         }
     }
     val metrics = LocalContext.current.resources.displayMetrics
@@ -96,7 +99,7 @@ fun TankScreen(viewModel: TankViewModel, state: TankUiState, onOpenSettings: () 
             Modifier
                 .fillMaxSize()
                 .testTag(TankTags.GESTURES)
-                .semantics { contentDescription = "The tank. Tap the water; pinch with two fingers to explore." }
+                .semantics { contentDescription = "The tank. Tap the water; drag a finger to sprinkle food; hold for a pellet; pinch with two fingers to explore." }
                 .tankGestures(handler),
         )
         TankHud(
@@ -149,7 +152,7 @@ fun TankHud(state: TankUiState, onAdd: () -> Unit, onSettings: () -> Unit, modif
                 modifier = Modifier.testTag(TankTags.HINT),
             ) {
                 Text(
-                    "Tap the water  ·  Pinch with two fingers to explore",
+                    "Drag to sprinkle food  ·  Hold for a pellet  ·  Pinch to explore",
                     style = MaterialTheme.typography.labelLarge,
                     color = Ocean.Foam,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
@@ -223,6 +226,10 @@ fun StatsPanel(stats: EngineStats, tier: QualityTier, gpu: String, thermalHeadro
             Text(String.format(Locale.US, "%.0f fps  ·  %.1f ms", stats.fps, stats.workMs), style = StatsText)
             Text("${tier.label}  ·  ${stats.sceneWidth}×${stats.sceneHeight} → ${stats.width}×${stats.height}", style = StatsText)
             Text("${stats.drawn}/${stats.creatures} drawn  ·  ${stats.frames} frames", style = StatsText)
+            Text(
+                String.format(Locale.US, "food %d  ·  %.1f mg  ·  eaten %.1f mg  ·  hunger %.2f", stats.food, stats.foodMg, stats.eatenMg, stats.hunger),
+                style = StatsText,
+            )
             Text(
                 "thermal headroom " + (thermalHeadroom?.let { String.format(Locale.US, "%.2f", it) } ?: "n/a"),
                 style = StatsText,

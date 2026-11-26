@@ -254,10 +254,51 @@ vec4 turtleSkin(Lit l, float caustic) {
     return finish(lit, edgeAlpha(av));
 }
 
+// ------------------------------------------------------------------ food
+// Flakes in the colours of real fish food (orange, red, spirulina green,
+// yellow), speckled and a little translucent; pellets round and brown with a
+// sheen; crumbs like the flakes they came from. Food going off turns dull
+// and grey-brown, with a pale fuzz on the sand.
+
+vec4 food(Lit l, float caustic) {
+    float freshness = vRho;  // fract(kind) * 2 carries freshness for food
+    float r = length(vUv);
+    vec3 color;
+    float alpha = 1.0;
+    if (vPart == 1) {
+        vec3 n = normalize(vec3(vUv * 0.9, sqrt(max(1.0 - r * r, 0.05))));
+        vec3 brown = mix(srgb(vec3(0.78, 0.52, 0.27)), srgb(vec3(0.66, 0.42, 0.2)), vSeed);
+        float diffuse = max(dot(n, normalize(F.sun.xyz)), 0.0);
+        color = brown * (l.sun * diffuse + l.ambient) + l.sun * pow(max(dot(n, l.H), 0.0), 40.0) * 0.4;
+        alpha = 1.0 - smoothstep(0.92, 1.0, r);
+    } else {
+        float pick = fract(vSeed * 7.31);
+        vec3 base = pick < 0.35 ? srgb(vec3(0.96, 0.48, 0.14))
+                  : pick < 0.6  ? srgb(vec3(0.85, 0.2, 0.13))
+                  : pick < 0.82 ? srgb(vec3(0.4, 0.62, 0.27))
+                  : srgb(vec3(0.95, 0.8, 0.32));
+        float speck = vnoise(vUv * 6.0 + vSeed * 40.0);
+        base *= 0.8 + 0.35 * speck;
+        if (vPart == 2) base *= 0.85;
+        color = base * (l.sun * 0.85 + l.ambient) * (0.85 + 0.5 * caustic);
+        alpha = vPart == 0 ? 0.9 : 0.95;
+    }
+    // Going off: duller, browner, and a pale fuzz.
+    vec3 rotten = srgb(vec3(0.33, 0.3, 0.22)) * (l.sun * 0.7 + l.ambient);
+    color = mix(rotten, color, smoothstep(0.0, 0.7, freshness));
+    float fuzz = (1.0 - freshness) * smoothstep(0.55, 0.9, vnoise(vUv * 9.0 + vSeed * 13.0));
+    color = mix(color, srgb(vec3(0.85, 0.86, 0.8)) * (l.sun * 0.6 + l.ambient), fuzz * 0.5);
+    return finish(color, alpha);
+}
+
 void main() {
     float depth = vZ / F.tank.z;
     float caustic = causticsAt(vWorld, timeS(), 1) * (1.0 - 0.55 * depth);
     Lit l = lighting(caustic);
+    if (vVisual == 2) {
+        outColor = food(l, caustic);
+        return;
+    }
     if (vVisual == 1) {
         outColor = vPart == 10 ? turtleShell(l, caustic) : turtleSkin(l, caustic);
     } else {

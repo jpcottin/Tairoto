@@ -16,6 +16,7 @@ layout(location = 0) out vec2 vUv;
 layout(location = 1) flat out int vPart;
 layout(location = 2) out float vRho;
 layout(location = 3) out float vHeight;
+layout(location = 4) flat out int vVisual;
 
 void main() {
     float D = F.tank.z;
@@ -39,6 +40,7 @@ void main() {
     }
     vUv = inUv;
     vPart = part;
+    vVisual = int(floor(inKind + 0.001)) / 16;
     vRho = rho;
     vHeight = h / D;
     gl_Position = projectNdc(inPos + offset + grow, D);

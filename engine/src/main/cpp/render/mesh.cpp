@@ -63,30 +63,66 @@ float MeshBuilder::chromisProfile(float t) {
 void MeshBuilder::build(const World& world, const CameraParams& cam, Mesh& mesh) {
     mesh.clear();
     const auto& cs = world.creatures();
+    const auto& fs = world.food();
     const float floorZ = world.tank().depth;
     order_.clear();
-    for (int i = 0; i < (int)cs.size(); i++) {
-        const Creature& c = cs[i];
-        // Visible if the creature or its shadow touches the screen.
-        float r = c.length * 0.75f * cam.pxPerMm;
-        Vec2 a = worldToScreen(cam, c.pos.xy(), c.pos.z);
-        Vec2 b = worldToScreen(cam, c.pos.xy() + Sun::shadowOffset(c.pos.z, floorZ), floorZ);
-        auto on = [&](Vec2 s) {
-            return s.x > -r && s.y > -r && s.x < cam.outSize.x + r && s.y < cam.outSize.y + r;
-        };
-        if (on(a) || on(b)) order_.push_back(i);
-    }
-    // Painter's order: deepest first, so nearer creatures cover deeper ones.
-    std::sort(order_.begin(), order_.end(), [&](int x, int y) {
-        if (cs[x].pos.z != cs[y].pos.z) return cs[x].pos.z > cs[y].pos.z;
-        return cs[x].id < cs[y].id;
+    auto visible = [&](Vec2 at, float z, float radiusMm) {
+        // Visible if the thing or its shadow touches the screen.
+        float r = radiusMm * cam.pxPerMm;
+        Vec2 a = worldToScreen(cam, at, z);
+        Vec2 b = worldToScreen(cam, at + Sun::shadowOffset(z, floorZ), floorZ);
+        auto on = [&](Vec2 s) { return s.x > -r && s.y > -r && s.x < cam.outSize.x + r && s.y < cam.outSize.y + r; };
+        return on(a) || on(b);
+    };
+    for (int i = 0; i < (int)cs.size(); i++)
+        if (visible(cs[i].pos.xy(), cs[i].pos.z, cs[i].length * 0.75f)) order_.push_back({cs[i].pos.z, i, cs[i].id});
+    for (int i = 0; i < (int)fs.size(); i++)
+        if (visible(fs[i].pos.xy(), fs[i].pos.z, fs[i].radius() + 1.0f))
+            order_.push_back({fs[i].pos.z, -1 - i, -(int64_t)fs[i].id});
+    // Painter's order: deepest first, so nearer things cover deeper ones.
+    std::sort(order_.begin(), order_.end(), [](const Item& a, const Item& b) {
+        if (a.z != b.z) return a.z > b.z;
+        return a.key < b.key;
     });
-    for (int i : order_) {
-        const Creature& c = cs[i];
-        if (c.loco == Locomotion::Paddle) turtle(c, mesh);
-        else fish(c, mesh);
-        mesh.creaturesDrawn++;
+    for (const Item& it : order_) {
+        if (it.index >= 0) {
+            const Creature& c = cs[it.index];
+            if (c.loco == Locomotion::Paddle) turtle(c, mesh);
+            else fish(c, mesh);
+            mesh.creaturesDrawn++;
+        } else {
+            food(fs[-1 - it.index], mesh);
+            mesh.foodDrawn++;
+        }
     }
+}
+
+void MeshBuilder::food(const Food& f, Mesh& m) {
+    // Freshness rides in the fraction of kind, like the shell's radius.
+    const int part = f.kind == FoodKind::Flake ? kPartFlake : (f.kind == FoodKind::Pellet ? kPartPellet : kPartCrumb);
+    const float kind = (float)part + 16.0f * kVisualFood + 0.499f * saturate(f.freshness);
+    Emitter e{m, f.pos.z, kind, hash01(f.seed)};
+    const float r = f.radius();
+    const Vec2 c = f.pos.xy();
+    // A flake tumbling as it sinks shows its edge now and then.
+    float squash = f.kind == FoodKind::Pellet ? 1.0f : 0.3f + 0.7f * std::fabs(std::cos(f.tumble));
+    if (f.state == FoodState::Floating || f.state == FoodState::Resting) squash = 1.0f;
+    const int n = f.kind == FoodKind::Pellet ? 12 : (f.kind == FoodKind::Flake ? 7 : 5);
+    Vec2 ax = fromAngle(f.spin), ay = perp(ax);
+    uint32_t centre = e.vert(c, 0, 0, f.spin);
+    uint32_t first = 0, prev = 0;
+    for (int i = 0; i < n; i++) {
+        float a = kTau * (float)i / (float)n;
+        // Flakes and crumbs are irregular; pellets are round.
+        float k = f.kind == FoodKind::Pellet ? 1.0f : 0.65f + 0.35f * hash01(f.seed * 31u + (uint32_t)i);
+        float u = std::cos(a) * k, v = std::sin(a) * k;
+        Vec2 p = c + ax * (u * r) + ay * (v * r * squash);
+        uint32_t idx = e.vert(p, u, v, f.spin);
+        if (i == 0) first = idx;
+        else e.tri(centre, prev, idx);
+        prev = idx;
+    }
+    e.tri(centre, prev, first);
 }
 
 void MeshBuilder::fish(const Creature& c, Mesh& m) {

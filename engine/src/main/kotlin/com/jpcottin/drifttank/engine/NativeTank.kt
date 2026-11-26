@@ -25,7 +25,16 @@ data class EngineStats(
     val width: Int = 0,
     val height: Int = 0,
     val simTimeS: Float = 0f,
+    /** Pieces of food in the tank, their mass, and all that has been eaten (mg). */
+    val food: Int = 0,
+    val foodMg: Float = 0f,
+    val eatenMg: Float = 0f,
+    /** Mean hunger of the creatures: 0 full, 1 starving. */
+    val hunger: Float = 0f,
 )
+
+/** What can be dropped in from above. */
+enum class FoodKind(val nativeId: Int) { FLAKE(0), PELLET(1) }
 
 enum class VulkanState { WAITING, RENDERING, UNSUPPORTED }
 
@@ -77,6 +86,8 @@ class NativeTank : TankEngine {
     /** A tap on the glass at a point of the water surface (mm). */
     override fun tap(at: Vec2) = nativeTap(h(), at.x, at.y)
 
+    override fun dropFood(at: Vec2, kind: FoodKind, count: Int) = nativeDropFood(h(), at.x, at.y, kind.nativeId, count)
+
     fun setTilt(x: Float, y: Float) = nativeSetTilt(h(), x, y)
 
     /** Runs the simulation for [seconds] without drawing. For tests. */
@@ -100,6 +111,10 @@ class NativeTank : TankEngine {
             width = v[9].toInt(),
             height = v[10].toInt(),
             simTimeS = v[11],
+            food = v[12].toInt(),
+            foodMg = v[13],
+            eatenMg = v[14],
+            hunger = v[15],
         )
     }
 
@@ -120,7 +135,7 @@ class NativeTank : TankEngine {
     }
 
     private companion object {
-        const val STATS_SIZE = 12
+        const val STATS_SIZE = 16
         const val SNAPSHOT_STRIDE = 6
 
         init {
@@ -139,6 +154,7 @@ class NativeTank : TankEngine {
         @JvmStatic external fun nativeRemove(h: Long, id: Long)
         @JvmStatic external fun nativeClear(h: Long)
         @JvmStatic external fun nativeTap(h: Long, x: Float, y: Float)
+        @JvmStatic external fun nativeDropFood(h: Long, x: Float, y: Float, kind: Int, count: Int)
         @JvmStatic external fun nativeSetTilt(h: Long, x: Float, y: Float)
         @JvmStatic external fun nativeStepForTest(h: Long, seconds: Float)
         @JvmStatic external fun nativeStats(h: Long, out: FloatArray)
