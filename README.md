@@ -1,0 +1,52 @@
+# Drift Tank
+
+A living aquarium for Android, seen from above: a school of green chromis and a
+green sea turtle swim over rippled sand under moving caustic light. Built to
+grow into one tank shared by several devices on a table, fish swimming from
+one screen to the next.
+
+> Work in progress, kept local for now. Milestone 1 of 10: the solo tank.
+
+## What is in it
+
+- **C++ simulation** (`engine/src/main/cpp/sim`): schooling with a spatial grid,
+  beat-and-glide swimming, a spine that bends into turns, a caudal fin on a
+  damped spring; a turtle that cruises, rests on the sand, climbs to breathe
+  and flees when tapped. Fixed 120 Hz steps, deterministic for a seed.
+- **Vulkan renderer** (`engine/src/main/cpp/render`, `shaders/`): an HDR scene
+  pass (procedural sand, pebbles, two-layer caustics, soft depth-scaled
+  shadows, marine snow, creatures painted entirely in shaders) and a composite
+  pass (surface refraction, sun glints, tap ripples, ACES tone mapping, grade,
+  vignette, dither). No textures anywhere.
+- **Top-down 2.5D**: millimetres on the table and depth below the surface,
+  with a shared projection (`Camera.kt`, `camera.h`, `common.glsl`).
+- **Quality tiers** Low / High / Ultra / CI, with an automatic governor fed by
+  frame rate and thermal headroom; ADPF performance hints from the render thread.
+- **Kotlin core** (`core/world`): geometry, camera, species catalogue, entity
+  ownership with epochs, a `Link` abstraction (loopback for now), the session.
+- **Compose app**: full-bleed tank, glass HUD, creature picker with drawn
+  species portraits, settings (Navigation 3, DataStore).
+
+## Build and test
+
+```sh
+./gradlew :app:assembleDebug
+./gradlew :core:world:test                  # Kotlin core (JVM)
+./gradlew :app:testDebugUnitTest            # view model (JVM, fake engine)
+./gradlew :engine:nativeHostTest            # C++ simulation and meshes, on the host
+./gradlew :app:validateDebugScreenshotTest  # Compose screenshots
+./gradlew :engine:connectedDebugAndroidTest :app:connectedDebugAndroidTest  # on a device
+```
+
+Deterministic launch for screenshots (debug builds):
+
+```sh
+adb shell am start -n com.jpcottin.drifttank/.MainActivity --ez drifttank.ci true --el drifttank.seed 7
+# also: --es drifttank.quality low|high|ultra|ci  --ez drifttank.stats true  --ez drifttank.hints false
+```
+
+## Gestures
+
+Tap the water: a ripple, and the fish nearby dart away. Double tap: zoom.
+Two fingers: pan and pinch. Mouse: drag to pan, wheel to zoom. One-finger
+drag is kept for sprinkling food (milestone 2).

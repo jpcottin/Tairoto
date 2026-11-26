@@ -1,0 +1,48 @@
+package com.jpcottin.drifttank.ui.tank
+
+import android.view.Surface
+import com.jpcottin.drifttank.engine.EngineStats
+import com.jpcottin.drifttank.engine.TankEngine
+import com.jpcottin.drifttank.engine.VulkanState
+import com.jpcottin.drifttank.world.Camera
+import com.jpcottin.drifttank.world.CreatureSpec
+import com.jpcottin.drifttank.world.EntityId
+import com.jpcottin.drifttank.world.QualityTier
+import com.jpcottin.drifttank.world.Species
+import com.jpcottin.drifttank.world.TankSize
+import com.jpcottin.drifttank.world.Vec2
+import com.jpcottin.drifttank.world.Viewport
+
+/** Records what the view model asks of the engine. */
+class FakeEngine : TankEngine {
+    val creatures = LinkedHashMap<EntityId, CreatureSpec>()
+    var lastTank: TankSize? = null
+    var camera: Camera? = null
+    var viewport: Viewport? = null
+    var lastQuality: QualityTier? = null
+    var deterministic: Pair<Boolean, Long>? = null
+    val taps = mutableListOf<Vec2>()
+    var surfaces = 0
+    var closed = false
+    var stats = EngineStats(vulkan = VulkanState.RENDERING, fps = 60f)
+
+    override fun setSurface(surface: Surface?) { surfaces++ }
+    override fun setTank(size: TankSize) { lastTank = size }
+    override fun setCamera(camera: Camera, viewport: Viewport) { this.camera = camera; this.viewport = viewport }
+    override fun setQuality(tier: QualityTier) { lastQuality = tier }
+    override fun setDeterministic(on: Boolean, seed: Long) { deterministic = on to seed }
+    override fun setPaused(paused: Boolean) = Unit
+    override fun spawn(creature: CreatureSpec, species: Species) { creatures[creature.id] = creature }
+    override fun remove(id: EntityId) { creatures.remove(id) }
+    override fun clear() = creatures.clear()
+    override fun tap(at: Vec2) { taps += at }
+    override fun stats(): EngineStats = stats
+    override fun gpuName(): String = "Fake GPU"
+    override fun close() { closed = true }
+}
+
+class FakeSignals(var headroom: Float? = 0.3f, var refresh: Float = 60f, var now: Long = 0L) : DeviceSignals {
+    override fun thermalHeadroom(): Float? = headroom
+    override fun refreshRateHz(): Float = refresh
+    override fun nowMs(): Long = now
+}
