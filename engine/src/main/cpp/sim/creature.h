@@ -85,6 +85,7 @@ struct Creature {
     float jetPhase = 0;       // octopus: mantle pulses
     float gaitPhase = 0;      // octopus arm sway, crab claw picking
     int grabArm = -1;         // octopus: the arm reaching for food
+    bool den = false;         // octopus: its hiding place is against a coral head or a stone
     float wobble = 0;         // crab: the shell rocking after it slams in
     float threat = 0;         // crab: seconds since something big came close
     // Octopus arms: the joints (drawn), and the state that moves them: each

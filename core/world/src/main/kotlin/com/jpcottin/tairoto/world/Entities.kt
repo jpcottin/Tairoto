@@ -74,23 +74,34 @@ data class CreatureSpec(
 data class TankScene(
     val size: TankSize,
     val creatures: List<CreatureSpec> = emptyList(),
+    /** What stands on the sand: coral heads, branching coral, clams, stones. */
+    val decor: List<DecorSpec> = emptyList(),
 ) {
     fun count(speciesId: String): Int = creatures.count { it.speciesId == speciesId }
+    fun countDecor(kindId: String): Int = decor.count { it.kindId == kindId }
+    fun decor(id: EntityId): DecorSpec? = decor.firstOrNull { it.id == id }
+    fun creature(id: EntityId): CreatureSpec? = creatures.firstOrNull { it.id == id }
+
+    /** Every id in the scene, creatures and decorations, so new ones never reuse one. */
+    val allIds: List<EntityId> get() = creatures.map { it.id } + decor.map { it.id }
 
     companion object {
         /** A soft cap that keeps the frame rate up on modest phones. */
         const val MAX_CREATURES = 160
+        /** Enough to build a reef, few enough to leave sand to walk on. */
+        const val MAX_DECOR = 24
     }
 }
 
 /** Builds creatures at sensible places for their species. */
 object Population {
-    /** A new reef tank: a school of chromis and one turtle. */
+    /** A new lagoon: every reef species in its default number, on a floor of coral, a clam and stones. */
     fun defaultScene(size: TankSize, ids: EntityIdAllocator, random: Random): TankScene {
+        val decor = DecorLayout.defaultDecor(size, ids, random)
         val creatures = SpeciesCatalog.all.filter { it.tankType == TankType.REEF }.flatMap { species ->
             release(species, species.defaultCount, size, ids, random)
         }
-        return TankScene(size, creatures)
+        return TankScene(size, creatures, decor)
     }
 
     /** A lagoon of just these creatures, species id to count (for tests and close looks). */

@@ -44,7 +44,7 @@ fun SpeciesArt(speciesId: String, modifier: Modifier = Modifier) {
     }
 }
 
-private fun DrawScope.drawSandDisc() {
+internal fun DrawScope.drawSandDisc() {
     val r = size.minDimension / 2f
     drawCircle(
         brush = Brush.radialGradient(

@@ -5,8 +5,8 @@ a school of *ʻatoti* (green chromis) and a *honu* (green sea turtle) over white
 coral sand, under moving caustic light. It is built to grow into one lagoon
 shared by several devices on a table, fish swimming from one screen to the next.
 
-> Work in progress, kept local for now. Milestones 1 (the solo lagoon) and 2
-> (food and feeding) of 10.
+> Work in progress, kept local for now. Milestones 1 (the solo lagoon),
+> 2 (food and feeding), 3 (the bottom dwellers) and 4 (arranging the lagoon) of 10.
 
 Tahitian names are checked against a reference before they are used, and the
 source is noted next to each species in `Species.kt`.
@@ -20,6 +20,25 @@ source is noted next to each species in `Species.kt`.
   (ocellated eagle ray) that flaps, glides and buries itself in the sand, the feʻe
   (day octopus) that walks on soft arms, camouflages, inks and jets away, and the
   uʻa (hermit crab) that steps on planted feet and hides in its shell.
+- **A lagoon floor to arrange**, each piece by its Tahitian name (sources in
+  `Decor.kt`): toʻa (a Porites coral head, knobbly, with Christmas tree worms),
+  toʻapū (branching Acropora coral), pahua (the giant clam, its mantle blue,
+  green or gold) and ʻōfaʻi (a stone crusted with coralline algae). They are
+  part of the lagoon, not scenery: fish swim over them or around them,
+  crabs and the octopus walk round them, food settles on top, the turtle may
+  rest on a coral head, the octopus makes its den against one, frightened
+  chromis dive in among the branches of a toʻapū, and the clam snaps shut
+  (with a puff) when a shadow or a knock comes near, then opens again slowly.
+- **Arranging**: the pencil button turns the lagoon into an edit mode: drag a
+  decoration to move it, twist with two fingers (or tap ↻) to turn it, take it
+  away, place new ones from the picker's Decorations tab, or take up the net
+  and tap a creature to scoop it out. Every change can be undone and redone
+  (a whole drag is one change; undoing a netted creature puts it back where
+  it was caught).
+- **The lagoon is kept**: saved a moment after every change and when the app
+  goes to the background, every creature where it is at that moment, and
+  restored at the next launch (a versioned file that tolerates damage and
+  species it does not know).
 - **Adaptive layout**: on a tablet, an unfolded foldable or a desktop window the
   species picker and the settings open as a pane beside the running lagoon; on a
   phone or a cover screen the picker is a sheet over it. Folding and unfolding
@@ -68,10 +87,16 @@ Deterministic launch for screenshots (debug builds):
 adb shell am start -n com.jpcottin.tairoto/.MainActivity --ez tairoto.ci true --el tairoto.seed 7
 # also: --es tairoto.quality low|high|ultra|ci  --ez tairoto.stats true  --ez tairoto.hints false
 #       --es tairoto.population "day_octopus:1,hermit_crab:2"  --ef tairoto.zoom 2.5   (a close look)
+#       --es tairoto.decor "coral_head:1,giant_clam:2"   (these decorations, in a column down the middle)
+#       --ez tairoto.fresh true   (a new lagoon, the saved one left alone; ci, population and decor imply it)
 ```
 
 ## Gestures
 
 Tap the water: a ripple, and the fish nearby dart away. Double tap: zoom.
-Two fingers: pan and pinch. Mouse: drag to pan, wheel to zoom. One-finger
-drag is kept for sprinkling food (milestone 2).
+Two fingers: pan and pinch. Mouse: drag to pan, wheel to zoom. One finger
+dragging sprinkles flakes; hold for a pellet.
+
+Arranging (the pencil button): tap a decoration to select it, drag it to move
+it, twist two fingers to turn it; drag over open water to pan. With the net:
+tap a creature. Back or Done to finish.

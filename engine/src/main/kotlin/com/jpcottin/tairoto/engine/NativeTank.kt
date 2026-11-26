@@ -3,6 +3,8 @@ package com.jpcottin.tairoto.engine
 import android.view.Surface
 import com.jpcottin.tairoto.world.Camera
 import com.jpcottin.tairoto.world.CreatureSpec
+import com.jpcottin.tairoto.world.DecorKind
+import com.jpcottin.tairoto.world.DecorSpec
 import com.jpcottin.tairoto.world.DepthProjection
 import com.jpcottin.tairoto.world.EntityId
 import com.jpcottin.tairoto.world.QualityTier
@@ -83,6 +85,15 @@ class NativeTank : TankEngine {
 
     override fun clear() = nativeClear(h())
 
+    override fun placeDecor(decor: DecorSpec, kind: DecorKind) = nativePlaceDecor(
+        h(), decor.id.raw, kind.nativeId, decor.seed, decor.at.x, decor.at.y, decor.angle,
+        kind.radiusFor(decor), kind.heightFor(decor),
+    )
+
+    override fun moveDecor(decor: DecorSpec) = nativeMoveDecor(h(), decor.id.raw, decor.at.x, decor.at.y, decor.angle)
+
+    override fun removeDecor(id: EntityId) = nativeRemoveDecor(h(), id.raw)
+
     /** A tap on the glass at a point of the water surface (mm). */
     override fun tap(at: Vec2) = nativeTap(h(), at.x, at.y)
 
@@ -118,7 +129,7 @@ class NativeTank : TankEngine {
         )
     }
 
-    fun snapshot(): List<CreatureState> {
+    override fun snapshot(): List<CreatureState> {
         val raw = nativeSnapshot(h())
         return List(raw.size / SNAPSHOT_STRIDE) { i ->
             val b = i * SNAPSHOT_STRIDE
@@ -153,6 +164,9 @@ class NativeTank : TankEngine {
         @JvmStatic external fun nativeSpawn(h: Long, id: Long, visual: Int, loco: Int, params: FloatArray, length: Float, seed: Int, x: Float, y: Float, z: Float)
         @JvmStatic external fun nativeRemove(h: Long, id: Long)
         @JvmStatic external fun nativeClear(h: Long)
+        @JvmStatic external fun nativePlaceDecor(h: Long, id: Long, kind: Int, seed: Int, x: Float, y: Float, angle: Float, radius: Float, height: Float)
+        @JvmStatic external fun nativeMoveDecor(h: Long, id: Long, x: Float, y: Float, angle: Float)
+        @JvmStatic external fun nativeRemoveDecor(h: Long, id: Long)
         @JvmStatic external fun nativeTap(h: Long, x: Float, y: Float)
         @JvmStatic external fun nativeDropFood(h: Long, x: Float, y: Float, kind: Int, count: Int)
         @JvmStatic external fun nativeSetTilt(h: Long, x: Float, y: Float)

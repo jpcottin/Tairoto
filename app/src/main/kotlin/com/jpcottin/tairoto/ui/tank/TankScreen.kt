@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.AndroidExternalSurface
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.Icon
@@ -71,7 +72,13 @@ object TankTags {
 }
 
 @Composable
-fun TankScreen(viewModel: TankViewModel, state: TankUiState, onOpenSettings: () -> Unit, onOpenSpecies: () -> Unit) {
+fun TankScreen(
+    viewModel: TankViewModel,
+    state: TankUiState,
+    onOpenSettings: () -> Unit,
+    onOpenSpecies: () -> Unit,
+    onOpenDecor: () -> Unit = {},
+) {
     val vm by rememberUpdatedState(viewModel)
     val handler = remember {
         object : TankGestureHandler {
@@ -81,6 +88,21 @@ fun TankScreen(viewModel: TankViewModel, state: TankUiState, onOpenSettings: () 
             override fun onSprinkle(at: Vec2, first: Boolean) = vm.sprinkle(at, first)
             override fun onSprinkleEnd() = vm.endSprinkle()
             override fun onLongPress(at: Vec2) = vm.dropPellet(at)
+            override fun onDragStart(at: Vec2): Boolean = vm.beginDrag(at)
+            override fun onDrag(at: Vec2) = vm.drag(at)
+            override fun onRotate(radians: Float) = vm.rotateSelected(radians)
+            override fun onGestureEnd() = vm.finishGesture()
+        }
+    }
+    val actions = remember {
+        object : EditActions {
+            override fun done() = vm.setEditing(false)
+            override fun undo() = vm.undo()
+            override fun redo() = vm.redo()
+            override fun tool(tool: EditTool) = vm.setTool(tool)
+            override fun add() = onOpenDecor()
+            override fun turn() = vm.turnSelected()
+            override fun remove() = vm.removeSelected()
         }
     }
     val metrics = LocalContext.current.resources.displayMetrics
@@ -98,24 +120,43 @@ fun TankScreen(viewModel: TankViewModel, state: TankUiState, onOpenSettings: () 
             Modifier
                 .fillMaxSize()
                 .testTag(TankTags.GESTURES)
-                .semantics { contentDescription = "The lagoon. Tap the water; drag a finger to sprinkle food; hold for a pellet; pinch with two fingers to explore." }
+                .semantics {
+                    contentDescription = if (state.edit.active) {
+                        "The lagoon, being arranged. Tap a decoration to select it, drag it to move it; with the net, tap a creature."
+                    } else {
+                        "The lagoon. Tap the water; drag a finger to sprinkle food; hold for a pellet; pinch with two fingers to explore."
+                    }
+                }
                 .tankGestures(handler),
         )
-        TankHud(
-            state = state,
-            onAdd = onOpenSpecies,
-            onSettings = onOpenSettings,
-        )
+        SelectionRing(state.edit.selection)
+        NetSweepEffect(state.edit.sweep)
+        if (state.edit.active) {
+            EditOverlay(
+                state.edit, actions,
+                Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(14.dp),
+            )
+        } else {
+            TankHud(
+                state = state,
+                onAdd = onOpenSpecies,
+                onSettings = onOpenSettings,
+                onArrange = { vm.setEditing(true) },
+            )
+        }
     }
 }
 
 @Composable
-fun TankHud(state: TankUiState, onAdd: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
+fun TankHud(state: TankUiState, onAdd: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier, onArrange: () -> Unit = {}) {
     Box(modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(14.dp)) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Box(Modifier.weight(1f)) { TitlePill(state.total) }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    GlassIconButton(onArrange, "Arrange the lagoon", EditTags.ARRANGE) {
+                        Icon(Icons.Outlined.Edit, null, Modifier.size(22.dp), tint = Ocean.Foam)
+                    }
                     GlassIconButton(onAdd, "Release creatures", TankTags.ADD) {
                         Icon(Icons.Rounded.Add, null, Modifier.size(26.dp), tint = Ocean.Foam)
                     }

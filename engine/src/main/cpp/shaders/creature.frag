@@ -17,6 +17,8 @@
 //   Uʻa, the white-spotted hermit crab: red legs and claws with black-ringed
 //   white spots and bristly edges, eyes on stalks, in a glossy turban shell.
 //   Clouds: stirred-up sand, and octopus ink.
+//   Decorations: Toʻa the coral head, Toʻapū the branching coral, Pahua the
+//   giant clam, ʻŌfaʻi the stone.
 
 layout(location = 0) in vec2 vUv;
 layout(location = 1) flat in int vPart;
@@ -605,6 +607,325 @@ vec4 cloud(Lit l, float caustic) {
     return finish(color, alpha);
 }
 
+
+// ------------------------------------------------------------------ decorations
+// In the decoration's own frame: vUv on its unit disc (x along its angle),
+// vAux.xy the slope of its surface in world axes, vAux.w the distance to its
+// outline. So the patterns move with it when it is dragged or turned.
+
+/** A vector in the decoration's frame, turned into world axes. */
+vec2 frameToWorld(vec2 v) {
+    vec2 f = vec2(cos(vFrame), sin(vFrame));
+    return f * v.x + vec2(-f.y, f.x) * v.y;
+}
+
+/** The surface normal from the dome's slope plus a bump's slope (in the decoration's frame). */
+vec3 decorNormal(vec2 bumpSlope) {
+    vec2 s = vAux.xy + frameToWorld(bumpSlope);
+    return normalize(vec3(-s, 1.0));
+}
+
+/**
+ * Rounded lumps on a cellular pattern: x = distance to the nearest centre,
+ * y = distance to the cell's edge, zw = from here toward the centre; id the cell.
+ */
+vec4 lumps(vec2 p, out float id) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    float f1 = 8.0, f2 = 8.0;
+    vec2 to = vec2(0.0), cid = vec2(0.0);
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 g = vec2(x, y);
+            vec2 r = g + 0.15 + 0.7 * hash22(i + g) - f;
+            float d = dot(r, r);
+            if (d < f1) {
+                f2 = f1;
+                f1 = d;
+                to = r;
+                cid = i + g;
+            } else if (d < f2) {
+                f2 = d;
+            }
+        }
+    }
+    id = hash12(cid);
+    return vec4(sqrt(f1), sqrt(f2) - sqrt(f1), to);
+}
+
+/** Where a decoration meets the sand: its colour blends into the sand's, its edge is soft. */
+vec3 intoSand(vec3 albedo, float rho) {
+    return mix(albedo, sandAlbedo(vWorld), smoothstep(0.86, 1.0, rho) * 0.85);
+}
+
+float decorAlpha(float rho) {
+    float aa = max(fwidth(rho) * 1.5, 0.03);
+    return 1.0 - smoothstep(1.0 - aa, 1.0, rho);
+}
+
+vec3 shade(vec3 albedo, vec3 n, Lit l, float ao, float gloss, float sheen) {
+    float diffuse = max(dot(n, normalize(F.sun.xyz)), 0.0);
+    float ndh = max(dot(n, l.H), 0.0);
+    return albedo * (l.sun * diffuse + l.ambient) * ao + l.sun * pow(ndh, gloss) * sheen;
+}
+
+/**
+ * Toʻa, a Porites coral head: knobbly lobes divided by grooves, the surface
+ * pitted with tiny polyps, here and there the coloured spirals of Christmas
+ * tree worms; dark turf algae around its foot.
+ */
+/** Distance to the nearest of a scatter of points: 0 on a hummock's crown. */
+float hummock(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    float d1 = 8.0;
+    for (int y = -1; y <= 1; y++)
+        for (int x = -1; x <= 1; x++) {
+            vec2 g = vec2(x, y);
+            vec2 r = g + 0.2 + 0.6 * hash22(i + g) - f;
+            d1 = min(d1, dot(r, r));
+        }
+    return sqrt(d1);
+}
+
+/** The knobbly surface of a Porites head: rounded hummocks of two sizes, creased where they meet. */
+float poritesHeight(vec2 q) {
+    float big = 1.0 - smoothstep(0.0, 0.85, hummock(q * 5.5 + vSeed * 7.0));
+    float small = 1.0 - smoothstep(0.0, 0.8, hummock(q * 13.0 + vSeed * 13.0));
+    return sqrt(big) * 0.75 + small * 0.25;
+}
+
+vec4 coralHead(Lit l, float caustic) {
+    vec2 q = vUv;
+    float rho = vAux.w;
+    const float e = 0.012;
+    float h0 = poritesHeight(q);
+    vec2 g = vec2(poritesHeight(q + vec2(e, 0.0)) - poritesHeight(q - vec2(e, 0.0)),
+                  poritesHeight(q + vec2(0.0, e)) - poritesHeight(q - vec2(0.0, e))) / (2.0 * e);
+    vec3 n = decorNormal(g * 0.12 * (1.0 - smoothstep(0.8, 0.98, rho)));
+    float crease = 1.0 - smoothstep(0.05, 0.3, h0);
+    float id = hash12(floor(q * 3.2 + vSeed * 7.0));
+
+    float k = fract(vSeed * 7.13);
+    vec3 base = k < 0.35 ? srgb(vec3(0.86, 0.78, 0.6))      // cream
+              : k < 0.65 ? srgb(vec3(0.78, 0.64, 0.42))     // golden brown
+              : k < 0.85 ? srgb(vec3(0.74, 0.68, 0.84))     // lavender
+              : srgb(vec3(0.82, 0.72, 0.52));               // sand-yellow
+    vec3 albedo = base * (0.92 + 0.14 * fbm(q * 4.0 + vSeed * 5.0)) * (0.95 + 0.1 * vnoise(q * 20.0 + vSeed * 3.0));
+    albedo *= 1.0 - 0.25 * crease;
+
+    // Polyps: tiny pits scattered over it, fading out when too small to see.
+    vec2 pp = q * 70.0 + vSeed * 41.0;
+    vec2 pc = floor(pp);
+    float pit = 1.0 - smoothstep(0.1, 0.26, length(fract(pp) - 0.5 - (hash22(pc) - 0.5) * 0.5));
+    pit *= step(0.25, hash12(pc + 3.1)) * (1.0 - smoothstep(0.3, 0.7, fwidth(pp.x)));
+    albedo *= 1.0 - 0.14 * pit;
+
+    // Christmas tree worms: here and there a pair of bright spiral plumes.
+    vec2 wc = q * 5.0 + vSeed * 19.0;
+    float wid = hash12(floor(wc));
+    if (wid > 0.84) {
+        vec2 c = fract(wc) - 0.5 - (hash22(floor(wc)) - 0.5) * 0.4;
+        vec3 wormC = wid > 0.97 ? srgb(vec3(0.95, 0.95, 0.9))
+                   : wid > 0.93 ? srgb(vec3(0.95, 0.55, 0.08))
+                   : wid > 0.89 ? srgb(vec3(0.1, 0.35, 0.95))
+                   : srgb(vec3(0.85, 0.12, 0.12));
+        for (int s = 0; s < 2; s++) {
+            vec2 d = c - vec2(s == 0 ? 0.07 : -0.07, 0.0);
+            float r = length(d) / 0.075;
+            if (r < 1.0) {
+                float a = atan(d.y, d.x);
+                float bands = fract(a / TAU * 3.0 + r * 2.2 + (s == 0 ? 0.0 : 0.5));
+                vec3 plume = mix(wormC, wormC * 0.45 + 0.55 * srgb(vec3(1.0)), smoothstep(0.55, 0.75, bands) * 0.5);
+                albedo = mix(albedo, plume, 1.0 - smoothstep(0.75, 1.0, r));
+            }
+        }
+    }
+
+    // A fine dusting of sand on the flat top; dark turf algae round the foot.
+    albedo = mix(albedo, sandAlbedo(vWorld), smoothstep(0.97, 1.0, n.z) * 0.15);
+    float foot = smoothstep(0.78, 0.94, rho) * (0.6 + 0.4 * fbm(q * 9.0 + vSeed * 5.0));
+    albedo = mix(albedo, srgb(vec3(0.36, 0.34, 0.22)), foot * 0.6);
+    albedo = intoSand(albedo, rho);
+
+    // Lit as a solid: wrapped diffuse so the shaded side is not black, darker in the creases and at the foot.
+    vec3 L = normalize(F.sun.xyz);
+    float diffuse = max(dot(n, L) * 0.8 + 0.2, 0.0);
+    float ao = (1.0 - crease * 0.3) * mix(1.0, 0.65, smoothstep(0.75, 1.0, rho));
+    float ndh = max(dot(n, l.H), 0.0);
+    vec3 lit = albedo * (l.sun * diffuse * 1.3 + l.ambient * 0.9) * ao + l.sun * pow(ndh, 24.0) * 0.04;
+    return finish(lit, decorAlpha(rho));
+}
+
+/** The colours of a branching coral: along the branch, and at its growing tips. */
+void branchPalette(out vec3 base, out vec3 tip) {
+    float k = fract(vSeed * 5.31);
+    if (k < 0.3) {
+        base = srgb(vec3(0.6, 0.48, 0.32));
+        tip = srgb(vec3(0.66, 0.48, 0.82));  // tan with violet tips
+    } else if (k < 0.55) {
+        base = srgb(vec3(0.8, 0.74, 0.58));
+        tip = srgb(vec3(0.52, 0.74, 0.92));  // cream with sky-blue tips
+    } else if (k < 0.8) {
+        base = srgb(vec3(0.5, 0.56, 0.36));
+        tip = srgb(vec3(0.84, 0.88, 0.5));   // olive with lime tips
+    } else {
+        base = srgb(vec3(0.78, 0.55, 0.6));
+        tip = srgb(vec3(0.96, 0.82, 0.88));  // pink
+    }
+}
+
+/** How much light gets down into the thicket: the bases of the branches are in shade. */
+float thicketLight() {
+    float above = F.tank.z - vZ;
+    return mix(0.32, 1.0, smoothstep(2.0, 20.0, above));
+}
+
+/**
+ * Toʻapū, branching coral: Acropora branches studded with little cup-shaped
+ * corallites, darker toward the shaded base, pale at the growing tip.
+ */
+vec4 coralBranch(Lit l, float caustic) {
+    float u = vUv.x, v = vUv.y, av = abs(v);
+    float along = vAux.x, hw = max(vAux.y, 0.2);
+    vec3 n = toWorld(vec3(0.0, v * 0.9, sqrt(max(1.0 - v * v * 0.8, 0.1))));
+    vec3 base, tip;
+    branchPalette(base, tip);
+    // Corallites as far apart along the branch as across it, so they stay round.
+    vec3 c = cells(vec2(along / (hw * 0.62), v * 1.6) + vSeed * 13.0);
+    float cup = 1.0 - smoothstep(0.16, 0.34, c.x);
+    float pore = 1.0 - smoothstep(0.04, 0.11, c.x);
+    vec3 albedo = mix(base, tip, smoothstep(0.5, 1.0, u));
+    albedo *= 0.86 + 0.28 * cup;
+    albedo *= 1.0 - 0.4 * pore;
+    // The axial corallite at the very tip: white.
+    albedo = mix(albedo, srgb(vec3(0.96, 0.94, 0.9)), smoothstep(0.9, 0.99, u) * (1.0 - av) * 0.85);
+    vec3 lit = shade(albedo, n, l, thicketLight(), 40.0, 0.08);
+    return finish(lit, edgeAlpha(av));
+}
+
+/** A branch growing straight up, seen end on: a round tip with a white axial corallite. */
+vec4 coralTip(Lit l, float caustic) {
+    float rho = length(vUv);
+    vec3 n = toWorld(vec3(vUv * 0.75, sqrt(max(1.0 - rho * rho * 0.56, 0.1))));
+    vec3 base, tip;
+    branchPalette(base, tip);
+    if (vAux.x > 0.5) {
+        // The heart of the thicket: old dark coral and the shadowed bases of the branches.
+        vec3 c = cells(vUv * 5.0 + vSeed * 9.0);
+        vec3 albedo = base * 0.5 * (0.8 + 0.4 * (1.0 - smoothstep(0.1, 0.3, c.x)));
+        vec3 lit = shade(albedo, n, l, 0.45, 20.0, 0.0);
+        return finish(lit, edgeAlpha(rho));
+    }
+    float a = atan(vUv.y, vUv.x);
+    float radial = 0.5 + 0.5 * cos(a * 7.0 + vSeed * 20.0);
+    vec3 albedo = mix(tip, mix(base, tip, 0.5), smoothstep(0.3, 1.0, rho));
+    albedo *= 0.9 + 0.16 * radial * smoothstep(0.4, 0.8, rho);
+    albedo = mix(albedo, srgb(vec3(0.92, 0.9, 0.86)), (1.0 - smoothstep(0.1, 0.24, rho)) * 0.5);
+    albedo *= 1.0 - 0.35 * (1.0 - smoothstep(0.0, 0.07, rho));  // its tiny mouth
+    vec3 lit = shade(albedo, n, l, thicketLight(), 40.0, 0.1);
+    return finish(lit, edgeAlpha(rho));
+}
+
+/**
+ * Pahua, the giant clam (Tridacna maxima), from above: two fluted valves,
+ * their scalloped lips meeting in a zigzag, and between them the mantle in
+ * vivid blues, greens or browns, spotted, shimmering, with its siphons. It
+ * draws the mantle in and closes the gape when frightened.
+ */
+vec4 giantClam(Lit l, float caustic) {
+    vec2 q = vUv;  // x along the hinge, y across
+    float rho = vAux.w, open = vAux.z;
+    float x = q.x, ay = abs(q.y);
+    float span = sqrt(max(1.0 - x * x, 0.0));
+    // The valves' lips are scalloped where the shell's folds end.
+    float fold = abs(fract(x * 2.6 + 0.25) - 0.5) * 2.0;
+    float lip = (0.05 + 0.1 * fold) * span;
+    float frill = open * (0.035 * sin(x * 30.0 + vSeed * 20.0 + timeS() * 0.9) + 0.02 * sin(x * 71.0 + vSeed * 9.0));
+    float mantleW = mix(lip, 0.9 * span, open * open * (3.0 - 2.0 * open)) + frill;
+    float inMantle = 1.0 - smoothstep(mantleW - 0.025, mantleW + 0.005, ay);
+
+    // The shell: grey-cream folds, growth lines parallel to the lips, a film of algae.
+    float rib = cos(x * 2.6 * TAU);
+    vec2 shellBump = vec2(-sin(x * 2.6 * TAU) * 0.9, 0.0);
+    float growth = smoothstep(0.75, 0.95, fract((ay - lip) * 22.0 + 0.3 * rib));
+    vec3 shellC = srgb(vec3(0.82, 0.8, 0.72)) * (0.82 + 0.18 * rib) * (1.0 - 0.15 * growth);
+    shellC = mix(shellC, srgb(vec3(0.45, 0.5, 0.32)), smoothstep(0.55, 0.85, fbm(q * 6.0 + vSeed * 7.0)) * 0.45);
+
+    // The mantle.
+    float k = fract(vSeed * 3.77);
+    vec3 m0, m1, rim;
+    if (k < 0.3) {
+        m0 = srgb(vec3(0.08, 0.32, 0.85)); m1 = srgb(vec3(0.02, 0.1, 0.42)); rim = srgb(vec3(0.35, 0.9, 0.95));
+    } else if (k < 0.55) {
+        m0 = srgb(vec3(0.08, 0.58, 0.52)); m1 = srgb(vec3(0.95, 0.8, 0.3)); rim = srgb(vec3(0.55, 0.95, 0.72));
+    } else if (k < 0.8) {
+        m0 = srgb(vec3(0.42, 0.3, 0.17)); m1 = srgb(vec3(0.22, 0.55, 0.95)); rim = srgb(vec3(0.9, 0.76, 0.42));
+    } else {
+        m0 = srgb(vec3(0.32, 0.18, 0.68)); m1 = srgb(vec3(0.85, 0.6, 0.95)); rim = srgb(vec3(0.42, 0.8, 1.0));
+    }
+    float sid;
+    vec4 sp = lumps(vec2(q.x * 9.0, q.y * 14.0) + vSeed * 17.0, sid);
+    float spot = 1.0 - smoothstep(0.18, 0.3, sp.x);
+    vec3 mantle = mix(m0, m1, spot * 0.85);
+    // Wavy lines running along the mantle, and a bright band at its frilled edge.
+    mantle *= 0.88 + 0.12 * sin((ay / max(mantleW, 0.05)) * 18.0 + vnoise(q * 8.0) * 4.0);
+    mantle = mix(mantle, rim, smoothstep(0.72, 0.95, ay / max(mantleW, 0.05)) * 0.8);
+    // Iridophores: pinpoints that shimmer as the light moves.
+    vec2 ip = q * vec2(38.0, 52.0);
+    float glint = (1.0 - smoothstep(0.12, 0.3, length(fract(ip) - 0.5))) * step(0.72, hash12(floor(ip) + vSeed));
+    glint *= 0.5 + 0.5 * sin(timeS() * 2.3 + hash12(floor(ip)) * 40.0);
+    mantle += rim * glint * 0.6 * open;
+    // The incurrent siphon at one end, frilled; the excurrent one a small raised tube.
+    vec2 si = (q - vec2(0.52, 0.0)) / vec2(0.13, 0.08);
+    float sd = length(si);
+    float ring = smoothstep(0.55, 0.7, sd) * (1.0 - smoothstep(0.9, 1.05, sd));
+    float tentacles = step(0.5, fract(atan(si.y, si.x) / TAU * 16.0));
+    mantle = mix(mantle, rim * 0.8, ring * tentacles * open);
+    mantle = mix(mantle, srgb(vec3(0.02, 0.03, 0.05)), (1.0 - smoothstep(0.5, 0.6, sd)) * open);
+    float ed = length((q - vec2(-0.12, 0.0)) / vec2(0.06, 0.05));
+    mantle = mix(mantle, mantle * 1.5 + 0.05, smoothstep(0.55, 0.75, ed) * (1.0 - smoothstep(0.85, 1.0, ed)) * open);
+    mantle = mix(mantle, m1 * 0.3, (1.0 - smoothstep(0.4, 0.55, ed)) * open);
+    // Barely open, only the dark inner edge of the mantle shows in the gape.
+    mantle = mix(m1 * 0.25, mantle, smoothstep(0.1, 0.5, open));
+
+    vec2 bump = mix(shellBump, vec2(0.0, sign(q.y) * 0.35), inMantle);
+    vec3 n = decorNormal(bump);
+    vec3 albedo = intoSand(mix(shellC, mantle, inMantle), rho);
+    vec3 lit = shade(albedo, n, l, 1.0, mix(20.0, 70.0, inMantle), mix(0.04, 0.35, inMantle));
+    return finish(lit, decorAlpha(rho));
+}
+
+/**
+ * ʻŌfaʻi, a stone of the lagoon: rough dark basalt with lighter patches and
+ * pits, crusts of pink coralline algae on its sides, green-brown turf on top.
+ */
+float stoneHeight(vec2 q) { return fbm(q * 5.0 + vSeed * 11.0) * 0.6 + vnoise(q * 16.0 + vSeed * 3.0) * 0.25; }
+
+vec4 stone(Lit l, float caustic) {
+    vec2 q = vUv;
+    float rho = vAux.w;
+    const float e = 0.015;
+    vec2 g = vec2(stoneHeight(q + vec2(e, 0.0)) - stoneHeight(q - vec2(e, 0.0)),
+                  stoneHeight(q + vec2(0.0, e)) - stoneHeight(q - vec2(0.0, e))) / (2.0 * e);
+    vec3 n = decorNormal(g * 0.18 * (1.0 - smoothstep(0.8, 1.0, rho)));
+    float patches = fbm(q * 3.2 + vSeed * 4.0);
+    vec3 albedo = mix(srgb(vec3(0.42, 0.39, 0.35)), srgb(vec3(0.6, 0.56, 0.5)), smoothstep(0.35, 0.7, patches));
+    albedo *= 0.9 + 0.2 * vnoise(q * 24.0 + vSeed);
+    // Small pits left by gas bubbles in the lava, few and irregular.
+    vec3 c = cells(q * 9.0 + vSeed * 9.0);
+    albedo *= 1.0 - 0.3 * (1.0 - smoothstep(0.05, 0.1, c.x)) * step(0.55, c.z);
+    // Pink coralline crusts in small blotches, on the sides more than the top.
+    float crust = smoothstep(0.62, 0.7, fbm(q * 6.0 + vSeed * 23.0) + 0.1 * smoothstep(0.5, 0.9, rho));
+    albedo = mix(albedo, srgb(vec3(0.8, 0.6, 0.6)) * (0.88 + 0.24 * vnoise(q * 30.0)), crust * 0.7);
+    // A soft fuzz of turf algae where the light falls.
+    float turf = smoothstep(0.85, 0.97, n.z) * smoothstep(0.5, 0.65, fbm(q * 5.0 + vSeed * 2.0 + 5.0));
+    albedo = mix(albedo, srgb(vec3(0.42, 0.46, 0.26)) * (0.9 + 0.2 * vnoise(q * 40.0)), turf * 0.6);
+    albedo = intoSand(albedo, rho);
+    vec3 lit = shade(albedo, n, l, mix(1.0, 0.75, smoothstep(0.8, 1.0, rho)), 24.0, 0.04);
+    return finish(lit, decorAlpha(rho));
+}
+
 void main() {
     float depth = vZ / F.tank.z;
     float caustic = causticsAt(vWorld, timeS(), 1) * (1.0 - 0.55 * depth);
@@ -616,6 +937,10 @@ void main() {
         case 4: outColor = octopus(l, caustic); break;
         case 5: outColor = vPart == 0 ? crabShell(l, caustic) : crabLimb(l, caustic); break;
         case 6: outColor = cloud(l, caustic); break;
+        case 11: outColor = coralHead(l, caustic); break;
+        case 12: outColor = vPart == 1 ? coralTip(l, caustic) : coralBranch(l, caustic); break;
+        case 13: outColor = giantClam(l, caustic); break;
+        case 14: outColor = stone(l, caustic); break;
         default: outColor = vPart == 0 ? fishBody(l, caustic) : fishFin(l, caustic); break;  // the schooling fish
     }
 }

@@ -1,5 +1,7 @@
 package com.jpcottin.tairoto.engine
 
+import com.jpcottin.tairoto.world.DecorCatalog
+import com.jpcottin.tairoto.world.DecorSpec
 import com.jpcottin.tairoto.world.EntityId
 import com.jpcottin.tairoto.world.SceneDiff
 import com.jpcottin.tairoto.world.SpeciesCatalog
@@ -12,16 +14,31 @@ import com.jpcottin.tairoto.world.TankSize
  */
 class SceneSync(private val tank: TankEngine) {
     private val applied = HashSet<EntityId>()
+    private val appliedDecor = HashMap<EntityId, DecorSpec>()
     private var size: TankSize? = null
 
     val appliedCount: Int get() = applied.size
+    val appliedDecorCount: Int get() = appliedDecor.size
 
     fun apply(scene: TankScene) {
         if (scene.size != size) {
             tank.setTank(scene.size)
             size = scene.size
         }
-        val diff = SceneDiff.between(applied, scene)
+        val diff = SceneDiff.between(applied, scene, appliedDecor)
+        diff.decorRemoved.forEach {
+            tank.removeDecor(it)
+            appliedDecor -= it
+        }
+        diff.decorMoved.forEach {
+            tank.moveDecor(it)
+            appliedDecor[it.id] = it
+        }
+        diff.decorAdded.forEach { d ->
+            val kind = DecorCatalog[d.kindId] ?: return@forEach
+            tank.placeDecor(d, kind)
+            appliedDecor[d.id] = d
+        }
         diff.removed.forEach {
             tank.remove(it)
             applied -= it

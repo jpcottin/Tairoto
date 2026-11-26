@@ -22,6 +22,9 @@ float strengthOf(int visual, int part) {
         return part == 1 ? 0.4 : 0.5;
     }
     if (visual == 6) return (part == 1 ? 0.35 : 0.12) * vAux.x;   // ink, sand
+    if (visual == 11 || visual == 14) return 0.6;                 // coral head, stone
+    if (visual == 12) return 0.5;                                 // branching coral, light between the branches
+    if (visual == 13) return 0.45;                                // giant clam
     if (part == 0 || part == 10) return 0.62;                     // body, shell
     if (part == 11 || part == 12) return 0.55;                    // head, flippers
     if (part == 1) return 0.18;                                   // tail fin

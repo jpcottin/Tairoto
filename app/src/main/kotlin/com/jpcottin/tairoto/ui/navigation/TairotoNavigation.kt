@@ -27,6 +27,7 @@ import com.jpcottin.tairoto.ui.settings.SettingsScreen
 import com.jpcottin.tairoto.ui.settings.SettingsUi
 import com.jpcottin.tairoto.ui.tank.SpeciesPicker
 import com.jpcottin.tairoto.ui.tank.TankScreen
+import com.jpcottin.tairoto.ui.tank.TankUiState
 import com.jpcottin.tairoto.ui.tank.TankViewModel
 import kotlinx.serialization.Serializable
 import java.util.Locale
@@ -39,6 +40,10 @@ data object SpeciesKey : NavKey
 
 @Serializable
 data object SettingsKey : NavKey
+
+/** The picker, open on its decorations. */
+@Serializable
+data object DecorKey : NavKey
 
 /**
  * How many panes fit side by side: two on a tablet, an unfolded foldable or a
@@ -84,6 +89,8 @@ fun TairotoNavigation(vm: TankViewModel) {
     // Two panes side by side report no previous entries, which turns off
     // NavDisplay's own back handling; this one closes the supporting pane.
     BackHandler(enabled = backStack.size > 1) { backStack.removeLastOrNull() }
+    // Back while arranging (with nothing open) finishes arranging.
+    BackHandler(enabled = backStack.size == 1 && state.edit.active) { vm.setEditing(false) }
 
     // The lagoon is immersive unless the settings take the whole screen.
     Immersive(!(backStack.lastOrNull() == SettingsKey && !twoPane))
@@ -99,15 +106,14 @@ fun TairotoNavigation(vm: TankViewModel) {
                     state = state,
                     onOpenSettings = { open(SettingsKey) },
                     onOpenSpecies = { vm.dismissHint(); open(SpeciesKey) },
+                    onOpenDecor = { open(DecorKey) },
                 )
             }
+            entry<DecorKey>(metadata = SupportingPaneSceneStrategy.supportingPane() + BottomSheetSceneStrategy.bottomSheet()) {
+                Picker(vm, state, twoPane, startOnDecor = true, close = { close(DecorKey) })
+            }
             entry<SpeciesKey>(metadata = SupportingPaneSceneStrategy.supportingPane() + BottomSheetSceneStrategy.bottomSheet()) {
-                SpeciesPicker(
-                    counts = state.counts,
-                    roomLeft = state.roomLeft,
-                    onRelease = vm::release,
-                    onClose = if (twoPane) ({ close(SpeciesKey) }) else null,
-                )
+                Picker(vm, state, twoPane, startOnDecor = false, close = { close(SpeciesKey) })
             }
             entry<SettingsKey>(metadata = SupportingPaneSceneStrategy.supportingPane()) {
                 SettingsScreen(
@@ -128,6 +134,28 @@ fun TairotoNavigation(vm: TankViewModel) {
                 )
             }
         },
+    )
+}
+
+/**
+ * What can go into the lagoon. Placing a decoration from a sheet closes it,
+ * so the decoration can be seen and dragged into place; a pane beside the
+ * lagoon stays open.
+ */
+@Composable
+private fun Picker(vm: TankViewModel, state: TankUiState, twoPane: Boolean, startOnDecor: Boolean, close: () -> Unit) {
+    SpeciesPicker(
+        counts = state.counts,
+        roomLeft = state.roomLeft,
+        onRelease = vm::release,
+        onClose = if (twoPane) close else null,
+        decorCounts = state.decorCounts,
+        decorRoomLeft = state.decorRoomLeft,
+        onPlace = { id ->
+            vm.placeDecor(id)
+            if (!twoPane) close()
+        },
+        startOnDecor = startOnDecor,
     )
 }
 

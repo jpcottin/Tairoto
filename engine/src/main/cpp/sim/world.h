@@ -11,6 +11,7 @@
 #include "sim/cloud.h"
 #include "sim/creature.h"
 #include "sim/current.h"
+#include "sim/decor.h"
 #include "sim/food.h"
 
 namespace dt {
@@ -119,6 +120,24 @@ public:
     /** The root of a hermit crab's leg, at the shell's opening. */
     static Vec2 crabLegRoot(const Creature& c, int leg);
 
+    // ---- decorations: coral heads, branching coral, giant clams, stones
+    /** Puts a decoration on the sand; false if the id is taken. */
+    bool placeDecor(int64_t id, DecorKind kind, uint32_t seed, Vec2 at, float angle, float radius, float height);
+    bool moveDecor(int64_t id, Vec2 at, float angle);
+    bool removeDecor(int64_t id);
+    void clearDecor() { decor_.clear(); }
+    const std::vector<Decor>& decor() const { return decor_; }
+    std::vector<Decor>& decorForTest() { return decor_; }
+    const Decor* findDecor(int64_t id) const;
+    /** How high the decorations stand above the sand at p (the highest of them; 0 on open sand). */
+    float decorHeightAt(Vec2 p) const;
+    /** True if p (padded by pad mm) is on the footprint of a decoration. */
+    bool onDecor(Vec2 p, float pad) const;
+    /** May this creature slip in among the branches of d? Only small reef fish do. */
+    static bool shelters(const Decor& d, const Creature& c);
+    /** How far below its centre a creature's body reaches (mm), for clearances. */
+    static float bodyBelow(const Creature& c);
+
 private:
     void stepFixed(float h);
     void stepFish(Creature& c, float h);
@@ -138,6 +157,17 @@ private:
     Vec2 wallAvoidance(Vec2 p, Vec2 fwd, float lookAhead, float margin) const;
     void clampInside(Creature& c, float margin) const;
     static void updateSpine(Creature& c, float h);
+    /** A push away from decorations ahead that stand taller than the creature swims. */
+    Vec2 decorAvoidance(const Creature& c, Vec2 fwd, float lookAhead, float pad) const;
+    /** Moves a creature out of any decoration it has got into (sideways, never up or down). */
+    void keepOutOfDecor(Creature& c, float pad) const;
+    /** The nearest decoration of a kind within maxDist of p (edge to p), or null. */
+    const Decor* nearestDecor(Vec2 p, float maxDist, bool (*accept)(const Decor&)) const;
+    /** A random point of open sand at least margin from the walls and clear of decorations. */
+    Vec2 openSand(float margin, float pad);
+    /** Where an octopus would tuck itself in against a coral head or a stone, if one is near. */
+    bool denFor(const Creature& c, Vec2& at) const;
+    void stepDecor(float h);
 
     void stepFood(float h);
     void settleFood();
@@ -170,6 +200,7 @@ private:
     CurrentField current_;
     std::vector<Cloud> clouds_;
     std::vector<int> grounded_;  // creatures on the sand, rebuilt every step
+    std::vector<Decor> decor_;
 };
 
 }  // namespace dt

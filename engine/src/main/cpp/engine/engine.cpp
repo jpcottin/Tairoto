@@ -88,6 +88,12 @@ void Engine::spawn(int64_t id, Visual v, Locomotion l, const SpeciesParams& sp, 
 void Engine::remove(int64_t id) { post([this, id] { world_.remove(id); }); }
 void Engine::clearCreatures() { post([this] { world_.clear(); }); }
 
+void Engine::placeDecor(int64_t id, DecorKind kind, uint32_t seed, Vec2 at, float angle, float radius, float height) {
+    post([=] { world_.placeDecor(id, kind, seed, at, angle, radius, height); });
+}
+void Engine::moveDecor(int64_t id, Vec2 at, float angle) { post([=] { world_.moveDecor(id, at, angle); }); }
+void Engine::removeDecor(int64_t id) { post([=] { world_.removeDecor(id); }); }
+
 void Engine::tap(Vec2 world) {
     post([this, world] {
         world_.startle(world);

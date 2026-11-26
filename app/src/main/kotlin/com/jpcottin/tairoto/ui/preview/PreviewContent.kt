@@ -37,14 +37,26 @@ import com.jpcottin.tairoto.engine.VulkanState
 import com.jpcottin.tairoto.ui.navigation.rememberLagoonDirective
 import com.jpcottin.tairoto.ui.settings.SettingsScreen
 import com.jpcottin.tairoto.ui.settings.SettingsUi
+import com.jpcottin.tairoto.ui.species.DecorArt
 import com.jpcottin.tairoto.ui.species.SpeciesArt
+import com.jpcottin.tairoto.ui.tank.DecorCard
+import com.jpcottin.tairoto.ui.tank.EditActions
+import com.jpcottin.tairoto.ui.tank.EditOverlay
+import com.jpcottin.tairoto.ui.tank.EditTool
+import com.jpcottin.tairoto.ui.tank.EditUi
+import com.jpcottin.tairoto.ui.tank.SelectionRing
+import com.jpcottin.tairoto.ui.tank.SelectionUi
 import com.jpcottin.tairoto.ui.tank.SpeciesCard
 import com.jpcottin.tairoto.ui.tank.SpeciesPicker
 import com.jpcottin.tairoto.ui.tank.TankHud
 import com.jpcottin.tairoto.ui.tank.TankUiState
 import com.jpcottin.tairoto.ui.theme.Ocean
 import com.jpcottin.tairoto.ui.theme.TairotoTheme
+import com.jpcottin.tairoto.world.DecorCatalog
+import com.jpcottin.tairoto.world.EntityId
 import com.jpcottin.tairoto.world.QualityMode
+import com.jpcottin.tairoto.world.UndoState
+import com.jpcottin.tairoto.world.Vec2
 import com.jpcottin.tairoto.world.QualityTier
 import com.jpcottin.tairoto.world.SpeciesCatalog
 import com.jpcottin.tairoto.world.TankSize
@@ -72,6 +84,16 @@ object PreviewData {
     val lagoonWithStats = lagoon.copy(
         hintVisible = false, showStats = true, stats = stats, tier = QualityTier.HIGH, gpu = "Adreno (TM) 750",
         thermalHeadroom = 0.42f,
+    )
+
+    val decorCounts = mapOf("coral_head" to 2, "branching_coral" to 1, "giant_clam" to 1, "stone" to 3)
+
+    /** Arranging, with a coral head selected in the middle of the screen. */
+    fun editing(tool: EditTool = EditTool.MOVE, selected: Boolean = true) = EditUi(
+        active = true,
+        tool = tool,
+        selection = if (selected) SelectionUi(EntityId(9), Vec2(520f, 1100f), 260f, "Toʻa") else null,
+        undo = UndoState(undo = "moving Toʻa"),
     )
 
     val settings = SettingsUi(
@@ -127,7 +149,7 @@ fun LagoonWithPanePreviewContent(pane: PreviewPane, state: TankUiState = Preview
         return
     }
     when (pane) {
-        PreviewPane.Species -> Box(Modifier.fillMaxSize()) {
+        PreviewPane.Species, PreviewPane.Decor -> Box(Modifier.fillMaxSize()) {
             LagoonScreenPreviewContent(state.copy(hintVisible = false))
             Box(Modifier.fillMaxSize().background(Color(0x66000000)))
             Surface(
@@ -140,13 +162,75 @@ fun LagoonWithPanePreviewContent(pane: PreviewPane, state: TankUiState = Preview
     }
 }
 
-enum class PreviewPane { Species, Settings }
+enum class PreviewPane { Species, Decor, Settings }
 
 @Composable
 private fun PaneContent(pane: PreviewPane, inPane: Boolean) {
     when (pane) {
         PreviewPane.Species -> SpeciesPicker(PreviewData.counts, 160 - PreviewData.total, onRelease = {}, onClose = if (inPane) ({}) else null)
+        PreviewPane.Decor -> SpeciesPicker(
+            PreviewData.counts, 160 - PreviewData.total, onRelease = {}, onClose = if (inPane) ({}) else null,
+            decorCounts = PreviewData.decorCounts, decorRoomLeft = 17, startOnDecor = true,
+        )
         PreviewPane.Settings -> SettingsScreen(PreviewData.settings, onBack = {}, onQuality = {}, onShowStats = {}, onResetTank = {}, inPane = inPane)
+    }
+}
+
+/**
+ * Arranging the lagoon: the edit bar over the backdrop, with a decoration
+ * selected (its ring and its name with the turn and remove buttons) or the
+ * hint for the tool in hand.
+ */
+@Composable
+fun LagoonEditingPreviewContent(edit: EditUi = PreviewData.editing()) {
+    Box(Modifier.fillMaxSize()) {
+        LagoonBackdrop()
+        SelectionRing(edit.selection)
+        EditOverlay(
+            edit,
+            object : EditActions {
+                override fun done() = Unit
+                override fun undo() = Unit
+                override fun redo() = Unit
+                override fun tool(tool: EditTool) = Unit
+                override fun add() = Unit
+                override fun turn() = Unit
+                override fun remove() = Unit
+            },
+            Modifier.padding(14.dp),
+        )
+    }
+}
+
+/** One card per decoration, as in the picker. */
+@Composable
+fun DecorCardsPreviewContent() {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column(
+            Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            DecorCatalog.all.forEach { DecorCard(it, PreviewData.decorCounts[it.id] ?: 0, enabled = true, onPlace = {}) }
+        }
+    }
+}
+
+/** Every decoration's portrait with its Tahitian name. */
+@Composable
+fun DecorGalleryPreviewContent() {
+    Row(Modifier.background(Ocean.Abyss).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        DecorCatalog.all.forEach { kind ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                DecorArt(kind.id, Modifier.size(104.dp).clip(CircleShape))
+                Text(
+                    kind.displayName,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Ocean.Foam,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.width(104.dp).padding(top = 4.dp),
+                )
+            }
+        }
     }
 }
 
@@ -210,6 +294,26 @@ private fun LagoonWithSettingsPreview() = TairotoTheme { LagoonWithPanePreviewCo
 @NarrowPreviews
 @Composable
 private fun SpeciesCardsPreview() = TairotoTheme { SpeciesCardsPreviewContent() }
+
+@FormFactorPreviews
+@Composable
+private fun LagoonWithDecorPreview() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Decor) }
+
+@FormFactorPreviews
+@Composable
+private fun LagoonEditingPreview() = TairotoTheme { LagoonEditingPreviewContent() }
+
+@NarrowPreviews
+@Composable
+private fun LagoonNettingPreview() = TairotoTheme { LagoonEditingPreviewContent(PreviewData.editing(EditTool.NET, selected = false)) }
+
+@NarrowPreviews
+@Composable
+private fun DecorCardsPreview() = TairotoTheme { DecorCardsPreviewContent() }
+
+@androidx.compose.ui.tooling.preview.Preview(widthDp = 480, heightDp = 150)
+@Composable
+private fun DecorGalleryPreview() = TairotoTheme { DecorGalleryPreviewContent() }
 
 @androidx.compose.ui.tooling.preview.Preview(widthDp = 600, heightDp = 300)
 @androidx.compose.ui.tooling.preview.Preview(widthDp = 360, heightDp = 420)

@@ -81,6 +81,23 @@ JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeClear(J
     engine(h)->clearCreatures();
 }
 
+JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativePlaceDecor(JNIEnv*, jclass, jlong h, jlong id,
+                                                                                    jint kind, jint seed, jfloat x,
+                                                                                    jfloat y, jfloat angle,
+                                                                                    jfloat radius, jfloat height) {
+    engine(h)->placeDecor(id, (DecorKind)kind, (uint32_t)seed, {x, y}, angle, radius, height);
+}
+
+JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeMoveDecor(JNIEnv*, jclass, jlong h, jlong id,
+                                                                                   jfloat x, jfloat y, jfloat angle) {
+    engine(h)->moveDecor(id, {x, y}, angle);
+}
+
+JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeRemoveDecor(JNIEnv*, jclass, jlong h,
+                                                                                     jlong id) {
+    engine(h)->removeDecor(id);
+}
+
 JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeTap(JNIEnv*, jclass, jlong h, jfloat x,
                                                                              jfloat y) {
     engine(h)->tap({x, y});

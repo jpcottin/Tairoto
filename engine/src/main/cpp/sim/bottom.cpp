@@ -55,6 +55,15 @@ float World::floorUnder(const Creature& c) const {
             below = 0.1f * c.length + 1.0f;
             break;
     }
+    // Over a coral head or a stone it keeps above its top (a chromis may go in among the branches).
+    for (const Decor& d : decor_) {
+        if (shelters(d, c)) continue;
+        Vec2 v = c.pos.xy() - d.pos;
+        float r = length(v);
+        float edge = d.radiusAt((r > 1e-4f ? std::atan2(v.y, v.x) : 0.0f) - d.angle) + reach * 0.5f;
+        if (r >= edge) continue;
+        limit = std::min(limit, tank_.depth - d.heightAtRho(r / edge) - below);
+    }
     for (int i : grounded_) {
         const Creature& o = creatures_[i];
         if (o.id == c.id) continue;
@@ -382,7 +391,10 @@ void World::stepRay(Creature& c, float h) {
     if (c.glideTimer > 0 && c.speed < cruise * 0.6f) c.glideTimer = 0;
 
     // Turning, wide and smooth.
-    if (!onSand) steer += wallAvoidance(p, fwd, 1.2f * span, 0.7f * span) * 1.4f;
+    if (!onSand) {
+        steer += wallAvoidance(p, fwd, 1.2f * span, 0.7f * span) * 1.4f;
+        steer += decorAvoidance(c, fwd, 1.2f * span, 0.35f * span) * 1.4f;
+    }
     float maxTurn = c.sp.turnRate * (c.behavior == Behavior::Flee ? 1.8f : 1.0f) * (onSand ? 0.1f : 1.0f) *
                     (0.5f + 0.5f * saturate(c.speed / cruise));
     float before = c.heading;
@@ -398,6 +410,7 @@ void World::stepRay(Creature& c, float h) {
     c.pos.x = np.x;
     c.pos.y = np.y;
     clampInside(c, span * 0.45f);
+    keepOutOfDecor(c, 0.3f * span);
 
     if (c.behavior == Behavior::Forage) {
         float eatenBefore = c.eatenMg;
@@ -606,7 +619,9 @@ void World::stepOctopus(Creature& c, float h) {
     Vec2 grabAt = p;
     auto newTarget = [&]() {
         float m = std::min(L * 0.9f, std::min(tank_.width, tank_.height) * 0.4f);
-        c.target = Vec3(rng_.range(m, tank_.width - m), rng_.range(m, tank_.height - m), sandZ);
+        Vec2 at = openSand(m, 0.6f * L);
+        c.target = Vec3(at.x, at.y, sandZ);
+        c.den = false;
     };
 
     switch (c.behavior) {
@@ -621,6 +636,8 @@ void World::stepOctopus(Creature& c, float h) {
                 if (rng_.chance(0.35f)) {
                     c.behavior = Behavior::Hide;
                     c.stateTimer = rng_.range(20.0f, 45.0f);
+                    Vec2 den;
+                    if ((c.den = denFor(c, den))) c.target = Vec3(den.x, den.y, sandZ);
                 } else {
                     newTarget();
                     c.stateTimer = rng_.range(10.0f, 25.0f);
@@ -635,6 +652,8 @@ void World::stepOctopus(Creature& c, float h) {
                 if (rng_.chance(0.4f)) {
                     c.behavior = Behavior::Hide;
                     c.stateTimer = rng_.range(20.0f, 45.0f);
+                    Vec2 den;
+                    if ((c.den = denFor(c, den))) c.target = Vec3(den.x, den.y, sandZ);
                 } else {
                     c.behavior = Behavior::Cruise;
                     newTarget();
@@ -643,6 +662,13 @@ void World::stepOctopus(Creature& c, float h) {
             }
             break;
         case Behavior::Hide:
+            if (c.den && dist > 0.25f * L) {
+                // First to its den against a coral head or a stone, fading as it goes.
+                targetSpeed = cruise;
+                steer = toT / dist;
+                camoWant = 0.4f;
+                break;
+            }
             camoWant = 1;
             spread = 0.75f;
             curl = 2.4f;  // arms curled close around it
@@ -713,6 +739,8 @@ void World::stepOctopus(Creature& c, float h) {
             if (c.pos.z > D - 2.5f || c.stateTimer <= 0) {
                 c.behavior = Behavior::Hide;
                 c.stateTimer = rng_.range(15.0f, 30.0f);
+                Vec2 den;
+                if ((c.den = denFor(c, den))) c.target = Vec3(den.x, den.y, sandZ);
             }
             break;
         default:
@@ -726,7 +754,10 @@ void World::stepOctopus(Creature& c, float h) {
 
     bool jetting = c.behavior == Behavior::Flee;
     if (!jetting) {
-        if (targetSpeed > 0) steer += wallAvoidance(p, steer, 0.8f * L, 0.7f * L) * 1.2f;
+        if (targetSpeed > 0) {
+            steer += wallAvoidance(p, steer, 0.8f * L, 0.7f * L) * 1.2f;
+            steer += decorAvoidance(c, normalize(steer, fromAngle(c.heading)), 0.8f * L, 0.35f * L) * 1.2f;
+        }
         float before = c.heading;
         if (targetSpeed > 0) c.heading = approachAngle(c.heading, angleOf(steer), c.sp.turnRate * h);
         c.turnRate = damp(c.turnRate, wrapAngle(c.heading - before) / h, 4.0f, h);
@@ -749,6 +780,7 @@ void World::stepOctopus(Creature& c, float h) {
     c.pos.x = np.x;
     c.pos.y = np.y;
     clampInside(c, 0.5f * L);
+    keepOutOfDecor(c, 0.3f * L);
     if (c.behavior != Behavior::Forage) c.grabArm = -1;
 
     updateArms(c, h, spread, curl, rate, grabAt);
@@ -881,7 +913,8 @@ void World::stepCrab(Creature& c, float h) {
     Vec2 steer = dist > 1e-3f ? toT / dist : fwd;
     auto newTarget = [&]() {
         float m = std::min(L * 1.2f, std::min(tank_.width, tank_.height) * 0.4f);
-        c.target = Vec3(rng_.range(m, tank_.width - m), rng_.range(m, tank_.height - m), c.pos.z);
+        Vec2 at = openSand(m, 0.6f * L);
+        c.target = Vec3(at.x, at.y, c.pos.z);
     };
 
     switch (c.behavior) {
@@ -946,7 +979,10 @@ void World::stepCrab(Creature& c, float h) {
     c.cover = approach(c.cover, coverWant, coverRate * h);
 
     if (c.cover < 0.3f) {
-        if (targetSpeed > 0) steer += wallAvoidance(p, fwd, 0.6f * L, 0.8f * L) * 1.2f;
+        if (targetSpeed > 0) {
+            steer += wallAvoidance(p, fwd, 0.6f * L, 0.8f * L) * 1.2f;
+            steer += decorAvoidance(c, fwd, 0.8f * L, 0.45f * L) * 1.4f;
+        }
         float before = c.heading;
         c.heading = approachAngle(c.heading, angleOf(steer), c.sp.turnRate * h);
         c.turnRate = damp(c.turnRate, wrapAngle(c.heading - before) / h, 6.0f, h);
@@ -962,6 +998,7 @@ void World::stepCrab(Creature& c, float h) {
     c.pos.x = np.x;
     c.pos.y = np.y;
     clampInside(c, 0.6f * L);
+    keepOutOfDecor(c, 0.45f * L);
     c.pos.z = std::min(D - crabLift(L), D - 1.0f);
 
     c.wobble = damp(c.wobble, 0.0f, 2.5f, h);

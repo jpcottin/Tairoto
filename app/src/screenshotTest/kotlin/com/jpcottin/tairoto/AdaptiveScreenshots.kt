@@ -3,7 +3,11 @@ package com.jpcottin.tairoto
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import com.android.tools.screenshot.PreviewTest
+import com.jpcottin.tairoto.ui.preview.DecorCardsPreviewContent
+import com.jpcottin.tairoto.ui.preview.DecorGalleryPreviewContent
 import com.jpcottin.tairoto.ui.preview.FormFactorPreviews
+import com.jpcottin.tairoto.ui.preview.LagoonEditingPreviewContent
+import com.jpcottin.tairoto.ui.tank.EditTool
 import com.jpcottin.tairoto.ui.preview.LagoonScreenPreviewContent
 import com.jpcottin.tairoto.ui.preview.LagoonWithPanePreviewContent
 import com.jpcottin.tairoto.ui.preview.NarrowPreviews
@@ -51,3 +55,31 @@ fun EverySpeciesCard() = TairotoTheme { SpeciesCardsPreviewContent() }
 @Preview(name = "narrow", widthDp = 360, heightDp = 420)
 @Composable
 fun SpeciesGallery() = TairotoTheme { SpeciesGalleryPreviewContent() }
+
+/** The decorations tab of the picker: a sheet when narrow, a pane when wide. */
+@PreviewTest
+@FormFactorPreviews
+@Composable
+fun LagoonWithDecorPicker() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Decor) }
+
+/** Arranging, a coral head selected. */
+@PreviewTest
+@FormFactorPreviews
+@Composable
+fun LagoonEditing() = TairotoTheme { LagoonEditingPreviewContent() }
+
+/** Arranging with the net in hand. */
+@PreviewTest
+@NarrowPreviews
+@Composable
+fun LagoonNetting() = TairotoTheme { LagoonEditingPreviewContent(PreviewData.editing(EditTool.NET, selected = false)) }
+
+@PreviewTest
+@NarrowPreviews
+@Composable
+fun EveryDecorCard() = TairotoTheme { DecorCardsPreviewContent() }
+
+@PreviewTest
+@Preview(name = "decor", widthDp = 480, heightDp = 150)
+@Composable
+fun DecorGallery() = TairotoTheme { DecorGalleryPreviewContent() }

@@ -125,6 +125,10 @@ void World::startle(Vec2 at, float strength) {
         c.startleDelay = d / 420.0f;  // the fright spreads outwards as a wave
         c.startleTimer = 0.5f + 0.7f * c.sp.shyness;
     }
+    // A giant clam feels the knock and shuts.
+    for (Decor& d : decor_)
+        if (d.kind == DecorKind::GiantClam && length(d.pos - at) < d.radius * 2.5f + 25.0f * strength)
+            d.shutTimer = std::max(d.shutTimer, rng_.range(3.5f, 6.0f));
 }
 
 void World::stepFixed(float h) {
@@ -133,6 +137,7 @@ void World::stepFixed(float h) {
     current_.step(h);
     stepFood(h);
     stepClouds(h);
+    stepDecor(h);
     buildScents(h);
     float cell = 15.0f;
     for (auto& c : creatures_)
@@ -257,16 +262,39 @@ void World::stepFish(Creature& c, float h) {
     steer += avoid;
     float margin = std::max(3.0f * L, 9.0f);
     steer += wallAvoidance(p, fwd, 2.5f * L, margin) * 1.6f;
+    steer += decorAvoidance(c, fwd, 2.5f * L, 0.4f * L) * 1.6f;
 
     bool frightened = false;
+    const Decor* shelter = nullptr;
     if (c.startleTimer > 0) {
         if (c.startleDelay > 0) {
             c.startleDelay -= h;
         } else {
             c.startleTimer -= h;
             Vec2 away = p - c.startleFrom;
-            steer += normalize(away, fwd) * 6.0f;
-            c.burstTimer = std::max(c.burstTimer, 0.28f);
+            // A chromis dives into the nearest branching coral rather than out into the open.
+            if (c.visual == Visual::GreenChromis)
+                shelter = nearestDecor(p, 10.0f * L, [](const Decor& d) { return d.sheltering(); });
+            // Unless the coral lies straight toward what frightened it.
+            if (shelter && (length(shelter->pos - p) < shelter->radius ||
+                            dot(normalize(shelter->pos - p), normalize(c.startleFrom - p, -fwd)) < 0.75f)) {
+                Vec2 to = shelter->pos - p;
+                float inside = length(to) / shelter->radius;
+                // Toward its middle, holding on there among the branches.
+                steer += normalize(to, fwd) * (6.0f * std::max(saturate(inside), 0.6f));
+                c.depthTarget = tank_.depth - shelter->height * 0.55f;
+                c.depthTimer = std::max(c.depthTimer, 1.5f);
+                // Down among the branches it stays a few seconds, until the fright has passed.
+                if (inside < 0.8f && c.stateTimer <= 0) {
+                    c.stateTimer = rng_.range(2.5f, 4.5f);
+                    c.startleTimer = std::max(c.startleTimer, c.stateTimer);
+                }
+            } else {
+                shelter = nullptr;
+                steer += normalize(away, fwd) * 6.0f;
+            }
+            if (!shelter || length(shelter->pos - p) > shelter->radius * 1.5f) c.burstTimer = std::max(c.burstTimer, 0.28f);
+            else c.burstTimer = 0;
             frightened = true;
         }
     }
@@ -286,8 +314,10 @@ void World::stepFish(Creature& c, float h) {
     else if (!frightened && !feeding && rng_.chance(0.16f * h)) c.glideTimer = rng_.range(0.35f, 0.9f);
     if (c.burstTimer <= 0 && rng_.chance(0.02f * h)) c.burstTimer = rng_.range(0.15f, 0.3f);
 
+    if (c.stateTimer > 0) c.stateTimer -= h;
     float target;
-    if (c.burstTimer > 0) target = burst;
+    if (shelter) target = cruise * clamp(length(shelter->pos - p) / shelter->radius, 0.12f, 1.6f);
+    else if (c.burstTimer > 0) target = burst;
     else if (feeding) target = cruise * (0.25f + 1.5f * saturate(foodDist / (4.0f * L)));
     else if (c.glideTimer > 0) target = cruise * 0.55f;
     else target = cruise * (0.85f + 0.3f * noise1(c.age * 0.2f, c.seed + 7));
@@ -315,15 +345,17 @@ void World::stepFish(Creature& c, float h) {
         c.depthTarget = want;
         c.depthTimer = rng_.range(4.0f, 12.0f);
     }
-    float vzWant = clamp((c.depthTarget - c.pos.z) * (feeding ? 1.5f : 0.6f), -0.6f * L, 0.6f * L);
-    if (frightened) vzWant -= 0.2f * L;  // a startled fish dives a little, then comes back
-    c.vz = damp(c.vz, vzWant, 2.0f, h);
+    float vzMax = shelter ? 1.5f * L : 0.6f * L;  // diving into cover, it drops fast
+    float vzWant = clamp((c.depthTarget - c.pos.z) * (feeding || shelter ? 1.5f : 0.6f), -vzMax, vzMax);
+    if (frightened && !shelter) vzWant -= 0.2f * L;  // a startled fish dives a little, then comes back
+    c.vz = damp(c.vz, vzWant, shelter ? 5.0f : 2.0f, h);
     c.pos.z = std::max(2.0f, riseAbove(c, clamp(c.pos.z + c.vz * h, 2.0f, tank_.depth - 4.0f), h));
 
     Vec2 np = p + fromAngle(c.heading) * (c.speed * h);
     c.pos.x = np.x;
     c.pos.y = np.y;
     clampInside(c, L * 0.6f);
+    keepOutOfDecor(c, 0.3f * L);
     if (c.startleTimer <= 0) c.startleTimer = 0;
 
     // The mouth is at the snout: a bite when it reaches the food.
@@ -511,7 +543,10 @@ void World::stepTurtle(Creature& c, float h) {
     c.rest = damp(c.rest, restWant, restWant > c.rest ? 0.9f : 2.5f, h);
 
     // Steering, with the walls.
-    if (c.behavior != Behavior::Rest) steer += wallAvoidance(p, fwd, 1.4f * L, 0.9f * L) * 1.2f;
+    if (c.behavior != Behavior::Rest) {
+        steer += wallAvoidance(p, fwd, 1.4f * L, 0.9f * L) * 1.2f;
+        steer += decorAvoidance(c, fwd, 1.4f * L, 0.4f * L) * 1.2f;
+    }
     float desired = angleOf(steer);
     float maxTurn = c.sp.turnRate * (c.behavior == Behavior::Flee ? 2.0f : 1.0f) * (1.0f - 0.9f * c.rest);
     float before = c.heading;
@@ -541,6 +576,7 @@ void World::stepTurtle(Creature& c, float h) {
     c.pos.x = np.x;
     c.pos.y = np.y;
     clampInside(c, L * 0.55f);
+    keepOutOfDecor(c, 0.4f * L);
 
     if (c.behavior == Behavior::Forage) tryBite(c, p + fromAngle(c.heading) * (0.52f * L), c.pos.z, 0.1f * L);
     // Each power stroke shoves water back past the flippers.

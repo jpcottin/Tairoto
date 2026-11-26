@@ -20,13 +20,21 @@ object AppLauncher {
         store.setShowStats(false)
     }
 
-    fun launch(ci: Boolean = true, stats: Boolean? = null, seed: Long = 7): ActivityScenario<MainActivity> {
+    fun launch(
+        ci: Boolean = true,
+        stats: Boolean? = null,
+        seed: Long = 7,
+        fresh: Boolean = true,
+        extras: Intent.() -> Unit = {},
+    ): ActivityScenario<MainActivity> {
         resetSettings()
         val intent = Intent(ApplicationProvider.getApplicationContext(), MainActivity::class.java).apply {
             putExtra(LaunchOptions.SEED, seed)
             putExtra(LaunchOptions.HINTS, false)
+            if (fresh) putExtra(LaunchOptions.FRESH, true)
             if (ci) putExtra(LaunchOptions.CI, true)
             if (stats != null) putExtra(LaunchOptions.STATS, stats)
+            extras()
         }
         return ActivityScenario.launch(intent)
     }

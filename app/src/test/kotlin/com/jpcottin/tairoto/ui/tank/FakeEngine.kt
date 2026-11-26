@@ -1,12 +1,15 @@
 package com.jpcottin.tairoto.ui.tank
 
 import android.view.Surface
+import com.jpcottin.tairoto.engine.CreatureState
 import com.jpcottin.tairoto.engine.EngineStats
 import com.jpcottin.tairoto.engine.FoodKind
 import com.jpcottin.tairoto.engine.TankEngine
 import com.jpcottin.tairoto.engine.VulkanState
 import com.jpcottin.tairoto.world.Camera
 import com.jpcottin.tairoto.world.CreatureSpec
+import com.jpcottin.tairoto.world.DecorKind
+import com.jpcottin.tairoto.world.DecorSpec
 import com.jpcottin.tairoto.world.EntityId
 import com.jpcottin.tairoto.world.QualityTier
 import com.jpcottin.tairoto.world.Species
@@ -38,6 +41,15 @@ class FakeEngine : TankEngine {
     override fun spawn(creature: CreatureSpec, species: Species) { creatures[creature.id] = creature }
     override fun remove(id: EntityId) { creatures.remove(id) }
     override fun clear() = creatures.clear()
+    val decor = LinkedHashMap<EntityId, DecorSpec>()
+    /** Where creatures are now, if a test moved them; otherwise where they were released. */
+    val places = HashMap<EntityId, CreatureState>()
+    override fun placeDecor(decor: DecorSpec, kind: DecorKind) { this.decor[decor.id] = decor }
+    override fun moveDecor(decor: DecorSpec) { this.decor[decor.id] = decor }
+    override fun removeDecor(id: EntityId) { decor.remove(id) }
+    override fun snapshot(): List<CreatureState> = creatures.values.map {
+        places[it.id] ?: CreatureState(it.id, it.spawnAt.x, it.spawnAt.y, it.spawnDepthMm, 0f, 0)
+    }
     override fun tap(at: Vec2) { taps += at }
     override fun dropFood(at: Vec2, kind: FoodKind, count: Int) { drops += Drop(at, kind, count) }
     override fun stats(): EngineStats = stats

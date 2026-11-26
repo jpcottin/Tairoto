@@ -11,10 +11,11 @@ import android.view.Display
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jpcottin.tairoto.data.DataStoreSettings
+import com.jpcottin.tairoto.data.FileLagoonStore
 import com.jpcottin.tairoto.engine.NativeTank
 import com.jpcottin.tairoto.ui.navigation.TairotoNavigation
 import com.jpcottin.tairoto.ui.tank.DeviceSignals
@@ -22,23 +23,33 @@ import com.jpcottin.tairoto.ui.tank.TankViewModel
 import com.jpcottin.tairoto.ui.theme.TairotoTheme
 
 class MainActivity : ComponentActivity() {
+    private lateinit var vm: TankViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         val options = LaunchOptions.from(intent, debuggable)
+        val factory = viewModelFactory {
+            initializer {
+                TankViewModel(
+                    NativeTank(), DataStoreSettings(applicationContext), options, AndroidSignals(applicationContext),
+                    lagoonStore = FileLagoonStore(applicationContext.filesDir),
+                )
+            }
+        }
+        vm = ViewModelProvider(this, factory)[TankViewModel::class.java]
         setContent {
             TairotoTheme {
-                val vm: TankViewModel = viewModel(
-                    factory = viewModelFactory {
-                        initializer {
-                            TankViewModel(NativeTank(), DataStoreSettings(applicationContext), options, AndroidSignals(applicationContext))
-                        }
-                    },
-                )
                 TairotoNavigation(vm)
             }
         }
+    }
+
+    /** Leaving the app (or turning the screen off): the lagoon is saved with everyone where they are. */
+    override fun onStop() {
+        super.onStop()
+        vm.saveNow()
     }
 }
 

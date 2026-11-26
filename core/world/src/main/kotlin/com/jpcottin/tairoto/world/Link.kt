@@ -34,6 +34,15 @@ sealed interface Msg {
 
     @Serializable @SerialName("reset")
     data class Reset(val scene: TankScene) : Msg
+
+    @Serializable @SerialName("place")
+    data class PlaceDecor(val decor: DecorSpec) : Msg
+
+    @Serializable @SerialName("move")
+    data class MoveDecor(val id: EntityId, val at: Vec2, val angle: Float) : Msg
+
+    @Serializable @SerialName("unplace")
+    data class RemoveDecor(val id: EntityId) : Msg
 }
 
 /** One message as it arrives: who sent it, and to whom (null = everyone). */

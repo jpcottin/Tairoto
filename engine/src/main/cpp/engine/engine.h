@@ -67,6 +67,9 @@ public:
     void spawn(int64_t id, Visual v, Locomotion l, const SpeciesParams& sp, float length, uint32_t seed, Vec3 at);
     void remove(int64_t id);
     void clearCreatures();
+    void placeDecor(int64_t id, DecorKind kind, uint32_t seed, Vec2 at, float angle, float radius, float height);
+    void moveDecor(int64_t id, Vec2 at, float angle);
+    void removeDecor(int64_t id);
     /** A tap on the glass at a point of the water surface. */
     void tap(Vec2 world);
     /** Drops food at a point of the surface (kind: 0 flake, 1 pellet). */

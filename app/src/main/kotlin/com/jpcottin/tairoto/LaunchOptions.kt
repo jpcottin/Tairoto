@@ -23,8 +23,15 @@ data class LaunchOptions(
     val population: Map<String, Int>? = null,
     /** Starting zoom, for a close look (1 = the whole width of the lagoon). */
     val zoom: Float? = null,
+    /** Start with a new lagoon and do not save it: the saved one is left as it was. */
+    val fresh: Boolean = false,
+    /** With [population], a floor of just these decorations (kind id to count) around the middle. */
+    val decor: Map<String, Int>? = null,
 ) {
     val deterministic: Boolean get() = ci
+
+    /** A run for tests or a close look neither restores the saved lagoon nor overwrites it. */
+    val persist: Boolean get() = !ci && !fresh && population == null && decor == null
 
     companion object {
         const val SEED = "tairoto.seed"
@@ -35,6 +42,21 @@ data class LaunchOptions(
         /** For example `hermit_crab:3,day_octopus:1`. */
         const val POPULATION = "tairoto.population"
         const val ZOOM = "tairoto.zoom"
+        const val FRESH = "tairoto.fresh"
+        /** For example `coral_head:1,giant_clam:2`. */
+        const val DECOR = "tairoto.decor"
+
+        /** Reads `kind:count,kind:count` of decorations; unknown or malformed entries are skipped. */
+        fun parseDecor(text: String?): Map<String, Int>? {
+            if (text.isNullOrBlank()) return null
+            val out = linkedMapOf<String, Int>()
+            for (part in text.split(',')) {
+                val (id, n) = part.split(':').map { it.trim() }.takeIf { it.size == 2 } ?: continue
+                val count = n.toIntOrNull()?.takeIf { it in 0..24 } ?: continue
+                if (com.jpcottin.tairoto.world.DecorCatalog[id] != null) out[id] = count
+            }
+            return out.takeIf { it.isNotEmpty() }
+        }
 
         /** Reads `id:count,id:count`; unknown or malformed entries are skipped. */
         fun parsePopulation(text: String?): Map<String, Int>? {
@@ -60,6 +82,8 @@ data class LaunchOptions(
                 stats = if (intent.hasExtra(STATS)) intent.getBooleanExtra(STATS, false) else null,
                 population = parsePopulation(intent.getStringExtra(POPULATION)),
                 zoom = if (intent.hasExtra(ZOOM)) intent.getFloatExtra(ZOOM, 1f).takeIf { it in 0.5f..8f } else null,
+                fresh = intent.getBooleanExtra(FRESH, false),
+                decor = parseDecor(intent.getStringExtra(DECOR)),
             )
         }
     }

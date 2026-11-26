@@ -106,6 +106,10 @@ void MeshBuilder::build(const World& world, const CameraParams& cam, Mesh& mesh)
     for (int i = 0; i < (int)ks.size(); i++)
         if (visible(ks[i].pos.xy(), ks[i].pos.z, ks[i].radius * 1.3f))
             order_.push_back({ks[i].pos.z, ItemType::Cloud, i, ((int64_t)1 << 50) + (int64_t)ks[i].seed});
+    const auto& ds = world.decor();
+    for (int i = 0; i < (int)ds.size(); i++)
+        if (visible(ds[i].pos, floorZ - ds[i].height, ds[i].radius * 1.35f))
+            order_.push_back({floorZ - ds[i].height, ItemType::Decor, i, ((int64_t)1 << 52) + ds[i].id});
     // Painter's order: deepest first, so nearer things cover deeper ones.
     std::sort(order_.begin(), order_.end(), [](const Item& a, const Item& b) {
         if (a.z != b.z) return a.z > b.z;
@@ -132,6 +136,10 @@ void MeshBuilder::build(const World& world, const CameraParams& cam, Mesh& mesh)
             case ItemType::Cloud:
                 cloud(ks[it.index], mesh);
                 mesh.cloudsDrawn++;
+                break;
+            case ItemType::Decor:
+                decor(ds[it.index], mesh, floorZ);
+                mesh.decorDrawn++;
                 break;
         }
     }
@@ -806,6 +814,196 @@ void MeshBuilder::cloud(const Cloud& k, Mesh& m) {
     e.aux[1] = saturate(k.age / k.life);
     // Drawn a little larger than the cloud: the shader frays its edge with noise.
     disc(e, k.pos.xy(), k.radius * 1.3f, k.spin, 16, k.pos.z);
+}
+
+// ---------------------------------------------------------------- decorations
+
+void MeshBuilder::decor(const Decor& d, Mesh& m, float floorZ) {
+    switch (d.kind) {
+        case DecorKind::CoralHead: dome(d, m, floorZ, 12, 56); break;
+        case DecorKind::Stone: dome(d, m, floorZ, 9, 44); break;
+        case DecorKind::GiantClam: dome(d, m, floorZ, 7, 40); break;
+        case DecorKind::BranchingCoral: branches(d, m, floorZ); break;
+    }
+}
+
+/**
+ * A dome on its own outline: rings out from the top, uv on the unit disc in
+ * the decoration's frame, the surface slope in aux for the light, aux[3] the
+ * distance to the outline.
+ */
+void MeshBuilder::dome(const Decor& d, Mesh& m, float floorZ, int rings, int segs) {
+    Emitter e{m, floorZ - d.height, kindOfV(kPartDecorBody, kVisualDecor + (int)d.kind), hash01(d.seed)};
+    const float open = d.kind == DecorKind::GiantClam ? d.open : 0.0f;
+    auto at = [&](float rho, float th) {
+        return d.pos + rotate(fromAngle(th) * (d.radiusAt(th) * rho), d.angle);
+    };
+    auto vertex = [&](float rho, float th) {
+        Vec2 p = at(rho, th);
+        // The slope of the surface, from its height a little either side (world axes).
+        const float eps = std::max(0.15f, d.radius * 0.02f);
+        float r1 = std::min(rho, 0.985f);
+        Vec2 q = at(r1, th);
+        float hx = (d.heightAt(q + Vec2(eps, 0)) - d.heightAt(q - Vec2(eps, 0))) / (2 * eps);
+        float hy = (d.heightAt(q + Vec2(0, eps)) - d.heightAt(q - Vec2(0, eps))) / (2 * eps);
+        hx = clamp(hx, -6.0f, 6.0f);
+        hy = clamp(hy, -6.0f, 6.0f);
+        float z = floorZ - d.heightAtRho(std::min(rho, 0.999f));
+        Vec2 uv = fromAngle(th) * rho;
+        return e.vert(p, uv.x, uv.y, d.angle, z, hx, hy, open, rho);
+    };
+    uint32_t top = vertex(0.0f, 0.0f);
+    std::vector<uint32_t> prev(segs), cur(segs);
+    for (int j = 1; j <= rings; j++) {
+        // Rings closer together toward the edge, where the surface curves fastest.
+        float t = (float)j / (float)rings;
+        float rho = 1.0f - (1.0f - t) * (1.0f - t);
+        for (int k = 0; k < segs; k++) cur[k] = vertex(rho, kTau * (float)k / (float)segs);
+        for (int k = 0; k < segs; k++) {
+            int k2 = (k + 1) % segs;
+            if (j == 1) e.tri(top, cur[k], cur[k2]);
+            else e.quad(prev[k], prev[k2], cur[k2], cur[k]);
+        }
+        std::swap(prev, cur);
+    }
+}
+
+/**
+ * Branching coral seen from above: branches fanning out and up from the
+ * middle, each forking once or twice, the tips highest; and short ones growing
+ * straight up, seen end on. Deepest drawn first, so the tips cover the bases.
+ */
+void MeshBuilder::branches(const Decor& d, Mesh& m, float floorZ) {
+    struct Branch {
+        Vec2 pts[4];
+        float z[4];
+        float w0, w1;
+        float tipZ;
+    };
+    struct Stub {
+        Vec2 at;
+        float z, r;
+    };
+    std::vector<Branch> bs;
+    std::vector<Stub> stubs;
+    uint32_t s = d.seed * 2654435761u + 0x9E3779B9u;
+    auto rnd = [&]() {
+        s ^= s << 13;
+        s ^= s >> 17;
+        s ^= s << 5;
+        return (float)(s & 0xFFFFFF) / (float)0x1000000;
+    };
+    const float R = d.radius, H = d.height;
+    auto world = [&](Vec2 local) { return d.pos + rotate(local, d.angle); };
+    const int mains = 9 + (int)(rnd() * 4.0f);
+    for (int i = 0; i < mains; i++) {
+        float th = kTau * ((float)i + rnd() * 0.6f) / (float)mains;
+        float len = R * (0.62f + 0.36f * rnd());
+        float bend = (rnd() - 0.5f) * 0.5f;
+        float tipH = H * (0.72f + 0.28f * rnd());
+        Branch b;
+        for (int k = 0; k < 4; k++) {
+            float t = (float)k / 3.0f;
+            float r = len * (0.08f + 0.92f * t);
+            float a = th + bend * t * t;
+            b.pts[k] = world(fromAngle(a) * std::min(r, d.radiusAt(a) * 0.98f));
+            b.z[k] = floorZ - H * 0.2f - (tipH - H * 0.2f) * std::sqrt(t);
+        }
+        b.w0 = R * 0.085f;
+        b.w1 = R * 0.05f;
+        b.tipZ = b.z[3];
+        bs.push_back(b);
+        // One or two forks off it, reaching higher still.
+        int forks = 1 + (rnd() < 0.45f ? 1 : 0);
+        for (int f = 0; f < forks; f++) {
+            float t0 = 0.35f + 0.3f * rnd();
+            float side = (f == 0 ? 1.0f : -1.0f) * (rnd() < 0.5f ? 1.0f : -1.0f);
+            float a0 = th + bend * t0 * t0;
+            float r0 = len * (0.08f + 0.92f * t0);
+            Vec2 base = fromAngle(a0) * r0;
+            float fa = a0 + side * (0.45f + 0.35f * rnd());
+            float flen = len * (0.3f + 0.25f * rnd());
+            float baseZ = floorZ - H * 0.2f - (tipH - H * 0.2f) * std::sqrt(t0);
+            float fTip = floorZ - std::min(H, tipH + H * 0.12f * rnd());
+            Branch c;
+            for (int k = 0; k < 4; k++) {
+                float t = (float)k / 3.0f;
+                Vec2 local = base + fromAngle(fa) * (flen * t);
+                float la = std::atan2(local.y, local.x);
+                float lr = std::min(length(local), d.radiusAt(la) * 0.98f);
+                c.pts[k] = world(fromAngle(la) * lr);
+                c.z[k] = lerp(baseZ, fTip, std::sqrt(t));
+            }
+            c.w0 = R * 0.06f;
+            c.w1 = R * 0.04f;
+            c.tipZ = c.z[3];
+            bs.push_back(c);
+        }
+    }
+    // Upright branches near the middle, seen end on as round tips.
+    int ups = 5 + (int)(rnd() * 5.0f);
+    for (int i = 0; i < ups; i++) {
+        float a = rnd() * kTau;
+        float r = R * 0.45f * std::sqrt(rnd());
+        stubs.push_back({world(fromAngle(a) * r), floorZ - H * (0.85f + 0.15f * rnd()), R * (0.04f + 0.015f * rnd())});
+    }
+    std::sort(bs.begin(), bs.end(), [](const Branch& a, const Branch& b) { return a.tipZ > b.tipZ; });
+
+    Emitter e{m, floorZ - H, kindOfV(kPartCoralBranch, kVisualDecor + (int)d.kind), hash01(d.seed)};
+    // The old, shaded heart of the thicket the branches grow out of.
+    e.kind = kindOfV(kPartCoralTip, kVisualDecor + (int)d.kind);
+    e.aux[0] = 1;  // a base, not a tip
+    e.aux[1] = R * 0.2f;
+    disc(e, d.pos, R * 0.2f, d.angle, 18, floorZ - H * 0.22f);
+    e.aux[0] = 0;
+    e.kind = kindOfV(kPartCoralBranch, kVisualDecor + (int)d.kind);
+    const int rows = 8;
+    for (const Branch& b : bs) {
+        Vec2 c[rows];
+        float hw[rows], uu[rows], fr[rows], zz[rows];
+        float along = 0;
+        for (int i = 0; i < rows; i++) {
+            float t = (float)i / (float)(rows - 1) * 3.0f;
+            int k = std::min((int)t, 2);
+            float f = t - (float)k;
+            Vec2 p0 = b.pts[std::max(k - 1, 0)], p1 = b.pts[k], p2 = b.pts[k + 1], p3 = b.pts[std::min(k + 2, 3)];
+            c[i] = catmull(p0, p1, p2, p3, f);
+            zz[i] = lerp(b.z[k], b.z[k + 1], f);
+            float tt = (float)i / (float)(rows - 1);
+            // Tapering, and rounded off at the tip.
+            float round = tt > 0.85f ? std::sqrt(std::max(0.0f, 1.0f - std::pow((tt - 0.85f) / 0.15f, 2.0f))) : 1.0f;
+            hw[i] = lerp(b.w0, b.w1, tt) * std::max(round, 0.25f);
+            uu[i] = tt;
+            if (i > 0) along += length(c[i] - c[i - 1]);
+        }
+        framesOf(c, rows, fr, d.angle);
+        // aux: length so far along the branch (mm) and its half width (mm), for round corallites.
+        uint32_t prev[3] = {0, 0, 0};
+        float soFar = 0;
+        for (int i = 0; i < rows; i++) {
+            if (i > 0) soFar += length(c[i] - c[i - 1]);
+            Vec2 side = perp(fromAngle(fr[i]));
+            uint32_t row[3] = {
+                e.vert(c[i] - side * hw[i], uu[i], -1.0f, fr[i], zz[i], soFar, hw[i], 0, 1.0f),
+                e.vert(c[i], uu[i], 0.0f, fr[i], zz[i], soFar, hw[i], 0, 0.0f),
+                e.vert(c[i] + side * hw[i], uu[i], 1.0f, fr[i], zz[i], soFar, hw[i], 0, 1.0f),
+            };
+            if (i > 0) {
+                e.quad(prev[0], prev[1], row[1], row[0]);
+                e.quad(prev[1], prev[2], row[2], row[1]);
+            }
+            std::copy(row, row + 3, prev);
+        }
+        (void)along;
+    }
+    e.kind = kindOfV(kPartCoralTip, kVisualDecor + (int)d.kind);
+    std::sort(stubs.begin(), stubs.end(), [](const Stub& a, const Stub& b) { return a.z > b.z; });
+    for (const Stub& st : stubs) {
+        e.aux[0] = 0;
+        e.aux[1] = st.r;
+        e.aux[2] = 0;
+        disc(e, st.at, st.r, d.angle, 14, st.z);
+    }
 }
 
 }  // namespace dt

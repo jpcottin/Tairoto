@@ -43,12 +43,18 @@ enum Part : int32_t {
     // Clouds (visual 6)
     kPartSandCloud = 0,
     kPartInkCloud = 1,
+    // Decorations (visuals 11 .. 14)
+    kPartDecorBody = 0,     // the dome of a coral head, a stone, a clam
+    kPartCoralBranch = 0,   // branching coral: one branch
+    kPartCoralTip = 1,      // branching coral: a branch growing straight up, seen end on
 };
 
 /** The look of food, after the creatures' looks (Visual in sim/species.h). */
 constexpr int kVisualFood = 2;
 /** Clouds of sand and ink. */
 constexpr int kVisualCloud = 6;
+/** Decorations: 11 + DecorKind (coral head 11, branching coral 12, giant clam 13, stone 14). */
+constexpr int kVisualDecor = 11;
 
 struct Vertex {
     float x, y;        // mm on the table plane
@@ -64,6 +70,8 @@ struct Vertex {
     //   octopus: camouflage, alarm, arm index / 8
     //   crab:    drawn in, -, -
     //   cloud:   opacity now, age / life, -
+    //   decor:   slope of its surface (dh/dx, dh/dy, world axes), clam: how open
+    //            (branching coral: length along the branch in mm, its half width in mm)
     float aux[4];
 };
 static_assert(sizeof(Vertex) == 48, "the vertex layout is shared with the shaders");
@@ -74,7 +82,9 @@ struct Mesh {
     int creaturesDrawn = 0;
     int foodDrawn = 0;
     int cloudsDrawn = 0;
+    int decorDrawn = 0;
     void clear() {
+        decorDrawn = 0;
         vertices.clear();
         indices.clear();
         creaturesDrawn = 0;
@@ -101,7 +111,10 @@ private:
     void octopus(const Creature& c, Mesh& m);
     void crab(const Creature& c, Mesh& m, float floorZ);
     void cloud(const Cloud& k, Mesh& m);
-    enum class ItemType : int8_t { Creature, Food, Cloud };
+    void decor(const Decor& d, Mesh& m, float floorZ);
+    void dome(const Decor& d, Mesh& m, float floorZ, int rings, int segs);
+    void branches(const Decor& d, Mesh& m, float floorZ);
+    enum class ItemType : int8_t { Creature, Food, Cloud, Decor };
     struct Item {
         float z;
         ItemType type;

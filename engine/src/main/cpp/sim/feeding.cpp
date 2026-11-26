@@ -93,8 +93,10 @@ void World::stepFood(float h) {
                 Vec2 want = cur * 0.75f + flutter;
                 f.vel = Vec2(damp(f.vel.x, want.x, 2.0f, h), damp(f.vel.y, want.y, 2.0f, h));
                 f.pos.z += f.vz * h;
-                if (f.pos.z >= D - f.radius() * 0.3f) {
-                    f.pos.z = D - 0.15f;
+                // It lands on the sand, or on top of a coral head or a stone.
+                float floor = D - decorHeightAt(f.pos.xy());
+                if (f.pos.z >= floor - f.radius() * 0.3f) {
+                    f.pos.z = floor - 0.15f;
                     f.vz = 0;
                     f.state = FoodState::Resting;
                 }

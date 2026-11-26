@@ -1,6 +1,8 @@
 package com.jpcottin.tairoto.engine
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.jpcottin.tairoto.world.DecorCatalog
+import com.jpcottin.tairoto.world.DecorSpec
 import com.jpcottin.tairoto.world.EntityIdAllocator
 import com.jpcottin.tairoto.world.Population
 import com.jpcottin.tairoto.world.SpeciesCatalog
@@ -119,5 +121,32 @@ class NativeTankTest {
         val t = NativeTank()
         t.close()
         t.close()
+    }
+
+    @Test fun crabsWalkAroundACoralHeadPlacedThroughTheBridgeNeverOntoIt() {
+        val t = NativeTank()
+        try {
+            t.setDeterministic(true, 3)
+            val small = TankSize(160f, 200f, 55f)
+            val ids = EntityIdAllocator(1)
+            val crabs = Population.sceneOf(mapOf("hermit_crab" to 6), small, ids, Random(2))
+            val coral = DecorSpec(ids.allocate(), DecorCatalog.CoralHead.id, 4, small.center, 0f, 1f)
+            val sync = SceneSync(t)
+            sync.apply(crabs.copy(decor = listOf(coral)))
+            assertEquals(1, sync.appliedDecorCount)
+            repeat(12) {
+                t.stepForTest(5f)
+                t.snapshot().forEach { c ->
+                    // The engine pushes everything out of the footprint; give its lobes a little room.
+                    assertTrue("crab ${c.id} on the coral at ${c.x},${c.y}", Vec2(c.x, c.y).minus(coral.at).length > coral.radiusMm * 0.85f)
+                }
+            }
+            // Moved, then removed: the engine follows the scene.
+            sync.apply(crabs.copy(decor = listOf(coral.copy(at = Vec2(20f, 20f)))))
+            sync.apply(crabs)
+            assertEquals(0, sync.appliedDecorCount)
+        } finally {
+            t.close()
+        }
     }
 }

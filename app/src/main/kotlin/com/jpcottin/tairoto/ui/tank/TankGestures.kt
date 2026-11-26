@@ -4,6 +4,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateRotation
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -23,6 +24,13 @@ interface TankGestureHandler {
     fun onSprinkle(at: Vec2, first: Boolean) = Unit
     fun onSprinkleEnd() = Unit
     fun onLongPress(at: Vec2) = Unit
+    /** A drag begins at [at]: true to take it (moving a decoration) instead of sprinkling. */
+    fun onDragStart(at: Vec2): Boolean = false
+    fun onDrag(at: Vec2) = Unit
+    /** Two fingers twisting, by this many radians. */
+    fun onRotate(radians: Float) = Unit
+    /** Every finger has left the glass. */
+    fun onGestureEnd() = Unit
 }
 
 private fun Offset.vec() = Vec2(x, y)
@@ -32,7 +40,8 @@ const val LONG_PRESS_MS = 450L
 
 /**
  * Touch: a tap ripples the water, a long press drops a pellet, one finger
- * dragging sprinkles flakes, two fingers pan and pinch.
+ * dragging sprinkles flakes (or, when the handler takes the drag, moves a
+ * decoration), two fingers pan, pinch and twist.
  * Mouse and trackpad: drag pans, the wheel zooms about the pointer.
  */
 fun Modifier.tankGestures(handler: TankGestureHandler): Modifier = this
@@ -45,6 +54,7 @@ fun Modifier.tankGestures(handler: TankGestureHandler): Modifier = this
             var multi = false
             var moved = false
             var sprinkling = false
+            var dragging = false
             var longPressed = false
             var last = start
             while (true) {
@@ -70,15 +80,21 @@ fun Modifier.tankGestures(handler: TankGestureHandler): Modifier = this
                     multi = true
                     val zoom = event.calculateZoom()
                     val pan = event.calculatePan()
+                    val rotation = event.calculateRotation()
                     val centroid = event.calculateCentroid(useCurrent = true)
                     if (pan != Offset.Zero) handler.onPan(pan.vec())
                     if (zoom != 1f && centroid != Offset.Unspecified) handler.onZoom(centroid.vec(), zoom)
+                    if (rotation != 0f) handler.onRotate(rotation * (Math.PI / 180.0).toFloat())
                     event.changes.forEach { it.consume() }
                 } else if (!multi) {
                     val p = pressed.first().position
-                    if ((p - start).getDistance() > viewConfiguration.touchSlop) moved = true
+                    if (!moved && (p - start).getDistance() > viewConfiguration.touchSlop) {
+                        moved = true
+                        dragging = !longPressed && handler.onDragStart(start.vec())
+                    }
                     if (moved) {
-                        if (mouse) handler.onPan((p - last).vec())
+                        if (dragging) handler.onDrag(p.vec())
+                        else if (mouse) handler.onPan((p - last).vec())
                         else if (!longPressed) {
                             handler.onSprinkle(p.vec(), first = !sprinkling)
                             sprinkling = true
@@ -89,6 +105,7 @@ fun Modifier.tankGestures(handler: TankGestureHandler): Modifier = this
                 }
             }
             if (sprinkling) handler.onSprinkleEnd()
+            handler.onGestureEnd()
             val quick = (currentEvent.changes.firstOrNull()?.uptimeMillis ?: startTime) - startTime < LONG_PRESS_MS
             if (!multi && !moved && !longPressed && quick) handler.onTap(start.vec())
         }
