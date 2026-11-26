@@ -19,6 +19,10 @@ class SpeciesTest {
         assertEquals("Fai manu", SpeciesCatalog.SpottedEagleRay.displayName)
         assertEquals("Feʻe", SpeciesCatalog.DayOctopus.displayName)
         assertEquals("Uʻa", SpeciesCatalog.HermitCrab.displayName)
+        assertEquals("Manini", SpeciesCatalog.ConvictSurgeonfish.displayName)
+        assertEquals("Taape", SpeciesCatalog.BluestripeSnapper.displayName)
+        assertEquals("ʻOuma", SpeciesCatalog.YellowstripeGoatfish.displayName)
+        assertEquals("Mamo", SpeciesCatalog.ScissortailSergeant.displayName)
         assertEquals("Green chromis", SpeciesCatalog.GreenChromis.copy(tahitianName = null).displayName)
     }
 
@@ -89,7 +93,9 @@ class SpeciesTest {
         assertEquals(listOf(0, 1, 2, 3, 4), Locomotion.entries.map { it.nativeId })
         // Visual 2 is food on the native side.
         assertTrue(SpeciesCatalog.all.none { it.visualId == 2 })
-        assertEquals(listOf(0, 1, 3, 4, 5), SpeciesCatalog.all.map { it.visualId })
+        assertEquals(setOf(0, 1, 3, 4, 5, 7, 8, 9, 10), SpeciesCatalog.all.map { it.visualId }.toSet())
+        // 6 is the clouds of sand and ink.
+        assertTrue(SpeciesCatalog.all.none { it.visualId == 6 })
     }
 
     @Test fun `the bottom dwellers live and feed on the sand`() {
@@ -106,5 +112,13 @@ class SpeciesTest {
         assertTrue(ok.isSuccess)
         val wide = runCatching { SpeciesCatalog.SpottedEagleRay.copy(bodyWidth = 2.5f) }
         assertTrue(wide.exceptionOrNull() is IllegalArgumentException)
+    }
+
+    @Test fun `the lagoon has five schools of small fish, each in its own depth`() {
+        val schools = SpeciesCatalog.all.filter { it.locomotion == Locomotion.SWIM && it.schooling > 0.7f }
+        assertEquals(5, schools.size)
+        schools.forEach { assertTrue(it.id, it.lengthMm.endInclusive <= 30f) }
+        // Not all at the same depth: the sergeants high, the goatfish near the sand.
+        assertTrue(SpeciesCatalog.ScissortailSergeant.depthBand.endInclusive < SpeciesCatalog.YellowstripeGoatfish.depthBand.start)
     }
 }

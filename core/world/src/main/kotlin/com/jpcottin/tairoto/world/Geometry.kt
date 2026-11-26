@@ -33,6 +33,10 @@ data class TankSize(val widthMm: Float, val heightMm: Float, val depthMm: Float)
 
     fun contains(p: Vec2): Boolean = p.x in 0f..widthMm && p.y in 0f..heightMm
 
+    /** At least as wide and as long as [other]: a lagoon only ever grows. */
+    fun grownTo(other: TankSize): TankSize =
+        TankSize(maxOf(widthMm, other.widthMm), maxOf(heightMm, other.heightMm), depthMm)
+
     companion object {
         /** The sand is this far below the surface on every device, so fish keep one size everywhere. */
         const val DEFAULT_DEPTH_MM = 55f

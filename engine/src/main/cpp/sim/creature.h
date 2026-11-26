@@ -87,15 +87,15 @@ struct Creature {
     int grabArm = -1;         // octopus: the arm reaching for food
     float wobble = 0;         // crab: the shell rocking after it slams in
     float threat = 0;         // crab: seconds since something big came close
-    // Octopus arms: soft chains with inertia (Verlet), the root on the body.
-    // A walking arm grips the sand with its tip: anchorJoint is the joint held
-    // at anchor (-1 when free), until the body has moved past it.
+    // Octopus arms: the joints (drawn), and the state that moves them: each
+    // segment's angle on the table and how fast it turns.
     Vec2 arm[kArms][kArmJoints];
-    Vec2 armPrev[kArms][kArmJoints];
+    float armAng[kArms][kArmJoints - 1] = {};
+    float armSpin[kArms][kArmJoints - 1] = {};
+    float armSeg[kArms] = {};
+    float armDrag = 0.75f;  // how hard the sand or the water holds the arms back, eased
+    float armCurl = 1.0f, armSpread = 1.0f, armMuscle = 50.0f, armJet = 0.0f;  // the pose, eased between behaviours
     float armLen[kArms] = {};
-    float armCycle[kArms] = {};
-    int anchorJoint[kArms] = {-1, -1, -1, -1, -1, -1, -1, -1};
-    Vec2 anchor[kArms];
     Vec2 foot[kLegs];
     Vec2 footFrom[kLegs];
     float swing[kLegs] = {-1, -1, -1, -1};  // < 0 planted, 0 .. 1 stepping

@@ -11,37 +11,15 @@ import android.view.Display
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import androidx.navigation3.runtime.NavKey
-import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.runtime.rememberNavBackStack
-import androidx.navigation3.ui.NavDisplay
 import com.jpcottin.tairoto.data.DataStoreSettings
 import com.jpcottin.tairoto.engine.NativeTank
-import com.jpcottin.tairoto.ui.settings.SettingsScreen
-import com.jpcottin.tairoto.ui.settings.SettingsUi
+import com.jpcottin.tairoto.ui.navigation.TairotoNavigation
 import com.jpcottin.tairoto.ui.tank.DeviceSignals
-import com.jpcottin.tairoto.ui.tank.TankScreen
 import com.jpcottin.tairoto.ui.tank.TankViewModel
 import com.jpcottin.tairoto.ui.theme.TairotoTheme
-import kotlinx.serialization.Serializable
-import java.util.Locale
-
-@Serializable
-data object TankKey : NavKey
-
-@Serializable
-data object SettingsKey : NavKey
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,58 +36,9 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                 )
-                TairotoApp(vm)
+                TairotoNavigation(vm)
             }
         }
-    }
-}
-
-@Composable
-fun TairotoApp(vm: TankViewModel) {
-    val state by vm.ui.collectAsStateWithLifecycle()
-    val backStack = rememberNavBackStack(TankKey)
-    NavDisplay(
-        backStack = backStack,
-        onBack = { backStack.removeLastOrNull() },
-        entryProvider = entryProvider {
-            entry<TankKey> {
-                Immersive(true)
-                TankScreen(vm, state, onOpenSettings = { backStack.add(SettingsKey) })
-            }
-            entry<SettingsKey> {
-                Immersive(false)
-                SettingsScreen(
-                    ui = SettingsUi(
-                        quality = state.qualityMode,
-                        activeTier = state.tier,
-                        showStats = state.showStats,
-                        creatures = state.total,
-                        gpu = state.gpu,
-                        version = BuildConfig.VERSION_NAME,
-                        tankMm = state.tankSize?.let { String.format(Locale.US, "%.0f × %.0f mm", it.widthMm, it.heightMm) } ?: "",
-                    ),
-                    onBack = { backStack.removeLastOrNull() },
-                    onQuality = vm::setQualityMode,
-                    onShowStats = vm::setShowStats,
-                    onResetTank = vm::resetTank,
-                )
-            }
-        },
-    )
-}
-
-/** The tank fills the screen with the system bars hidden (they come back with a swipe). */
-@Composable
-private fun Immersive(on: Boolean) {
-    val view = LocalView.current
-    DisposableEffect(on) {
-        val window = (view.context as? ComponentActivity)?.window
-        if (window != null) {
-            val controller = WindowCompat.getInsetsController(window, view)
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            if (on) controller.hide(WindowInsetsCompat.Type.systemBars()) else controller.show(WindowInsetsCompat.Type.systemBars())
-        }
-        onDispose { }
     }
 }
 

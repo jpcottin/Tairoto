@@ -43,9 +43,9 @@ class ComponentsTest {
         }
         compose.onNodeWithText("ʻAtoti").assertIsDisplayed()
         compose.onNodeWithText("Green chromis · Chromis viridis").assertIsDisplayed()
-        compose.onNodeWithText("Honu").assertIsDisplayed()
         compose.onNodeWithTag(SheetTags.count("green_chromis")).assertIsDisplayed()
         compose.onNodeWithText("22 in the lagoon").assertIsDisplayed()
+        compose.onNodeWithText("Honu").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag(SheetTags.release("green_sea_turtle")).performScrollTo().performClick()
         compose.onNodeWithTag(SheetTags.release("green_chromis")).performScrollTo().performClick()
         assertEquals(listOf("green_sea_turtle", "green_chromis"), released)

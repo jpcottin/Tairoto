@@ -128,11 +128,20 @@ class TankViewModel(
         startStats()
     }
 
+    /** The biggest window the lagoon has been shown in, in mm². */
+    private var largestScreenMm2 = 0f
+
     fun onSurfaceSize(widthPx: Int, heightPx: Int, xdpi: Float, ydpi: Float) {
         if (widthPx <= 0 || heightPx <= 0) return
         val vp = Viewport(widthPx.toFloat(), heightPx.toFloat(), ScreenMm.pxPerMm((xdpi + ydpi) / 2f))
         viewport = vp
-        val s = session ?: createSession(ScreenMm.fromPixels(widthPx, heightPx, xdpi, ydpi))
+        val screen = ScreenMm.fromPixels(widthPx, heightPx, xdpi, ydpi)
+        val s = session ?: createSession(screen)
+        // Unfolded, or in a much bigger window: the lagoon widens to fill it. Not
+        // when the same screen is turned sideways: then the camera just pans.
+        val area = screen.widthMm * screen.heightMm
+        if (area > largestScreenMm2 * GROW_AREA_RATIO) s.growTo(TankSize.forScreen(screen))
+        largestScreenMm2 = maxOf(largestScreenMm2, area)
         val size = s.scene.value.size
         camera = (camera ?: Camera.initial(vp, size).let { c ->
             options.zoom?.let { c.zoomedAbout(vp.center, it, vp, size) } ?: c
@@ -333,6 +342,8 @@ class TankViewModel(
         const val HINT_MS = 7_000L
         const val STATS_PERIOD_MS = 500L
         const val GOVERNOR_PERIOD_MS = 2_000L
+        /** A window this much larger than any before (unfolding) widens the lagoon. */
+        const val GROW_AREA_RATIO = 1.3f
         const val WARMUP_MS = 6_000L
         const val SPRINKLE_SPACING_MM = 3.5f
         const val FIRST_PINCH = 3

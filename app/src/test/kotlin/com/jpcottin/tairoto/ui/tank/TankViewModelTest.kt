@@ -322,4 +322,21 @@ class TankViewModelTest {
         assertEquals(1, vm.ui.value.counts["day_octopus"])
         assertEquals(4, engine.creatures.size)
     }
+
+    @Test fun `unfolding widens the lagoon and folding back keeps it`() = runTest(dispatcher) {
+        val vm = vm()
+        attach(vm)  // a folded phone: 1080 x 2400
+        val folded = vm.ui.value.tankSize!!
+        val creatures = vm.ui.value.total
+        vm.onSurfaceSize(2208, 1840, 420f, 420f)  // unfolded: wider than the lagoon made for the cover screen
+        runCurrent()
+        val open = vm.ui.value.tankSize!!
+        assertTrue("$folded -> $open", open.widthMm > folded.widthMm)
+        assertEquals(open, engine.lastTank)
+        assertEquals(creatures, vm.ui.value.total)
+        vm.onSurfaceSize(1080, 2400, 420f, 420f)  // folded again
+        runCurrent()
+        assertEquals(open, vm.ui.value.tankSize)
+        assertEquals(creatures, engine.creatures.size)
+    }
 }

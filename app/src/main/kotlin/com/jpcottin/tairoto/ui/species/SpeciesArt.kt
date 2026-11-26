@@ -35,6 +35,10 @@ fun SpeciesArt(speciesId: String, modifier: Modifier = Modifier) {
             SpeciesCatalog.SpottedEagleRay.id -> drawEagleRay()
             SpeciesCatalog.DayOctopus.id -> drawOctopus()
             SpeciesCatalog.HermitCrab.id -> drawHermitCrab()
+            SpeciesCatalog.ConvictSurgeonfish.id -> drawSchool(FishArt.Manini)
+            SpeciesCatalog.BluestripeSnapper.id -> drawSchool(FishArt.Taape)
+            SpeciesCatalog.YellowstripeGoatfish.id -> drawSchool(FishArt.Ouma)
+            SpeciesCatalog.ScissortailSergeant.id -> drawSchool(FishArt.Mamo)
             else -> drawChromisTrio()
         }
     }
@@ -168,6 +172,76 @@ private fun DrawScope.drawTurtle() {
             )
         }
     }
+}
+
+/** How a schooling fish looks from above, in the same palette as its shader. */
+private enum class FishArt(
+    val back: Color,
+    val flank: Color,
+    val fin: Color,
+    val width: Float,
+    /** Dark bars across the back, from the snout (0) to the tail (1). */
+    val bars: List<Float> = emptyList(),
+    val barWidth: Float = 0.05f,
+    /** A coloured line along each side. */
+    val stripe: Color? = null,
+) {
+    Manini(Color(0xFFAAB59C), Color(0xFFE6EBDF), Color(0xCCDCE0C8), 0.22f, listOf(0.12f, 0.28f, 0.44f, 0.6f, 0.76f, 0.9f), 0.035f),
+    Taape(Color(0xFFE6BC40), Color(0xFFFADB5C), Color(0xDDF5CF48), 0.2f, stripe = Color(0xFF3D7DF0)),
+    Ouma(Color(0xFF8E9184), Color(0xFFEDEDE5), Color(0xCCF2E6A0), 0.17f, stripe = Color(0xFFF7CF3A)),
+    Mamo(Color(0xFFAABB98), Color(0xFFE5EDE0), Color(0xCCE5EDE0), 0.24f, listOf(0.24f, 0.4f, 0.56f, 0.72f, 0.86f), 0.07f),
+}
+
+private fun DrawScope.drawFish(art: FishArt, center: Offset, length: Float, angleDeg: Float) {
+    rotate(angleDeg, center) {
+        translate(center.x, center.y) {
+            val w = length * art.width
+            // Forked tail.
+            val tail = Path().apply {
+                moveTo(-length * 0.36f, 0f)
+                lineTo(-length * 0.62f, -w * 0.95f)
+                lineTo(-length * 0.5f, 0f)
+                lineTo(-length * 0.62f, w * 0.95f)
+                close()
+            }
+            drawPath(tail, art.fin)
+            if (art == FishArt.Mamo) {
+                drawLine(Color(0xFF151515), Offset(-length * 0.4f, -w * 0.2f), Offset(-length * 0.6f, -w * 0.85f), strokeWidth = w * 0.18f)
+                drawLine(Color(0xFF151515), Offset(-length * 0.4f, w * 0.2f), Offset(-length * 0.6f, w * 0.85f), strokeWidth = w * 0.18f)
+            }
+            val body = Path().apply {
+                moveTo(length * 0.42f, 0f)
+                cubicTo(length * 0.4f, -w * 0.9f, length * 0.05f, -w * 1.05f, -length * 0.38f, -w * 0.22f)
+                lineTo(-length * 0.38f, w * 0.22f)
+                cubicTo(length * 0.05f, w * 1.05f, length * 0.4f, w * 0.9f, length * 0.42f, 0f)
+                close()
+            }
+            drawPath(body, Brush.verticalGradient(listOf(art.flank, art.back, art.flank), startY = -w, endY = w))
+            art.stripe?.let { c ->
+                for (side in listOf(-1f, 1f)) {
+                    drawLine(c, Offset(length * 0.3f, side * w * 0.55f), Offset(-length * 0.34f, side * w * 0.2f), strokeWidth = w * 0.16f)
+                }
+            }
+            for (b in art.bars) {
+                val x = length * (0.42f - 0.8f * b)
+                val half = w * (1f - (b - 0.35f) * (b - 0.35f) * 1.6f).coerceAtLeast(0.25f)
+                drawLine(Color(0xEE111111), Offset(x, -half), Offset(x, half), strokeWidth = length * art.barWidth)
+            }
+            drawCircle(Color(0xFF0B0F0F), radius = w * 0.17f, center = Offset(length * 0.3f, -w * 0.5f))
+            drawCircle(Color(0xFF0B0F0F), radius = w * 0.17f, center = Offset(length * 0.3f, w * 0.5f))
+            if (art == FishArt.Ouma) {
+                drawLine(Color(0xFFF2E3A0), Offset(length * 0.42f, -w * 0.15f), Offset(length * 0.55f, -w * 0.4f), strokeWidth = w * 0.08f)
+                drawLine(Color(0xFFF2E3A0), Offset(length * 0.42f, w * 0.15f), Offset(length * 0.55f, w * 0.4f), strokeWidth = w * 0.08f)
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawSchool(art: FishArt) {
+    val s = size.minDimension
+    drawFish(art, Offset(s * 0.44f, s * 0.34f), s * 0.44f, -20f)
+    drawFish(art, Offset(s * 0.62f, s * 0.58f), s * 0.4f, -14f)
+    drawFish(art, Offset(s * 0.34f, s * 0.7f), s * 0.36f, -26f)
 }
 
 private fun DrawScope.drawEagleRay() {

@@ -13,6 +13,19 @@ source is noted next to each species in `Species.kt`.
 
 ## What is in it
 
+- **The creatures of the lagoon**, each by its Tahitian name (sources in `Species.kt`):
+  five schools of small fish — ʻatoti (green chromis), manini (convict surgeonfish),
+  taape (bluestripe snapper), ʻouma (yellowstripe goatfish, with its barbels) and
+  mamo (scissortail sergeant) — the honu (green sea turtle), the fai manu
+  (ocellated eagle ray) that flaps, glides and buries itself in the sand, the feʻe
+  (day octopus) that walks on soft arms, camouflages, inks and jets away, and the
+  uʻa (hermit crab) that steps on planted feet and hides in its shell.
+- **Adaptive layout**: on a tablet, an unfolded foldable or a desktop window the
+  species picker and the settings open as a pane beside the running lagoon; on a
+  phone or a cover screen the picker is a sheet over it. Folding and unfolding
+  move them between the two, and the lagoon widens for a bigger window
+  (Navigation 3 scenes: supporting pane, bottom sheet).
+
 - **Food and feeding**: drag to sprinkle flakes, hold for a pellet; a scent that grows
   with the food and the feeders draws fish from further away; messy bites, crumbs,
   decomposition, every milligram accounted for; a current grid stirred by tails.
@@ -43,13 +56,18 @@ source is noted next to each species in `Species.kt`.
 ./gradlew :engine:nativeHostTest            # C++ simulation and meshes, on the host
 ./gradlew :app:validateDebugScreenshotTest  # Compose screenshots
 ./gradlew :engine:connectedDebugAndroidTest :app:connectedDebugAndroidTest  # on a device
+scripts/fold-tests.sh                       # on a foldable emulator: folds and unfolds it (espresso-device)
 ```
+
+Previews for every major form factor (phone, foldable, tablet, desktop) are in
+`app/src/main/kotlin/.../ui/preview`; the screenshot tests render the same content.
 
 Deterministic launch for screenshots (debug builds):
 
 ```sh
 adb shell am start -n com.jpcottin.tairoto/.MainActivity --ez tairoto.ci true --el tairoto.seed 7
 # also: --es tairoto.quality low|high|ultra|ci  --ez tairoto.stats true  --ez tairoto.hints false
+#       --es tairoto.population "day_octopus:1,hermit_crab:2"  --ef tairoto.zoom 2.5   (a close look)
 ```
 
 ## Gestures

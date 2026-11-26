@@ -68,6 +68,20 @@ float MeshBuilder::chromisProfile(float t) {
     return lerp(1.0f, 0.2f, smoothstep(0.32f, 1.0f, t));
 }
 
+float MeshBuilder::fishProfile(Visual v, float t) {
+    float widest, snout, peduncle;
+    switch (v) {
+        case Visual::ConvictSurgeonfish: widest = 0.4f; snout = 0.55f; peduncle = 0.2f; break;   // oval, blunt
+        case Visual::BluestripeSnapper: widest = 0.36f; snout = 0.75f; peduncle = 0.22f; break;  // a pointed head
+        case Visual::YellowstripeGoatfish: widest = 0.32f; snout = 1.6f; peduncle = 0.2f; break;  // long sloping snout
+        case Visual::ScissortailSergeant: widest = 0.35f; snout = 0.6f; peduncle = 0.22f; break;
+        default: return chromisProfile(t);
+    }
+    t = saturate(t);
+    if (t < widest) return std::pow(std::sin(kPi * 0.5f * (t / widest)), snout) * 0.97f + 0.03f;
+    return lerp(1.0f, peduncle, smoothstep(widest, 1.0f, t));
+}
+
 void MeshBuilder::build(const World& world, const CameraParams& cam, Mesh& mesh) {
     mesh.clear();
     const auto& cs = world.creatures();
@@ -172,7 +186,7 @@ void MeshBuilder::fish(const Creature& c, Mesh& m) {
         float amp = amp0 * (0.008f + 0.075f * t * t);
         float lateral = amp * std::sin(c.tailPhase - 0.95f * kTau * t);
         center[i] = c.joint[i] + perp(tangent[i]) * lateral;
-        half[i] = maxHalf * chromisProfile(t);
+        half[i] = maxHalf * fishProfile(c.visual, t);
         u[i] = t * bodyLen;
         frame[i] = angleOf(tangent[i]);
     }
@@ -231,6 +245,31 @@ void MeshBuilder::fish(const Creature& c, Mesh& m) {
             fr[r] = ang + kPi;  // keep the frame pointing forward like the body
         }
         ribbon(fins, cl, hw, uu, fr, rows);
+    }
+
+    // A goatfish's two barbels under the chin: tucked back when it cruises,
+    // forward and busy, sweeping the sand, when it looks for food.
+    if (c.visual == Visual::YellowstripeGoatfish) {
+        Emitter b{m, c.pos.z, kindOf(kPartBarbel, c.visual), seed};
+        const float probing = c.foodTarget ? 1.0f : 0.25f;
+        const Vec2 f0 = fromAngle(frame[0]);
+        for (int side = -1; side <= 1; side += 2) {
+            Vec2 root = center[1] + perp(f0) * ((float)side * half[1] * 0.35f);
+            float sweep = 0.35f * std::sin(c.age * 9.0f + (float)side) * probing;
+            Vec2 dir = rotate(f0, (float)side * (0.25f + sweep) - (1.0f - probing) * 0.0f);
+            const int rows = 3;
+            Vec2 cl[rows];
+            float hw[rows], uu[rows], fr[rows];
+            float len = L * (0.06f + 0.08f * probing);
+            for (int r = 0; r < rows; r++) {
+                float t = (float)r / (rows - 1);
+                cl[r] = root + dir * (len * t);
+                hw[r] = L * 0.009f * (1.0f - 0.6f * t);
+                uu[r] = t;
+                fr[r] = angleOf(dir);
+            }
+            ribbon(b, cl, hw, uu, fr, rows);
+        }
     }
 
     // The body.

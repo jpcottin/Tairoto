@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.doubleClick
@@ -63,8 +64,8 @@ class TankAppTest {
             compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
             compose.onNodeWithTag(TankTags.ADD).performClick()
             compose.waitForTag(SheetTags.release(SpeciesCatalog.GreenChromis.id))
-            compose.onNodeWithTag(SheetTags.release(SpeciesCatalog.GreenChromis.id)).performClick()
-            compose.waitForText(SheetTags.count(SpeciesCatalog.GreenChromis.id)) { it == "28 in the lagoon" }
+            compose.onNodeWithTag(SheetTags.release(SpeciesCatalog.GreenChromis.id)).performScrollTo().performClick()
+            compose.waitForText(SheetTags.count(SpeciesCatalog.GreenChromis.id)) { it == "${SpeciesCatalog.GreenChromis.defaultCount + SpeciesCatalog.GreenChromis.addBatch} in the lagoon" }
             Espresso.pressBack()
             compose.waitForText(TankTags.COUNT) { it == "${DEFAULT + SpeciesCatalog.GreenChromis.addBatch} creatures" }
         }
@@ -75,7 +76,7 @@ class TankAppTest {
             compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
             compose.onNodeWithTag(TankTags.ADD).performClick()
             compose.waitForTag(SheetTags.release(SpeciesCatalog.GreenSeaTurtle.id))
-            compose.onNodeWithTag(SheetTags.release(SpeciesCatalog.GreenSeaTurtle.id)).performClick()
+            compose.onNodeWithTag(SheetTags.release(SpeciesCatalog.GreenSeaTurtle.id)).performScrollTo().performClick()
             compose.waitForText(SheetTags.count(SpeciesCatalog.GreenSeaTurtle.id)) { it == "2 in the lagoon" }
         }
     }
@@ -130,7 +131,7 @@ class TankAppTest {
             compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
             compose.onNodeWithTag(TankTags.ADD).performClick()
             compose.waitForTag(SheetTags.release(SpeciesCatalog.GreenChromis.id))
-            compose.onNodeWithTag(SheetTags.release(SpeciesCatalog.GreenChromis.id)).performClick()
+            compose.onNodeWithTag(SheetTags.release(SpeciesCatalog.GreenChromis.id)).performScrollTo().performClick()
             Espresso.pressBack()
             compose.waitForText(TankTags.COUNT) { it == "${DEFAULT + SpeciesCatalog.GreenChromis.addBatch} creatures" }
             compose.onNodeWithTag(TankTags.SETTINGS).performClick()
@@ -197,7 +198,7 @@ class TankAppTest {
             compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
             compose.onNodeWithTag(TankTags.ADD).performClick()
             compose.waitForTag(SheetTags.release(SpeciesCatalog.GreenSeaTurtle.id))
-            compose.onNodeWithTag(SheetTags.release(SpeciesCatalog.GreenSeaTurtle.id)).performClick()
+            compose.onNodeWithTag(SheetTags.release(SpeciesCatalog.GreenSeaTurtle.id)).performScrollTo().performClick()
             Espresso.pressBack()
             compose.waitForText(TankTags.COUNT) { it == "${DEFAULT + 1} creatures" }
             scenario.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }

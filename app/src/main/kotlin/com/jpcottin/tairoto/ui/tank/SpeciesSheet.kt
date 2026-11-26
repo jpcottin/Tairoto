@@ -6,7 +6,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -14,12 +21,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,20 +47,36 @@ import com.jpcottin.tairoto.world.TankType
 
 object SheetTags {
     const val SHEET = "species_sheet"
+    const val PANE = "species_pane"
+    const val CLOSE = "species_close"
     fun card(id: String) = "species_card_$id"
     fun release(id: String) = "species_release_$id"
     fun count(id: String) = "species_count_$id"
 }
 
+/**
+ * The species to release. On a narrow window it is the content of a bottom
+ * sheet over the lagoon; on a wide one a pane beside it, with [onClose].
+ */
 @Composable
-fun SpeciesSheet(counts: Map<String, Int>, roomLeft: Int, onRelease: (String) -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.testTag(SheetTags.SHEET),
-    ) {
+fun SpeciesPicker(counts: Map<String, Int>, roomLeft: Int, onRelease: (String) -> Unit, onClose: (() -> Unit)?) {
+    if (onClose == null) {
         SpeciesSheetContent(counts, roomLeft, onRelease)
+        return
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxSize().testTag(SheetTags.PANE),
+    ) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.End))) {
+            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onClose, modifier = Modifier.testTag(SheetTags.CLOSE)) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Close")
+                }
+            }
+            SpeciesSheetContent(counts, roomLeft, onRelease)
+        }
     }
 }
 
@@ -60,6 +85,7 @@ fun SpeciesSheetContent(counts: Map<String, Int>, roomLeft: Int, onRelease: (Str
     Column(
         Modifier
             .fillMaxWidth()
+            .testTag(SheetTags.SHEET)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
             .padding(bottom = 24.dp)
@@ -81,10 +107,27 @@ fun SpeciesSheetContent(counts: Map<String, Int>, roomLeft: Int, onRelease: (Str
 private fun Species.traits(): List<String> = buildList {
     add(if (tankType == TankType.REEF) "Lagoon" else tankType.name.lowercase().replaceFirstChar { it.uppercase() })
     if (schooling > 0.5f) add("Schools")
-    if (locomotion == Locomotion.PADDLE) {
-        add("Rests on the sand")
-        add("Breathes at the surface")
+    when (locomotion) {
+        Locomotion.SWIM -> Unit
+        Locomotion.PADDLE -> {
+            add("Rests on the sand")
+            add("Breathes at the surface")
+        }
+        Locomotion.GLIDE -> {
+            add("Flies on its wings")
+            add("Hides under the sand")
+        }
+        Locomotion.CRAWL -> {
+            add("Walks on eight arms")
+            add("Camouflage")
+            add("Inks")
+        }
+        Locomotion.WALK -> {
+            add("Carries its shell")
+            add("Hides in it")
+        }
     }
+    if (bottomFeeder && locomotion != Locomotion.PADDLE) add("Feeds on the sand")
     if (shyness > 0.6f) add("Shy")
 }
 

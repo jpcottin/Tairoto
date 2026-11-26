@@ -66,6 +66,19 @@ class TankSession(
         link.send(Msg.Remove(id))
     }
 
+    /**
+     * Widens the lagoon to cover a bigger window (a foldable opened, a window
+     * stretched): every creature stays where it is. It never shrinks; on a
+     * smaller window the camera pans over it instead. True if it grew.
+     */
+    fun growTo(size: TankSize): Boolean {
+        val before = sceneState.value.size
+        val grown = before.grownTo(size)
+        if (grown == before) return false
+        sceneState.value = sceneState.value.copy(size = grown)
+        return true
+    }
+
     /** Starts over with the default population. */
     suspend fun reset() {
         val fresh = Population.defaultScene(sceneState.value.size, ids, random)

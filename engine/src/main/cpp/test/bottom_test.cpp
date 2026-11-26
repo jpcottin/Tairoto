@@ -203,37 +203,63 @@ TEST(Octopus, ReachesOutAnArmForFoodOnTheSand) {
     EXPECT_GT(only(w, 2).eatenMg, 0.0f);
 }
 
-TEST(Octopus, WalkingArmsGripTheSandAndLetGo) {
-    // While an arm grips, the joint holding on does not move at all; and grips come and go.
+TEST(Octopus, ArmsMoveSmoothlyWithoutSnapping) {
+    // Walking, resting, hiding, jetting off and landing: no joint of any arm
+    // ever jerks. The second difference of each position over three steps
+    // (its acceleration) stays small, the way a soft arm moves in water.
     World w = lagoon(12);
     spawnOctopus(w);
     auto& o = w.creaturesForTest()[0];
     o.behavior = Behavior::Cruise;
     o.target = Vec3(100, 260, 54);
     o.stateTimer = 100;
-    int grips = 0, releases = 0;
-    int before[Creature::kArms];
-    Vec2 held[Creature::kArms];
-    for (int s = 0; s < 60 * 20; s++) {
-        const Creature& c = only(w, 2);
-        for (int k = 0; k < Creature::kArms; k++) {
-            before[k] = c.anchorJoint[k];
-            if (before[k] >= 0) held[k] = c.arm[k][before[k]];
-        }
+    Vec2 p0[Creature::kArms][Creature::kArmJoints], p1[Creature::kArms][Creature::kArmJoints];
+    float worst = 0;
+    Vec2 start = o.pos.xy();
+    for (int s = 0; s < 60 * 40; s++) {
+        if (s == 60 * 25) w.startle(only(w, 2).pos.xy());
         w.step(kDt);
-        const Creature& n = only(w, 2);
-        if (n.behavior != Behavior::Cruise) break;
-        for (int k = 0; k < Creature::kArms; k++) {
-            if (before[k] < 0 && n.anchorJoint[k] >= 0) grips++;
-            if (before[k] >= 0 && n.anchorJoint[k] < 0) releases++;
-            if (before[k] >= 0 && n.anchorJoint[k] == before[k]) {
-                ASSERT_LT(length(n.arm[k][before[k]] - held[k]), 1e-4f) << "arm " << k << " slid";
+        const Creature& c = only(w, 2);
+        if (s >= 2 && c.behavior != Behavior::Flee) {
+            for (int k = 0; k < Creature::kArms; k++)
+                for (int j = 1; j < Creature::kArmJoints; j++) {
+                    // Relative to the crown, so the body's own motion does not count.
+                    Vec2 a = p0[k][j], b = p1[k][j], d = c.arm[k][j] - c.pos.xy();
+                    worst = std::max(worst, length(d - b * 2.0f + a));
+                }
+        }
+        for (int k = 0; k < Creature::kArms; k++)
+            for (int j = 0; j < Creature::kArmJoints; j++) {
+                p0[k][j] = p1[k][j];
+                p1[k][j] = c.arm[k][j] - c.pos.xy();
             }
+        if (s == 60 * 20) {
+            EXPECT_GT(length(c.pos.xy() - start), 15.0f) << "it walked";
         }
     }
-    EXPECT_GT(grips, 6);
-    EXPECT_GT(releases, 4);
-    EXPECT_GT(length(only(w, 2).pos.xy() - Vec2(100, 150)), 15.0f) << "it walked";
+    EXPECT_LT(worst, 0.25f) << "mm per frame per frame";
+}
+
+TEST(Octopus, WalkingArmsSweepInTurn) {
+    // While it walks, its arms reach forward and pull back, neighbours out of step.
+    World w = lagoon(12);
+    spawnOctopus(w);
+    auto& o = w.creaturesForTest()[0];
+    o.behavior = Behavior::Cruise;
+    o.target = Vec3(100, 280, 54);
+    o.stateTimer = 100;
+    run(w, 2);
+    float lo[2] = {1e9f, 1e9f}, hi[2] = {-1e9f, -1e9f};
+    for (int s = 0; s < 60 * 8; s++) {
+        w.step(kDt);
+        const Creature& c = only(w, 2);
+        Vec2 fwd = fromAngle(c.heading);
+        float f0 = dot(c.arm[1][5] - c.pos.xy(), fwd), f1 = dot(c.arm[2][5] - c.pos.xy(), fwd);
+        lo[0] = std::min(lo[0], f0); hi[0] = std::max(hi[0], f0);
+        lo[1] = std::min(lo[1], f1); hi[1] = std::max(hi[1], f1);
+    }
+    EXPECT_GT(hi[0] - lo[0], 3.0f) << "arm 1 sweeps";
+    EXPECT_GT(hi[1] - lo[1], 3.0f) << "arm 2 sweeps";
 }
 
 TEST(Octopus, ArmsStreamBehindWhenItJets) {

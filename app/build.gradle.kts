@@ -46,6 +46,10 @@ android {
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // Lets espresso-device fold and unfold a foldable emulator from a test.
+        emulatorControl {
+            enable = true
+        }
     }
     // A guest on a software GPU can take seconds to answer a property query.
     adbOptions {
@@ -86,6 +90,9 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
+    implementation(libs.androidx.compose.material3.adaptive)
+    implementation(libs.androidx.compose.material3.adaptive.layout)
+    implementation(libs.androidx.compose.material3.adaptive.navigation3)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
@@ -110,5 +117,6 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.uiautomator)
     androidTestImplementation(libs.androidx.test.espresso.core)
+    androidTestImplementation(libs.androidx.test.espresso.device)
     androidTestImplementation(libs.kotlinx.coroutines.test)
 }

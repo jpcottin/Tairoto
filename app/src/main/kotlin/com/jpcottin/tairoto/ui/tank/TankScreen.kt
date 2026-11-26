@@ -71,8 +71,7 @@ object TankTags {
 }
 
 @Composable
-fun TankScreen(viewModel: TankViewModel, state: TankUiState, onOpenSettings: () -> Unit) {
-    var sheetOpen by rememberSaveable { mutableStateOf(false) }
+fun TankScreen(viewModel: TankViewModel, state: TankUiState, onOpenSettings: () -> Unit, onOpenSpecies: () -> Unit) {
     val vm by rememberUpdatedState(viewModel)
     val handler = remember {
         object : TankGestureHandler {
@@ -104,16 +103,8 @@ fun TankScreen(viewModel: TankViewModel, state: TankUiState, onOpenSettings: () 
         )
         TankHud(
             state = state,
-            onAdd = { sheetOpen = true; vm.dismissHint() },
+            onAdd = onOpenSpecies,
             onSettings = onOpenSettings,
-        )
-    }
-    if (sheetOpen) {
-        SpeciesSheet(
-            counts = state.counts,
-            roomLeft = state.roomLeft,
-            onRelease = { vm.release(it) },
-            onDismiss = { sheetOpen = false },
         )
     }
 }

@@ -321,3 +321,76 @@ TEST(Mesh, NoBottomDwellerTriangleIsEverStretched) {
         }
     }
 }
+
+TEST(Mesh, EverySchoolingFishHasItsOwnShape) {
+    const Visual fish[] = {Visual::GreenChromis, Visual::ConvictSurgeonfish, Visual::BluestripeSnapper,
+                           Visual::YellowstripeGoatfish, Visual::ScissortailSergeant};
+    for (Visual v : fish) {
+        EXPECT_TRUE(isSchoolingFish(v));
+        float widest = 0, at = 0;
+        for (float t = 0; t <= 1.0f; t += 0.01f) {
+            float p = MeshBuilder::fishProfile(v, t);
+            ASSERT_GE(p, 0.0f);
+            ASSERT_LE(p, 1.0f + 1e-5f);
+            if (p > widest) { widest = p; at = t; }
+        }
+        EXPECT_GT(widest, 0.99f);
+        EXPECT_GT(at, 0.25f);
+        EXPECT_LT(at, 0.45f);
+        EXPECT_LT(MeshBuilder::fishProfile(v, 1.0f), 0.25f) << "a narrow tail root";
+    }
+    // The goatfish is the most slender at its head, the surgeonfish the bluntest.
+    EXPECT_LT(MeshBuilder::fishProfile(Visual::YellowstripeGoatfish, 0.1f), MeshBuilder::fishProfile(Visual::ConvictSurgeonfish, 0.1f));
+    EXPECT_FALSE(isSchoolingFish(Visual::GreenSeaTurtle));
+}
+
+TEST(Mesh, OnlyTheGoatfishHasBarbels) {
+    World w;
+    w.setTank({200, 300, 55});
+    w.spawn(1, Visual::YellowstripeGoatfish, Locomotion::Swim, SpeciesParams::yellowstripeGoatfish(), 25, 1, Vec3(100, 150, 40));
+    w.spawn(2, Visual::ConvictSurgeonfish, Locomotion::Swim, SpeciesParams::convictSurgeonfish(), 22, 2, Vec3(60, 150, 30));
+    w.spawn(3, Visual::ScissortailSergeant, Locomotion::Swim, SpeciesParams::scissortailSergeant(), 18, 3, Vec3(140, 150, 10));
+    w.step(1.0f / 60.0f);
+    Mesh m;
+    MeshBuilder().build(w, cameraOver(w), m);
+    int barbels[16] = {};
+    for (auto& v : m.vertices)
+        if (partOf(v) == kPartBarbel && visualOf(v) < 16) barbels[visualOf(v)]++;
+    EXPECT_EQ(2 * 3 * 3, barbels[(int)Visual::YellowstripeGoatfish]);
+    EXPECT_EQ(0, barbels[(int)Visual::ConvictSurgeonfish]);
+    EXPECT_EQ(0, barbels[(int)Visual::ScissortailSergeant]);
+}
+
+TEST(Mesh, MixedSchoolsKeepApartAndStaySmooth) {
+    // Five schools in one lagoon for a minute: each fish still swims with its own kind.
+    World w;
+    w.setTank({200, 300, 55});
+    w.setSeed(8);
+    Rng r(8);
+    struct K { Visual v; SpeciesParams p; float len; };
+    const K kinds[] = {{Visual::GreenChromis, SpeciesParams::greenChromis(), 15},
+                       {Visual::ConvictSurgeonfish, SpeciesParams::convictSurgeonfish(), 22},
+                       {Visual::BluestripeSnapper, SpeciesParams::bluestripeSnapper(), 23},
+                       {Visual::YellowstripeGoatfish, SpeciesParams::yellowstripeGoatfish(), 25},
+                       {Visual::ScissortailSergeant, SpeciesParams::scissortailSergeant(), 18}};
+    int64_t id = 1;
+    for (const K& k : kinds)
+        for (int i = 0; i < 8; i++)
+            w.spawn(id++, k.v, Locomotion::Swim, k.p, k.len, r.next(), Vec3(r.range(40, 160), r.range(40, 260), r.range(10, 45)));
+    for (int s = 0; s < 60 * 60; s++) w.step(1.0f / 60.0f);
+    // Each fish's nearest neighbour is most often one of its own.
+    int own = 0, total = 0;
+    for (const Creature& a : w.creatures()) {
+        float best = 1e9f;
+        const Creature* near = nullptr;
+        for (const Creature& b : w.creatures()) {
+            if (b.id == a.id) continue;
+            float d = length(b.pos.xy() - a.pos.xy());
+            if (d < best) { best = d; near = &b; }
+        }
+        own += near && near->visual == a.visual;
+        total++;
+    }
+    // By chance alone it would be about one in five; schools brushing past each other are real.
+    EXPECT_GT((float)own / (float)total, 0.6f);
+}

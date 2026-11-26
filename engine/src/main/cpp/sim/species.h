@@ -15,7 +15,17 @@ enum class Locomotion : int32_t {
 };
 
 /** The look: the mesh profile and the shader pattern. Matches Species.visualId. */
-enum class Visual : int32_t { GreenChromis = 0, GreenSeaTurtle = 1, EagleRay = 3, Octopus = 4, HermitCrab = 5 };
+enum class Visual : int32_t {
+    GreenChromis = 0, GreenSeaTurtle = 1, EagleRay = 3, Octopus = 4, HermitCrab = 5,
+    // More schooling fish of the lagoon (2 is food and 6 clouds).
+    ConvictSurgeonfish = 7, BluestripeSnapper = 8, YellowstripeGoatfish = 9, ScissortailSergeant = 10,
+};
+
+/** A fish that schools, swims with a tail beat and is drawn by the fish mesh. */
+inline bool isSchoolingFish(Visual v) {
+    return v == Visual::GreenChromis || v == Visual::ConvictSurgeonfish || v == Visual::BluestripeSnapper ||
+           v == Visual::YellowstripeGoatfish || v == Visual::ScissortailSergeant;
+}
 
 struct SpeciesParams {
     float cruiseBl = 1.0f;     // cruising speed, body lengths per second
@@ -72,6 +82,36 @@ struct SpeciesParams {
         s.schooling = 0.0f; s.shyness = 0.2f; s.turnRate = 0.55f; s.bodyWidth = 0.62f; s.tailBeatHz = 0.32f;
         s.smell = 0.8f; s.biteMg = 3.5f; s.messiness = 0.6f; s.stomachMg = 40.0f; s.hungerPerS = 1.0f / 400.0f;
         s.bottomFeeder = true;
+        return s;
+    }
+    static SpeciesParams convictSurgeonfish() {
+        SpeciesParams s = greenChromis();
+        s.cruiseBl = 1.0f; s.burstBl = 4.0f; s.depthMin = 0.35f; s.depthMax = 0.8f;
+        s.schooling = 0.8f; s.shyness = 0.6f; s.turnRate = 2.6f; s.bodyWidth = 0.2f; s.tailBeatHz = 2.2f;
+        s.smell = 0.9f; s.biteMg = 0.6f; s.messiness = 0.4f; s.stomachMg = 6.0f; s.hungerPerS = 1.0f / 140.0f;
+        s.bottomFeeder = true;  // grazes the algae on the bottom
+        return s;
+    }
+    static SpeciesParams bluestripeSnapper() {
+        SpeciesParams s = greenChromis();
+        s.cruiseBl = 0.9f; s.burstBl = 4.5f; s.depthMin = 0.3f; s.depthMax = 0.7f;
+        s.schooling = 0.95f; s.shyness = 0.5f; s.turnRate = 2.4f; s.bodyWidth = 0.22f; s.tailBeatHz = 2.2f;
+        s.smell = 1.1f; s.biteMg = 0.8f; s.messiness = 0.3f; s.stomachMg = 8.0f; s.hungerPerS = 1.0f / 160.0f;
+        return s;
+    }
+    static SpeciesParams yellowstripeGoatfish() {
+        SpeciesParams s = greenChromis();
+        s.cruiseBl = 0.8f; s.burstBl = 4.0f; s.depthMin = 0.7f; s.depthMax = 0.92f;
+        s.schooling = 0.75f; s.shyness = 0.55f; s.turnRate = 2.2f; s.bodyWidth = 0.18f; s.tailBeatHz = 2.0f;
+        s.smell = 1.3f; s.biteMg = 0.6f; s.messiness = 0.25f; s.stomachMg = 7.0f; s.hungerPerS = 1.0f / 150.0f;
+        s.bottomFeeder = true;  // probes the sand with its barbels
+        return s;
+    }
+    static SpeciesParams scissortailSergeant() {
+        SpeciesParams s = greenChromis();
+        s.cruiseBl = 1.2f; s.burstBl = 4.8f; s.depthMin = 0.1f; s.depthMax = 0.5f;
+        s.schooling = 0.85f; s.shyness = 0.65f; s.turnRate = 2.9f; s.bodyWidth = 0.24f; s.tailBeatHz = 2.5f;
+        s.smell = 1.0f; s.biteMg = 0.5f; s.messiness = 0.4f; s.stomachMg = 4.5f; s.hungerPerS = 1.0f / 140.0f;
         return s;
     }
     static SpeciesParams eagleRay() {

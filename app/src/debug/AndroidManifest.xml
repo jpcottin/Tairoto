@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug builds only: espresso-device folds and unfolds the emulator from the
+  instrumented tests through the emulator's gRPC service, from the app's own
+  process. The release build asks for no network permission (yet).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The emulator's gRPC service is at 10.0.2.2, a local address: from Android 17 that takes this permission. -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+</manifest>

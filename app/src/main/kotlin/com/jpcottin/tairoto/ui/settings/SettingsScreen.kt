@@ -18,6 +18,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +50,7 @@ import com.jpcottin.tairoto.world.QualityTier
 object SettingsTags {
     const val SCREEN = "settings_screen"
     const val BACK = "settings_back"
+    const val LAGOON = "settings_lagoon"
     const val STATS = "settings_stats"
     const val RESET = "settings_reset"
     const val RESET_CONFIRM = "settings_reset_confirm"
@@ -75,6 +77,8 @@ fun SettingsScreen(
     onQuality: (QualityMode) -> Unit,
     onShowStats: (Boolean) -> Unit,
     onResetTank: () -> Unit,
+    /** Shown beside the lagoon on a wide window rather than on its own. */
+    inPane: Boolean = false,
 ) {
     Scaffold(
         modifier = Modifier.testTag(SettingsTags.SCREEN),
@@ -82,8 +86,10 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text("Settings") },
                 navigationIcon = {
+                    // Beside the lagoon it closes, as a pane does; on its own it goes back.
                     IconButton(onClick = onBack, modifier = Modifier.testTag(SettingsTags.BACK)) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                        if (inPane) Icon(Icons.Rounded.Close, contentDescription = "Close")
+                        else Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
@@ -137,6 +143,7 @@ fun SettingsContent(
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     "${ui.creatures} creatures in a lagoon of ${ui.tankMm}.",
+                    modifier = Modifier.testTag(SettingsTags.LAGOON),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -163,8 +163,128 @@ object SpeciesCatalog {
         stomachMg = 4f,
         hungerPerSecond = 1f / 150f,
         bottomFeeder = false,
-        defaultCount = 22,
+        defaultCount = 16,
         addBatch = 6,
+    )
+
+    val ConvictSurgeonfish = Species(
+        id = "convict_surgeonfish",
+        // Tetiaroa Society (convict surgeonfish, manini); Bishop Museum, Cook Islands database (Manini, Tahitian).
+        tahitianName = "Manini",
+        commonName = "Convict surgeonfish",
+        scientificName = "Acanthurus triostegus",
+        description = "A pale surgeonfish striped like a convict with six thin black bars. Schools of manini " +
+            "sweep over the lagoon floor together, grazing the fine algae on the sand and the coral rubble.",
+        tankType = TankType.REEF,
+        locomotion = Locomotion.SWIM,
+        visualId = 7,
+        lengthMm = 20f..25f,
+        cruiseBodyLengthsPerS = 1.0f,
+        burstBodyLengthsPerS = 4f,
+        depthBand = 0.35f..0.8f,
+        schooling = 0.8f,
+        shyness = 0.6f,
+        turnRateRadPerS = 2.6f,
+        bodyWidth = 0.2f,
+        tailBeatHz = 2.2f,
+        smell = 0.9f,
+        biteMg = 0.6f,
+        messiness = 0.4f,
+        stomachMg = 6f,
+        hungerPerSecond = 1f / 140f,
+        bottomFeeder = true,
+        defaultCount = 8,
+        addBatch = 5,
+    )
+
+    val BluestripeSnapper = Species(
+        id = "bluestripe_snapper",
+        // Bishop Museum, Cook Islands database (Taape, Tahitian); NOAA (taape, brought to Hawaiʻi from the Marquesas and Moʻorea).
+        tahitianName = "Taape",
+        commonName = "Bluestripe snapper",
+        scientificName = "Lutjanus kasmira",
+        description = "Bright yellow with electric-blue lines down its sides. By day taape hang in tight, " +
+            "slow schools near the coral heads; at night they spread out over the sand to hunt.",
+        tankType = TankType.REEF,
+        locomotion = Locomotion.SWIM,
+        visualId = 8,
+        lengthMm = 20f..26f,
+        cruiseBodyLengthsPerS = 0.9f,
+        burstBodyLengthsPerS = 4.5f,
+        depthBand = 0.3f..0.7f,
+        schooling = 0.95f,
+        shyness = 0.5f,
+        turnRateRadPerS = 2.4f,
+        bodyWidth = 0.22f,
+        tailBeatHz = 2.2f,
+        smell = 1.1f,
+        biteMg = 0.8f,
+        messiness = 0.3f,
+        stomachMg = 8f,
+        hungerPerSecond = 1f / 160f,
+        bottomFeeder = false,
+        defaultCount = 9,
+        addBatch = 5,
+    )
+
+    val YellowstripeGoatfish = Species(
+        id = "yellowstripe_goatfish",
+        // Tetiaroa Society (yellowstripe goatfish, ʻouma). The Bishop Museum database gives vete.
+        tahitianName = "ʻOuma",
+        commonName = "Yellowstripe goatfish",
+        scientificName = "Mulloidichthys flavolineatus",
+        description = "A slender silver fish with a yellow stripe from eye to tail. ʻOuma rest in loose " +
+            "schools over the sand, then fan out to feel for food in it with the two barbels under their chin.",
+        tankType = TankType.REEF,
+        locomotion = Locomotion.SWIM,
+        visualId = 9,
+        lengthMm = 22f..28f,
+        cruiseBodyLengthsPerS = 0.8f,
+        burstBodyLengthsPerS = 4f,
+        depthBand = 0.7f..0.92f,
+        schooling = 0.75f,
+        shyness = 0.55f,
+        turnRateRadPerS = 2.2f,
+        bodyWidth = 0.18f,
+        tailBeatHz = 2f,
+        smell = 1.3f,
+        biteMg = 0.6f,
+        messiness = 0.25f,
+        stomachMg = 7f,
+        hungerPerSecond = 1f / 150f,
+        bottomFeeder = true,
+        defaultCount = 6,
+        addBatch = 4,
+    )
+
+    val ScissortailSergeant = Species(
+        id = "scissortail_sergeant",
+        // Bishop Museum, Cook Islands database (Mamo, Tahitian, for Abudefduf sexfasciatus).
+        tahitianName = "Mamo",
+        commonName = "Scissortail sergeant",
+        scientificName = "Abudefduf sexfasciatus",
+        description = "A damselfish with five broad black bars and a black stripe down each lobe of its " +
+            "tail, like open scissors. Mamo school high in the water and are first to any food that falls in.",
+        tankType = TankType.REEF,
+        locomotion = Locomotion.SWIM,
+        visualId = 10,
+        lengthMm = 16f..20f,
+        cruiseBodyLengthsPerS = 1.2f,
+        burstBodyLengthsPerS = 4.8f,
+        depthBand = 0.1f..0.5f,
+        schooling = 0.85f,
+        shyness = 0.65f,
+        turnRateRadPerS = 2.9f,
+        bodyWidth = 0.24f,
+        tailBeatHz = 2.5f,
+        smell = 1f,
+        biteMg = 0.5f,
+        messiness = 0.4f,
+        stomachMg = 4.5f,
+        hungerPerSecond = 1f / 140f,
+        bottomFeeder = false,
+        defaultCount = 8,
+        addBatch = 5,
     )
 
     val GreenSeaTurtle = Species(
@@ -287,7 +407,10 @@ object SpeciesCatalog {
         addBatch = 1,
     )
 
-    val all: List<Species> = listOf(GreenChromis, GreenSeaTurtle, SpottedEagleRay, DayOctopus, HermitCrab)
+    val all: List<Species> = listOf(
+        GreenChromis, ConvictSurgeonfish, BluestripeSnapper, YellowstripeGoatfish, ScissortailSergeant,
+        GreenSeaTurtle, SpottedEagleRay, DayOctopus, HermitCrab,
+    )
 
     private val byId = all.associateBy { it.id }
 

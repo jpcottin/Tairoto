@@ -123,4 +123,14 @@ class SessionTest {
         assertEquals(listOf(EntityId(1)), diff.removed)
         assertTrue(SceneDiff.between(setOf(EntityId(2), EntityId(3)), TankScene(size, listOf(b, c))).isEmpty)
     }
+
+    @Test fun `the lagoon grows for a bigger window, keeps its creatures and never shrinks`() = runTest {
+        val start = TankScene(TankSize(150f, 320f, 55f), Population.release(SpeciesCatalog.HermitCrab, 3, TankSize(150f, 320f, 55f), EntityIdAllocator(0), Random(1)))
+        val session = TankSession(start, LoopbackLink(), Random(3))
+        assertTrue(session.growTo(TankSize(300f, 280f, 55f)))
+        assertEquals(TankSize(300f, 320f, 55f), session.scene.value.size)
+        assertEquals(start.creatures, session.scene.value.creatures)
+        assertTrue(!session.growTo(TankSize(100f, 100f, 55f)))
+        assertEquals(TankSize(300f, 320f, 55f), session.scene.value.size)
+    }
 }

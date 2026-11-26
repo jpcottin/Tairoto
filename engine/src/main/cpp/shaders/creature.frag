@@ -89,67 +89,146 @@ vec4 finish(vec3 color, float alpha) {
 
 // ------------------------------------------------------------------ chromis
 
-vec4 chromisBody(Lit l, float caustic) {
+/**
+ * A schooling fish's look from above, by species (vVisual):
+ *   0  ʻAtoti, green chromis: apple green to blue, iridescent.
+ *   7  Manini, convict surgeonfish: pale olive-white, six narrow black bars.
+ *   8  Taape, bluestripe snapper: bright yellow, electric-blue lines along the sides.
+ *   9  ʻOuma, yellowstripe goatfish: grey-olive back, white sides, a yellow stripe.
+ *   10 Mamo, scissortail sergeant: silvery green-white, five broad black bars.
+ */
+struct FishLook {
+    vec3 dorsum;    // along the back
+    vec3 flank;     // the sides
+    float iri;      // how iridescent
+    float scales;   // how much the scale rows show
+};
+
+FishLook fishLook() {
+    FishLook f;
+    if (vVisual == 7) {
+        f.dorsum = srgb(vec3(0.6, 0.66, 0.55)); f.flank = srgb(vec3(0.86, 0.9, 0.84)); f.iri = 0.08; f.scales = 0.5;
+    } else if (vVisual == 8) {
+        f.dorsum = srgb(vec3(0.86, 0.7, 0.16)); f.flank = srgb(vec3(0.98, 0.84, 0.26)); f.iri = 0.05; f.scales = 0.8;
+    } else if (vVisual == 9) {
+        f.dorsum = srgb(vec3(0.5, 0.52, 0.46)); f.flank = srgb(vec3(0.9, 0.9, 0.86)); f.iri = 0.1; f.scales = 1.0;
+    } else if (vVisual == 10) {
+        f.dorsum = srgb(vec3(0.62, 0.7, 0.55)); f.flank = srgb(vec3(0.88, 0.92, 0.86)); f.iri = 0.15; f.scales = 0.8;
+    } else {
+        f.dorsum = srgb(vec3(0.27, 0.55, 0.5)); f.flank = srgb(vec3(0.52, 0.86, 0.78)); f.iri = 1.0; f.scales = 1.0;
+    }
+    return f;
+}
+
+/** Dark bars across the back at these places along the body (0 snout .. 1 peduncle). */
+float bars(float u, float v, int visual) {
+    float d = 1.0;
+    if (visual == 7) {
+        // Manini: a bar through the eye, four across the body, one on the peduncle; narrow.
+        const float P[6] = float[6](0.085, 0.25, 0.42, 0.58, 0.74, 0.9);
+        for (int i = 0; i < 6; i++) d = min(d, abs(u - P[i] - 0.015 * v * v) / (i == 0 ? 0.02 : 0.028));
+        return 1.0 - smoothstep(0.7, 1.0, d);
+    }
+    if (visual == 10) {
+        // Mamo: five broad bars, the first just behind the head.
+        const float P[5] = float[5](0.22, 0.38, 0.54, 0.7, 0.86);
+        for (int i = 0; i < 5; i++) d = min(d, abs(u - P[i] + 0.02 * v * v) / 0.05);
+        return 1.0 - smoothstep(0.75, 1.0, d);
+    }
+    return 0.0;
+}
+
+vec4 fishBody(Lit l, float caustic) {
     float u = vUv.x / 0.78;   // 0 snout .. 1 peduncle
     float v = vUv.y;
     float av = abs(v);
     vec3 n = toWorld(vec3(u < 0.08 ? 0.5 * (0.08 - u) / 0.08 : 0.0, v * 0.92, sqrt(max(1.0 - v * v * 0.85, 0.05))));
+    FishLook f = fishLook();
 
-    vec3 dorsum = srgb(vec3(0.27, 0.55, 0.5));
-    vec3 flank = srgb(vec3(0.52, 0.86, 0.78));
-    vec3 base = mix(dorsum, flank, smoothstep(0.12, 0.85, av));
-    base = mix(base, srgb(vec3(0.2, 0.42, 0.42)), smoothstep(0.08, 0.0, u) * 0.6);  // darker snout
+    vec3 base = mix(f.dorsum, f.flank, smoothstep(0.12, 0.85, av));
+    base = mix(base, f.dorsum * 0.75, smoothstep(0.08, 0.0, u) * 0.6);  // darker snout
 
-    // Iridescence: thin-film colour that changes with the angle to the light.
     float ndh = max(dot(n, l.H), 0.0);
+    // Iridescence: thin-film colour that changes with the angle to the light.
     float film = 0.5 + 0.5 * sin(ndh * 7.0 + u * 4.0 + vSeed * TAU + timeS() * 0.4 + F.misc.x * 3.0);
     vec3 iri = mix(srgb(vec3(0.3, 0.62, 0.98)), srgb(vec3(0.45, 0.98, 0.58)), film);
-    base = mix(base, iri, 0.35 * smoothstep(0.25, 0.9, av) + 0.12);
+    base = mix(base, iri, (0.35 * smoothstep(0.25, 0.9, av) + 0.12) * f.iri);
+
+    if (vVisual == 8) {
+        // Taape: four electric-blue lines along each side, edged darker.
+        float lines = 0.0;
+        for (int i = 0; i < 4; i++) {
+            float at = 0.42 + 0.15 * float(i) + 0.05 * u;
+            float d = abs(av - at) / 0.035;
+            lines = max(lines, 1.0 - smoothstep(0.6, 1.0, d));
+        }
+        lines *= smoothstep(0.04, 0.12, u) * (1.0 - smoothstep(0.9, 1.0, u));
+        base = mix(base, srgb(vec3(0.15, 0.45, 0.95)), lines * 0.9);
+    } else if (vVisual == 9) {
+        // ʻOuma: a bright yellow stripe from the eye to the tail.
+        float stripe = 1.0 - smoothstep(0.06, 0.1, abs(av - 0.66));
+        base = mix(base, srgb(vec3(0.98, 0.82, 0.2)), stripe * smoothstep(0.05, 0.12, u) * 0.95);
+    }
+    base = mix(base, srgb(vec3(0.04, 0.05, 0.05)), bars(u, av, vVisual) * 0.92);
 
     // Scales: overlapping rows that catch the light one by one.
     vec2 sc = vec2(u * 46.0, v * 4.6 + floor(u * 46.0) * 0.5);
     vec2 cell = fract(sc) - 0.5;
     float rim = smoothstep(0.32, 0.5, length(cell));
-    base *= 1.0 - rim * 0.12;
+    base *= 1.0 - rim * 0.12 * f.scales;
     float glitter = step(0.86, hash12(floor(sc) + vSeed * 13.0)) * pow(ndh, 24.0) * 1.6 * (1.0 - smoothstep(0.22, 0.42, length(cell)));
 
     float diffuse = max(dot(n, normalize(F.sun.xyz)), 0.0);
     vec3 color = base * (l.sun * diffuse + l.ambient);
-    color += l.sun * (pow(ndh, 60.0) * 0.45 + glitter) * mix(vec3(1.0), iri, 0.5);
+    color += l.sun * (pow(ndh, 60.0) * 0.45 + glitter * (0.4 + 0.6 * f.iri)) * mix(vec3(1.0), iri, 0.5 * f.iri);
     // Light passing through the thin edge of the body.
-    color += flank * l.sun * smoothstep(0.75, 1.0, av) * 0.18;
+    color += f.flank * l.sun * smoothstep(0.75, 1.0, av) * 0.18;
 
-    // Eyes at the sides of the head: black pupil, gold ring, a highlight.
+    // Eyes at the sides of the head: black pupil, a ring, a highlight.
     vec2 e = vec2((u - 0.085) / 0.04, (av - 0.62) / 0.3);
     float eye = length(e);
     if (eye < 1.0) {
-        vec3 iris = mix(srgb(vec3(0.02, 0.03, 0.03)), srgb(vec3(0.72, 0.6, 0.25)), smoothstep(0.5, 0.85, eye));
+        vec3 ring = vVisual == 8 ? srgb(vec3(0.9, 0.75, 0.2)) : (vVisual == 7 ? srgb(vec3(0.3, 0.3, 0.25)) : srgb(vec3(0.72, 0.6, 0.25)));
+        vec3 irisC = mix(srgb(vec3(0.02, 0.03, 0.03)), ring, smoothstep(0.5, 0.85, eye));
         float hl = smoothstep(0.35, 0.0, length(e - vec2(-0.3, -0.35 * sign(v))));
-        color = mix(color, iris * (l.sun * 0.5 + l.ambient) + hl * 1.4, smoothstep(1.0, 0.85, eye));
+        color = mix(color, irisC * (l.sun * 0.5 + l.ambient) + hl * 1.4, smoothstep(1.0, 0.85, eye));
     }
     return finish(color, edgeAlpha(av));
 }
 
-vec4 chromisFin(Lit l, float caustic) {
+vec4 fishFin(Lit l, float caustic) {
     float u = vUv.x;
     float v = vUv.y;
     float av = abs(v);
-    vec3 tint = srgb(vec3(0.58, 0.88, 0.82));
+    FishLook f = fishLook();
+    vec3 tint = mix(f.flank, srgb(vec3(0.58, 0.88, 0.82)), vVisual == 0 ? 1.0 : 0.0);
+    if (vVisual == 8) tint = srgb(vec3(0.98, 0.82, 0.25));          // yellow fins
+    else if (vVisual == 9) tint = srgb(vec3(0.95, 0.88, 0.55));     // pale yellow tail
+    else if (vVisual == 7) tint = srgb(vec3(0.85, 0.88, 0.75));
     float alpha;
     float rays;
+    if (vPart == 4) {
+        // Barbels: pale yellow feelers.
+        vec3 c = srgb(vec3(0.95, 0.9, 0.6)) * (l.sun * 0.8 + l.ambient);
+        return finish(c, edgeAlpha(av) * 0.95);
+    }
     if (vPart == 1) {
-        // Forked tail: the middle is cut back, the lobes reach far.
-        float limit = 0.42 + 0.58 * pow(av, 0.85);
+        // The tail: deeply forked for the chromis, the sergeant and the goatfish, less so for the others.
+        float fork = vVisual == 7 ? 0.82 : (vVisual == 8 ? 0.62 : 0.42);
+        float limit = fork + (1.0 - fork) * pow(av, 0.85);
         float cut = 1.0 - smoothstep(limit - 0.06, limit, u);
         rays = 0.5 + 0.5 * cos(v * 26.0);
         alpha = cut * mix(0.72, 0.38, u) * (0.75 + 0.25 * rays);
         tint *= 0.9 + 0.15 * rays;
+        // Mamo: a black stripe down each lobe, the "scissors".
+        if (vVisual == 10) tint = mix(tint, srgb(vec3(0.05, 0.05, 0.05)), (1.0 - smoothstep(0.08, 0.16, abs(av - 0.62))) * smoothstep(0.15, 0.4, u));
+        if (vVisual == 10 || vVisual == 8) alpha = max(alpha, cut * 0.55);
     } else if (vPart == 2) {
         rays = 0.5 + 0.5 * cos(v * 14.0 + u * 2.0);
         alpha = mix(0.45, 0.2, u) * (0.8 + 0.2 * rays) * (1.0 - smoothstep(0.75, 1.0, u));
     } else {
         rays = 0.5 + 0.5 * cos(u * 60.0);
-        tint = srgb(vec3(0.3, 0.55, 0.5));
+        tint = f.dorsum * 0.85;
         alpha = 0.75 * (0.65 + 0.35 * rays);
     }
     vec3 color = tint * (l.sun * 0.7 + l.ambient) * (0.85 + 0.6 * caustic);
@@ -537,6 +616,6 @@ void main() {
         case 4: outColor = octopus(l, caustic); break;
         case 5: outColor = vPart == 0 ? crabShell(l, caustic) : crabLimb(l, caustic); break;
         case 6: outColor = cloud(l, caustic); break;
-        default: outColor = vPart == 0 ? chromisBody(l, caustic) : chromisFin(l, caustic); break;
+        default: outColor = vPart == 0 ? fishBody(l, caustic) : fishFin(l, caustic); break;  // the schooling fish
     }
 }

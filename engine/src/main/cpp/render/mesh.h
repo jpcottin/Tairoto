@@ -17,6 +17,7 @@ enum Part : int32_t {
     kPartCaudalFin = 1,
     kPartPectoralFin = 2,
     kPartDorsalFin = 3,
+    kPartBarbel = 4,  // a goatfish's chin barbels
     kPartShell = 10,
     kPartHead = 11,
     kPartFlipper = 12,
@@ -89,6 +90,8 @@ public:
 
     /** The strip half-width of a chromis at t (0 snout .. 1 peduncle), as a fraction of its widest. */
     static float chromisProfile(float t);
+    /** The same for any schooling fish: where it is widest and how pointed its snout is differ. */
+    static float fishProfile(Visual v, float t);
 
 private:
     void fish(const Creature& c, Mesh& m);

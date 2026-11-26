@@ -113,8 +113,9 @@ void World::initBottomDweller(Creature& c) {
                 Vec2 dir = fromAngle(frontA + s * kArmSpread[i]);
                 Vec2 root = c.pos.xy() + fromAngle(frontA + s * kArmRoot[i]) * (0.06f * L);
                 float seg = c.armLen[k] / (kAJ - 1);
-                for (int j = 0; j < kAJ; j++) c.arm[k][j] = c.armPrev[k][j] = root + dir * (seg * (float)j);
-                c.armCycle[k] = 0.5f * (float)(k % 2) + 0.25f * (float)(k / 4);
+                for (int j = 0; j < kAJ; j++) c.arm[k][j] = root + dir * (seg * (float)j);
+                for (int j = 0; j < kAJ - 1; j++) c.armAng[k][j] = angleOf(dir);
+                c.armSeg[k] = seg;
             }
             break;
         }
@@ -436,136 +437,113 @@ void World::stepRay(Creature& c, float h) {
 // ---------------------------------------------------------------- octopus
 
 void World::updateArms(Creature& c, float h, float spreadK, float curlK, float muscle, Vec2 grabAt) {
-    // Each arm is a soft chain with inertia. Its muscles only pull it toward a
-    // pose; on the sand, friction holds it where it lies, so a moving body drags
-    // its arms rather than swinging them; in the water they stream behind.
-    // Walking, the front and side arms take turns: one reaches forward, grips
-    // the sand with its tip and holds on while the body passes over it.
+    // An arm is a chain of segments, each with its own angle on the table,
+    // pulled toward a pose by a spring and slowed by a damper: stiff near the
+    // body, soft toward the tip, so every movement runs down the arm as a
+    // lagging wave. Positions are rebuilt from the angles: lengths are exact
+    // and no kink can form.
+    //  - On the sand each segment also follows where the joint ahead of it
+    //    was, like a rope dragged: a moving body trails its arms behind it.
+    //  - Walking, each arm sweeps forward and back in turn, neighbours out of
+    //    step, curling a little on the backstroke and unrolling as it reaches.
+    //  - Waves run from root to tip all the time, quicker when it moves.
     const float L = c.length;
     const float frontA = angleOf(octopusFront(c));
     const bool jetting = c.behavior == Behavior::Flee;
     const bool onSand = !jetting && c.pos.z > tank_.depth - 3.0f;
-    const bool walking = onSand && c.speed > 0.04f * L;
+    const float cruise = std::max(c.sp.cruiseBl * L, 1.0f);
+    const float walk = onSand ? smoothstep(0.02f, 0.8f, c.speed / cruise) : 0.0f;  // 0 still .. 1 walking
     const float open = 0.5f + 0.5f * std::cos(c.jetPhase);
     const float t = c.age;
-    const Vec2 travel = fromAngle(c.heading);
-    const float damping = onSand ? 30.0f : (jetting ? 2.5f : 4.0f);
-    const float keep = std::exp(-damping * h);
+    const bool still = c.behavior == Behavior::Hide;
+    // The hold of the sand fades in as it settles, out as it lifts off; a jet streams the arms back.
+    const float sandness = smoothstep(tank_.depth - 7.0f, tank_.depth - 2.0f, c.pos.z);
+    c.armDrag = damp(c.armDrag, jetting ? 0.55f : lerp(0.3f, 0.75f, sandness), 3.0f, h);
+    // Muscles do not switch from one pose to the next: they ease into it.
+    c.armCurl = damp(c.armCurl, curlK, 2.0f, h);
+    c.armSpread = damp(c.armSpread, spreadK, 2.0f, h);
+    c.armMuscle = damp(c.armMuscle, muscle, 2.0f, h);
+    c.armJet = damp(c.armJet, jetting ? 1.0f : 0.0f, jetting ? 8.0f : 2.5f, h);
     for (int k = 0; k < Creature::kArms; k++) {
         const float s = k < 4 ? -1.0f : 1.0f;
         const int i = k % 4;
         const Vec2 root = c.pos.xy() + fromAngle(frontA + s * kArmRoot[i]) * (0.06f * L);
         const float la = c.armLen[k];
-        float seg = la / (kAJ - 1);
-        Vec2* a = c.arm[k];
-        Vec2* prev = c.armPrev[k];
         const bool grabbing = k == c.grabArm;
+        Vec2* a = c.arm[k];
+        float* ang = c.armAng[k];
+        float* spin = c.armSpin[k];
 
-        // The gait: which arms grip, which reach.
-        bool reaching = false;
-        if (walking && i < 3 && !grabbing) {
-            c.armCycle[k] += h * c.speed / (0.45f * la);
-            float phase = c.armCycle[k] - std::floor(c.armCycle[k]);
-            reaching = phase < 0.4f;
-            if (reaching) c.anchorJoint[k] = -1;
-            else if (c.anchorJoint[k] < 0) {
-                c.anchorJoint[k] = kAJ - 2;
-                c.anchor[k] = a[kAJ - 2];
-            }
-        } else {
-            c.anchorJoint[k] = -1;
-        }
-        if (c.anchorJoint[k] >= 0) {
-            // Let go once the body has passed over it and pulls it taut, or has gone far beyond.
-            Vec2 d = c.anchor[k] - root;
-            float reach = la * (float)c.anchorJoint[k] / (float)(kAJ - 1);
-            bool behind = dot(d, travel) < 0;
-            if ((behind && length(d) > 0.9f * reach) || length(d) > 1.02f * reach || dot(d, travel) < -0.55f * la) {
-                c.anchorJoint[k] = -1;
-                c.armCycle[k] = std::floor(c.armCycle[k]) + 1.0f;  // and reach forward again
-            }
-        }
+        // The stroke: neighbours half a cycle apart, the two sides a quarter.
+        const float phase = c.gaitPhase + (float)(i % 2) * kPi + (s > 0 ? 0.5f * kPi : 0.0f);
+        const float stroke = std::sin(phase);  // +1 reaching forward .. -1 pulled back
+        const float sweep = (i == 3 ? 0.22f : 0.42f) * walk;
 
-        // The pose the muscles pull toward: a curl that rolls up at the tip and a slow wave.
         float base;
-        float curl = curlK * (0.6f + 0.4f * hash01(c.seed * 13u + (uint32_t)k));
-        const bool still = c.behavior == Behavior::Hide;
-        float waveAmp = still ? 0.25f : (c.behavior == Behavior::Rest ? 0.8f : 1.2f);
+        float curl = c.armCurl * (0.6f + 0.4f * hash01(c.seed * 13u + (uint32_t)k));
+        float waveAmp = still ? 0.25f : (c.behavior == Behavior::Rest ? 0.8f : 1.0f);
+        float waveRate = 1.3f + 2.2f * walk;
         float len = la;
         if (grabbing) {
             Vec2 to = grabAt - root;
             base = angleOf(to);
-            len = clamp(length(to), la * 0.3f, la * 1.05f);
-            seg = len / (kAJ - 1);  // an arm can shorten, or stretch a little, to reach
+            len = clamp(length(to), la * 0.3f, la * 1.05f);  // an arm can shorten, or stretch a little, to reach
             curl = 0;
             waveAmp = 0.1f;
-        } else if (jetting) {
-            // Mantle first: the arms on the other side of the body, bundled, opening as it refills.
-            base = frontA + s * (0.05f + 0.04f * (float)i) * (1.0f + 2.5f * open);
-            curl *= 0.2f;
-            waveAmp = 0.35f;
         } else {
             float wander = (still ? 0.05f : 0.25f) * noise1(t * 0.4f + (float)k * 3.1f, c.seed + (uint32_t)k);
-            base = frontA + s * kArmSpread[i] * spreadK + wander;
-            if (reaching) {
-                // Reaching out ahead along the way it goes, nearly straight.
-                base = angleOf(lerp(fromAngle(base), travel, 0.55f));
-                curl *= 0.25f;
-                waveAmp = 0.4f;
-            }
+            base = frontA + s * (kArmSpread[i] * c.armSpread - sweep * stroke) + wander;
+            curl += walk * 0.7f * (0.5f - 0.5f * stroke);  // curled in on the backstroke
+            // Jetting, mantle first: the arms on the other side of the body, bundled, opening as it refills.
+            float jetBase = frontA + s * (0.05f + 0.04f * (float)i) * (1.0f + 2.5f * open);
+            base += wrapAngle(jetBase - base) * c.armJet;
+            curl *= 1.0f - 0.8f * c.armJet;
+            waveAmp = lerp(waveAmp, 0.35f, c.armJet);
         }
-        Vec2 target[kAJ];
-        target[0] = root;
-        float ang = base;
-        float tseg = len / (kAJ - 1);
-        for (int j = 1; j < kAJ; j++) {
-            float sj = (float)j / (float)(kAJ - 1);
+        // Segment length eases toward the length wanted (an arm reaching, then relaxing).
+        c.armSeg[k] = damp(c.armSeg[k] > 0 ? c.armSeg[k] : la / (kAJ - 1), len / (kAJ - 1), 4.0f, h);
+        const float seg = c.armSeg[k];
+
+        // The pose, as an angle per segment.
+        float want[kAJ - 1];
+        float aw = base;
+        for (int j = 0; j < kAJ - 1; j++) {
+            float sj = (float)(j + 1) / (float)(kAJ - 1);
             float sj2 = sj * sj;
             float kappa = (-s * curl * (0.4f + 1.5f * sj2 + 4.0f * sj2 * sj2 * sj2) +
-                           waveAmp * std::sin(t * 1.3f + (float)k * 1.7f - sj * 5.0f) * 0.9f) / la;
-            ang += kappa * tseg;
-            target[j] = target[j - 1] + fromAngle(ang) * tseg;
+                           waveAmp * std::sin(t * waveRate + (float)k * 1.7f - sj * 4.5f) * 0.9f * sj) / la;
+            if (j > 0) aw += kappa * (la / (kAJ - 1));
+            want[j] = aw;
         }
 
-        // Verlet: carry on moving, slowed by the sand or the water, pulled by the muscles.
-        float k0 = muscle * (grabbing ? 4.0f : 1.0f) * (reaching ? 2.5f : 1.0f);
-        float kh = (grabbing || jetting) ? 1.0f : 0.0f;  // a lifted arm moves freely
-        float keepJ = kh > 0 ? std::exp(-(jetting ? 2.5f : 8.0f) * h) : keep;
-        if (reaching) keepJ = std::exp(-10.0f * h);  // lifted off the sand as it reaches
-        for (int j = 1; j < kAJ; j++) {
-            float sj = (float)j / (float)(kAJ - 1);
-            Vec2 vel = (a[j] - prev[j]) * keepJ;
-            Vec2 acc = (target[j] - a[j]) * (k0 * (1.0f - 0.5f * sj));
-            prev[j] = a[j];
-            a[j] += vel + acc * (h * h);
+        // Dragged: each segment turns to point from its joint, where it is now,
+        // to where the next joint was. Strong on the sand, weak in the water.
+        const float drag = c.armDrag;
+        Vec2 at = root;
+        for (int j = 0; j < kAJ - 1; j++) {
+            float sj = (float)(j + 1) / (float)(kAJ - 1);
+            Vec2 to = a[j + 1] - at;
+            if (length2(to) > 1e-8f) {
+                float follow = angleOf(to);
+                ang[j] += wrapAngle(follow - ang[j]) * drag * (0.3f + 0.7f * sj);
+            }
+            at += fromAngle(ang[j]) * seg;
         }
-        a[0] = prev[0] = root;
-        const int aj = c.anchorJoint[k];
-        if (aj >= 0) a[aj] = prev[aj] = c.anchor[k];
 
-        // Each segment keeps its length; the root and a gripping tip do not give.
-        // Between passes, every joint eases toward the line through its
-        // neighbours: the arm resists sharp bends and curves smoothly.
-        for (int it = 0; it < 6; it++) {
-            for (int j = 1; j < kAJ - 1; j++) {
-                if (j == aj) continue;
-                Vec2 mid = (a[j - 1] + a[j + 1]) * 0.5f;
-                a[j] += (mid - a[j]) * 0.12f;
-            }
-            for (int j = 1; j < kAJ; j++) {
-                Vec2 d = a[j] - a[j - 1];
-                float l = length(d);
-                if (l < 1e-6f) continue;
-                float w0 = (j - 1 == 0 || j - 1 == aj) ? 0.0f : 0.5f;
-                float w1 = j == aj ? 0.0f : 0.5f;
-                if (w0 + w1 <= 0) continue;
-                if (w0 == 0) w1 = 1;
-                if (w1 == 0) w0 = 1;
-                float diff = (l - seg) / l;
-                a[j - 1] += d * (diff * w0);
-                a[j] -= d * (diff * w1);
-            }
+        // Muscles: a damped spring per segment toward the pose, stiff at the root.
+        const float k0 = c.armMuscle * (grabbing ? 3.0f : 1.0f);
+        for (int j = 0; j < kAJ - 1; j++) {
+            float sj = (float)j / (float)(kAJ - 2);
+            float K = k0 * (1.0f - 0.7f * sj);
+            float C = 2.0f * std::sqrt(K) * 0.85f;
+            spin[j] += (K * wrapAngle(want[j] - ang[j]) - C * spin[j]) * h;
+            spin[j] = clamp(spin[j], -12.0f, 12.0f);
+            ang[j] += spin[j] * h;
         }
+
+        // The joints, from the root out.
+        a[0] = root;
+        for (int j = 0; j < kAJ - 1; j++) a[j + 1] = a[j] + fromAngle(ang[j]) * seg;
     }
 }
 
@@ -621,7 +599,7 @@ void World::stepOctopus(Creature& c, float h) {
     }
 
     c.stateTimer -= h;
-    float targetSpeed = 0, camoWant = 0.1f, spread = 1.0f, curl = 1.2f, rate = 90.0f, zWant = sandZ;
+    float targetSpeed = 0, camoWant = 0.1f, spread = 1.0f, curl = 1.0f, rate = 50.0f, zWant = sandZ;
     Vec2 steer = fromAngle(c.heading);
     Vec2 toT = c.target.xy() - p;
     float dist = length(toT);
@@ -758,7 +736,8 @@ void World::stepOctopus(Creature& c, float h) {
     } else {
         c.mantleAngle = approachAngle(c.mantleAngle, c.heading, 10.0f * h);
     }
-    c.gaitPhase = std::fmod(c.gaitPhase + h * kTau * (0.15f + 1.2f * c.speed / std::max(cruise, 1.0f)), kTau * 64.0f);
+    // About one stroke per arm length crawled.
+    c.gaitPhase = std::fmod(c.gaitPhase + h * kTau * (0.08f + c.speed / (0.6f * L)), kTau * 64.0f);
     if (!jetting) c.jetPhase = std::fmod(c.jetPhase + h * kTau * 0.5f, kTau * 64.0f);  // breathing
 
     // Depth: on the sand unless it jets.
