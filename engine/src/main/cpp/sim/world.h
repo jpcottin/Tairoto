@@ -8,6 +8,7 @@
 #include <unordered_map>
 
 #include "core/math.h"
+#include "sim/cloud.h"
 #include "sim/creature.h"
 #include "sim/current.h"
 #include "sim/food.h"
@@ -87,11 +88,53 @@ public:
     CurrentField& currentForTest() { return current_; }
     const Food* findFood(uint32_t id) const;
 
+    // ---- clouds of sand and ink
+    /** Adds a cloud; false when the cap is reached. */
+    bool puff(CloudKind kind, Vec3 at, Vec2 vel, float radius, float density, float life);
+    const std::vector<Cloud>& clouds() const { return clouds_; }
+    int inkClouds() const;
+
+    // ---- bottom dwellers
+    /** Where the ray's mouth, the octopus's arm tip or the crab's claws take food. */
+    static Vec2 octopusFront(const Creature& c) { return fromAngle(c.mantleAngle + kPi); }
+    /** Where a creature is drawn around its position, for culling and hit tests (mm). */
+    static float extentOf(const Creature& c);
+    /**
+     * The highest point of a creature (the smallest z): a crab's shell, an
+     * octopus's mantle, a turtle's carapace. Things are drawn in this order.
+     */
+    static float topOf(const Creature& c);
+    /**
+     * The deepest a swimmer may go where it is: just above anything lying on
+     * the sand beneath it (a crab, an octopus, a resting turtle, a buried ray).
+     */
+    float floorUnder(const Creature& c) const;
+    /** Rises smoothly (not in a jump) to stay above what lies on the sand beneath. */
+    float riseAbove(const Creature& c, float z, float h) const {
+        float limit = floorUnder(c);
+        return z > limit ? std::max(limit, z - 30.0f * h) : z;
+    }
+    /** The rest point of a hermit crab's foot, on the sand. */
+    static Vec2 crabFootRest(const Creature& c, int leg);
+    /** The root of a hermit crab's leg, at the shell's opening. */
+    static Vec2 crabLegRoot(const Creature& c, int leg);
+
 private:
     void stepFixed(float h);
     void stepFish(Creature& c, float h);
     void stepTurtle(Creature& c, float h);
     void chooseTurtleBehavior(Creature& c);
+    void stepRay(Creature& c, float h);
+    void chooseRayBehavior(Creature& c);
+    void stepOctopus(Creature& c, float h);
+    void updateArms(Creature& c, float h, float spreadK, float curlK, float muscle, Vec2 grabAt);
+    void stepCrab(Creature& c, float h);
+    void stepLegs(Creature& c, float h, Vec2 travel);
+    /** Something big and dangerous close to a crab, or 0. */
+    float crabThreat(const Creature& c) const;
+    void sandBurst(Vec2 at, float radius, int count, float strength);
+    void stepClouds(float h);
+    void initBottomDweller(Creature& c);
     Vec2 wallAvoidance(Vec2 p, Vec2 fwd, float lookAhead, float margin) const;
     void clampInside(Creature& c, float margin) const;
     static void updateSpine(Creature& c, float h);
@@ -125,6 +168,8 @@ private:
     std::vector<int> foodCellStart_, foodCellItems_;
     int scentCols_ = 0, scentRows_ = 0;
     CurrentField current_;
+    std::vector<Cloud> clouds_;
+    std::vector<int> grounded_;  // creatures on the sand, rebuilt every step
 };
 
 }  // namespace dt

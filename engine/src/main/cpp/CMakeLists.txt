@@ -32,6 +32,7 @@ add_custom_target(shaders DEPENDS ${SHADER_HEADERS})
 add_library(tairoto SHARED
     sim/world.cpp
     sim/feeding.cpp
+    sim/bottom.cpp
     sim/current.cpp
     render/mesh.cpp
     render/renderer.cpp

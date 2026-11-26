@@ -5,10 +5,17 @@
 
 namespace dt {
 
-enum class Locomotion : int32_t { Swim = 0, Paddle = 1 };
+/** How a creature moves; one controller per mode in the simulation. Matches Locomotion.nativeId. */
+enum class Locomotion : int32_t {
+    Swim = 0,    // fish: a tail beat, free in the water
+    Paddle = 1,  // turtle: rows with its flippers, rests on the sand
+    Glide = 2,   // eagle ray: flaps and glides on its wings, buries itself in the sand
+    Crawl = 3,   // octopus: walks on its arms, jets away, hides
+    Walk = 4,    // hermit crab: steps on its legs carrying its shell
+};
 
 /** The look: the mesh profile and the shader pattern. Matches Species.visualId. */
-enum class Visual : int32_t { GreenChromis = 0, GreenSeaTurtle = 1 };
+enum class Visual : int32_t { GreenChromis = 0, GreenSeaTurtle = 1, EagleRay = 3, Octopus = 4, HermitCrab = 5 };
 
 struct SpeciesParams {
     float cruiseBl = 1.0f;     // cruising speed, body lengths per second
@@ -64,6 +71,30 @@ struct SpeciesParams {
         s.cruiseBl = 0.28f; s.burstBl = 0.9f; s.depthMin = 0.3f; s.depthMax = 0.75f;
         s.schooling = 0.0f; s.shyness = 0.2f; s.turnRate = 0.55f; s.bodyWidth = 0.62f; s.tailBeatHz = 0.32f;
         s.smell = 0.8f; s.biteMg = 3.5f; s.messiness = 0.6f; s.stomachMg = 40.0f; s.hungerPerS = 1.0f / 400.0f;
+        s.bottomFeeder = true;
+        return s;
+    }
+    static SpeciesParams eagleRay() {
+        SpeciesParams s;
+        s.cruiseBl = 0.5f; s.burstBl = 2.2f; s.depthMin = 0.35f; s.depthMax = 0.8f;
+        s.schooling = 0.0f; s.shyness = 0.55f; s.turnRate = 0.7f; s.bodyWidth = 1.8f; s.tailBeatHz = 0.45f;
+        s.smell = 0.9f; s.biteMg = 1.2f; s.messiness = 0.5f; s.stomachMg = 20.0f; s.hungerPerS = 1.0f / 300.0f;
+        s.bottomFeeder = true;
+        return s;
+    }
+    static SpeciesParams octopus() {
+        SpeciesParams s;
+        s.cruiseBl = 0.22f; s.burstBl = 3.0f; s.depthMin = 0.92f; s.depthMax = 1.0f;
+        s.schooling = 0.0f; s.shyness = 0.8f; s.turnRate = 1.4f; s.bodyWidth = 0.45f; s.tailBeatHz = 0.9f;
+        s.smell = 1.2f; s.biteMg = 0.8f; s.messiness = 0.2f; s.stomachMg = 12.0f; s.hungerPerS = 1.0f / 250.0f;
+        s.bottomFeeder = true;
+        return s;
+    }
+    static SpeciesParams hermitCrab() {
+        SpeciesParams s;
+        s.cruiseBl = 0.35f; s.burstBl = 0.8f; s.depthMin = 1.0f; s.depthMax = 1.0f;
+        s.schooling = 0.0f; s.shyness = 0.9f; s.turnRate = 1.6f; s.bodyWidth = 0.7f; s.tailBeatHz = 2.2f;
+        s.smell = 1.0f; s.biteMg = 0.25f; s.messiness = 0.45f; s.stomachMg = 3.0f; s.hungerPerS = 1.0f / 200.0f;
         s.bottomFeeder = true;
         return s;
     }

@@ -8,17 +8,6 @@
 
 layout(location = 0) out vec4 outColor;
 
-float rippleHeight(vec2 q0) {
-    vec2 p = q0 * 2.0;  // features were drawn for a world twice as large
-    // Ripples run across the tank and meander, with their strength in patches.
-    vec2 warp = vec2(fbm(p * 0.018), fbm(p * 0.018 + 9.7)) - 0.5;
-    vec2 q = p + warp * 26.0;
-    float phase = dot(q, normalize(vec2(0.28, 1.0))) * (TAU / 8.5);
-    float crest = pow(0.5 + 0.5 * sin(phase + 0.6 * sin(phase * 0.5)), 1.7);
-    float strength = mix(0.25, 1.0, smoothstep(0.3, 0.7, fbm(p * 0.011 + 3.1)));
-    return crest * 0.55 * strength + vnoise(p * 1.7) * 0.07;
-}
-
 struct Pebble {
     float h;      // height of the pebble surface (0 when none)
     vec3 color;
@@ -84,19 +73,7 @@ void main() {
 
     Pebble pb = pebbles(p);
 
-    // Sand: two tones in drifts, patches of green algae, grains light and dark.
-    vec3 sandA = srgb(vec3(0.95, 0.88, 0.72));
-    vec3 sandB = srgb(vec3(0.84, 0.75, 0.58));
-    vec2 pf = p * 2.0;
-    vec3 albedo = mix(sandA, sandB, smoothstep(0.35, 0.75, fbm(pf * 0.04)));
-    float algae = smoothstep(0.6, 0.78, fbm(pf * 0.009 + 7.0));
-    albedo = mix(albedo, srgb(vec3(0.42, 0.5, 0.33)), algae * 0.45);
-    vec2 grain = floor(pf * 2.4);
-    float gk = hash12(grain);
-    albedo *= gk > 0.96 ? 0.8 : (gk < 0.03 ? 1.15 : 1.0);
-    albedo *= 0.94 + 0.12 * vnoise(pf * 4.1);
-    // Crests catch the light, troughs gather darker grains.
-    albedo *= 0.9 + 0.18 * smoothstep(0.1, 0.5, rippleHeight(p));
+    vec3 albedo = sandAlbedo(p);
 
     albedo = mix(albedo, pb.color, pb.mask);
     albedo *= pb.ao;
@@ -117,7 +94,7 @@ void main() {
         caustic = vec3(c);
     }
     // Big slow patches of brighter and darker water above.
-    float cloud = mix(0.75, 1.15, fbm(pf * 0.006 + t * 0.012));
+    float cloud = skyPatches(p, t);
 
     vec3 sunLight = srgb(vec3(1.0, 0.97, 0.9)) * F.sun.w * cloud;
     vec3 light = sunLight * diffuse * (0.62 + 0.95 * caustic) + srgb(vec3(0.4, 0.62, 0.75)) * 0.3;

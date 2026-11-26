@@ -5,6 +5,10 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertTextEquals
+import com.jpcottin.tairoto.world.SpeciesCatalog
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -47,11 +51,25 @@ class ComponentsTest {
         assertEquals(listOf("green_sea_turtle", "green_chromis"), released)
     }
 
+    @Test fun theSheetListsEveryCreatureByItsTahitianName() {
+        val released = mutableListOf<String>()
+        compose.setContent { TairotoTheme { SpeciesSheetContent(mapOf("green_chromis" to 22), 22) { released += it } } }
+        for (species in SpeciesCatalog.all) {
+            compose.onNodeWithTag(SheetTags.release(species.id)).performScrollTo()
+            compose.onNodeWithText(species.displayName).assertIsDisplayed()
+            compose.onNodeWithText("${species.commonName} · ${species.scientificName}").assertIsDisplayed()
+        }
+        compose.onNodeWithTag(SheetTags.release("day_octopus")).performScrollTo().performClick()
+        compose.onNodeWithTag(SheetTags.release("hermit_crab")).performScrollTo().performClick()
+        assertEquals(listOf("day_octopus", "hermit_crab"), released)
+    }
+
     @Test fun aFullTankDisablesRelease() {
         compose.setContent { TairotoTheme { SpeciesSheetContent(mapOf("green_chromis" to 160), 0) {} } }
         compose.onNodeWithText("The lagoon is full.").assertIsDisplayed()
         compose.onNodeWithTag(SheetTags.release("green_chromis")).assertIsNotEnabled()
-        compose.onNodeWithText("None in the lagoon").assertIsDisplayed()
+        compose.onNodeWithTag(SheetTags.count("green_chromis")).assertTextEquals("160 in the lagoon")
+        compose.onAllNodesWithText("None in the lagoon").assertCountEquals(SpeciesCatalog.all.size - 1)
     }
 
     @Test fun choosingAQualityReportsIt() {

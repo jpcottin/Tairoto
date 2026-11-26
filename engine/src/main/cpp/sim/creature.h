@@ -4,8 +4,14 @@
 
 namespace dt {
 
-/** What a turtle is doing. Fish only use Cruise and Flee. */
-enum class Behavior : int32_t { Cruise = 0, Descend = 1, Rest = 2, Surface = 3, Flee = 4, Forage = 5 };
+/**
+ * What a creature is doing. Fish only use Cruise and Flee. Hide is the ray
+ * under the sand, the octopus camouflaged, the hermit crab in its shell;
+ * Emerge is the way back out.
+ */
+enum class Behavior : int32_t {
+    Cruise = 0, Descend = 1, Rest = 2, Surface = 3, Flee = 4, Forage = 5, Hide = 6, Emerge = 7,
+};
 
 /**
  * One creature's whole dynamic state. Positions are in mm on the table plane,
@@ -13,6 +19,9 @@ enum class Behavior : int32_t { Cruise = 0, Descend = 1, Rest = 2, Surface = 3, 
  */
 struct Creature {
     static constexpr int kJoints = 12;
+    static constexpr int kArms = 8;       // octopus
+    static constexpr int kArmJoints = 10;
+    static constexpr int kLegs = 4;       // hermit crab: two walking legs a side
 
     int64_t id = 0;
     Visual visual = Visual::GreenChromis;
@@ -64,6 +73,32 @@ struct Creature {
     int scentCell = -1;        // the patch it is feeding at
     float retarget = 0;        // seconds until it looks for food again
     float eatenMg = 0;
+
+    // Bottom dwellers
+    float cover = 0;          // ray: sand over it; octopus: camouflage; crab: drawn into its shell (0 .. 1)
+    float alarm = 0;          // octopus: the dark flash of fright (0 .. 1)
+    float flapPhase = 0;      // ray wing beat
+    float flapAmp = 0;        // 0 gliding .. 1 full beat
+    float puffTimer = 0;      // seconds until the next cloud of sand
+    float inkCooldown = 0;    // octopus: seconds until it can ink again
+    float mantleAngle = 0;    // octopus: where the mantle points
+    float jetPhase = 0;       // octopus: mantle pulses
+    float gaitPhase = 0;      // octopus arm sway, crab claw picking
+    int grabArm = -1;         // octopus: the arm reaching for food
+    float wobble = 0;         // crab: the shell rocking after it slams in
+    float threat = 0;         // crab: seconds since something big came close
+    // Octopus arms: soft chains with inertia (Verlet), the root on the body.
+    // A walking arm grips the sand with its tip: anchorJoint is the joint held
+    // at anchor (-1 when free), until the body has moved past it.
+    Vec2 arm[kArms][kArmJoints];
+    Vec2 armPrev[kArms][kArmJoints];
+    float armLen[kArms] = {};
+    float armCycle[kArms] = {};
+    int anchorJoint[kArms] = {-1, -1, -1, -1, -1, -1, -1, -1};
+    Vec2 anchor[kArms];
+    Vec2 foot[kLegs];
+    Vec2 footFrom[kLegs];
+    float swing[kLegs] = {-1, -1, -1, -1};  // < 0 planted, 0 .. 1 stepping
 
     float age = 0;
 };

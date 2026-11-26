@@ -16,6 +16,9 @@ class SpeciesTest {
     @Test fun `the lagoon creatures go by their Tahitian names`() {
         assertEquals("ʻAtoti", SpeciesCatalog.GreenChromis.displayName)
         assertEquals("Honu", SpeciesCatalog.GreenSeaTurtle.displayName)
+        assertEquals("Fai manu", SpeciesCatalog.SpottedEagleRay.displayName)
+        assertEquals("Feʻe", SpeciesCatalog.DayOctopus.displayName)
+        assertEquals("Uʻa", SpeciesCatalog.HermitCrab.displayName)
         assertEquals("Green chromis", SpeciesCatalog.GreenChromis.copy(tahitianName = null).displayName)
     }
 
@@ -71,5 +74,37 @@ class SpeciesTest {
     @Test(expected = IllegalArgumentException::class)
     fun `a species id must be snake case`() {
         SpeciesCatalog.GreenChromis.copy(id = "Green Chromis")
+    }
+
+    @Test fun `Tahitian names are written with the ʻeta, never an apostrophe`() {
+        for (species in SpeciesCatalog.all) {
+            val name = species.tahitianName ?: continue
+            for (bad in listOf('\'', '’', '‘', '`', 'ʼ')) assertTrue("$name has '$bad'", bad !in name)
+        }
+        assertTrue(SpeciesCatalog.DayOctopus.tahitianName!!.contains('\u02BB'))
+    }
+
+    @Test fun `every way of moving has a species, and the native ids line up`() {
+        assertEquals(Locomotion.entries.toSet(), SpeciesCatalog.all.map { it.locomotion }.toSet())
+        assertEquals(listOf(0, 1, 2, 3, 4), Locomotion.entries.map { it.nativeId })
+        // Visual 2 is food on the native side.
+        assertTrue(SpeciesCatalog.all.none { it.visualId == 2 })
+        assertEquals(listOf(0, 1, 3, 4, 5), SpeciesCatalog.all.map { it.visualId })
+    }
+
+    @Test fun `the bottom dwellers live and feed on the sand`() {
+        val bottom = listOf(SpeciesCatalog.SpottedEagleRay, SpeciesCatalog.DayOctopus, SpeciesCatalog.HermitCrab)
+        bottom.forEach { assertTrue(it.id, it.bottomFeeder) }
+        assertEquals(1f, SpeciesCatalog.HermitCrab.depthBand.start, 0f)
+        assertTrue(SpeciesCatalog.DayOctopus.depthBand.start > 0.9f)
+        assertTrue("a ray is wider than it is long", SpeciesCatalog.SpottedEagleRay.bodyWidth > 1.5f)
+        assertTrue(SpeciesCatalog.HermitCrab.lengthMm.endInclusive < SpeciesCatalog.GreenChromis.lengthMm.endInclusive * 1.2f)
+    }
+
+    @Test fun `nothing is wider than twice its length`() {
+        val ok = runCatching { SpeciesCatalog.SpottedEagleRay.copy(bodyWidth = 2f) }
+        assertTrue(ok.isSuccess)
+        val wide = runCatching { SpeciesCatalog.SpottedEagleRay.copy(bodyWidth = 2.5f) }
+        assertTrue(wide.exceptionOrNull() is IllegalArgumentException)
     }
 }

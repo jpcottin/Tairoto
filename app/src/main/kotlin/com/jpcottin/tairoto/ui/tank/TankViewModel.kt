@@ -134,7 +134,9 @@ class TankViewModel(
         viewport = vp
         val s = session ?: createSession(ScreenMm.fromPixels(widthPx, heightPx, xdpi, ydpi))
         val size = s.scene.value.size
-        camera = (camera ?: Camera.initial(vp, size)).clamped(vp, size)
+        camera = (camera ?: Camera.initial(vp, size).let { c ->
+            options.zoom?.let { c.zoomedAbout(vp.center, it, vp, size) } ?: c
+        }).clamped(vp, size)
         pushCamera()
     }
 
@@ -147,7 +149,8 @@ class TankViewModel(
     private fun createSession(screen: ScreenMm): TankSession {
         val random = options.seed?.let { Random(it) } ?: Random.Default
         val size = TankSize.forScreen(screen)
-        val scene = Population.defaultScene(size, EntityIdAllocator(0), random)
+        val scene = options.population?.let { Population.sceneOf(it, size, EntityIdAllocator(0), random) }
+            ?: Population.defaultScene(size, EntityIdAllocator(0), random)
         val s = TankSession(scene, LoopbackLink(), random)
         session = s
         sync.apply(scene)

@@ -19,6 +19,10 @@ data class LaunchOptions(
     val quality: QualityTier? = null,
     val hints: Boolean = true,
     val stats: Boolean? = null,
+    /** A lagoon of just these creatures (species id to count) instead of the default one. */
+    val population: Map<String, Int>? = null,
+    /** Starting zoom, for a close look (1 = the whole width of the lagoon). */
+    val zoom: Float? = null,
 ) {
     val deterministic: Boolean get() = ci
 
@@ -28,6 +32,21 @@ data class LaunchOptions(
         const val QUALITY = "tairoto.quality"
         const val HINTS = "tairoto.hints"
         const val STATS = "tairoto.stats"
+        /** For example `hermit_crab:3,day_octopus:1`. */
+        const val POPULATION = "tairoto.population"
+        const val ZOOM = "tairoto.zoom"
+
+        /** Reads `id:count,id:count`; unknown or malformed entries are skipped. */
+        fun parsePopulation(text: String?): Map<String, Int>? {
+            if (text.isNullOrBlank()) return null
+            val out = linkedMapOf<String, Int>()
+            for (part in text.split(',')) {
+                val (id, n) = part.split(':').map { it.trim() }.takeIf { it.size == 2 } ?: continue
+                val count = n.toIntOrNull()?.takeIf { it in 0..200 } ?: continue
+                if (com.jpcottin.tairoto.world.SpeciesCatalog[id] != null) out[id] = count
+            }
+            return out.takeIf { it.isNotEmpty() }
+        }
 
         fun from(intent: Intent?, debuggable: Boolean): LaunchOptions {
             if (intent == null || !debuggable) return LaunchOptions()
@@ -39,6 +58,8 @@ data class LaunchOptions(
                     ?: if (ci) QualityTier.CI else null,
                 hints = intent.getBooleanExtra(HINTS, !ci),
                 stats = if (intent.hasExtra(STATS)) intent.getBooleanExtra(STATS, false) else null,
+                population = parsePopulation(intent.getStringExtra(POPULATION)),
+                zoom = if (intent.hasExtra(ZOOM)) intent.getFloatExtra(ZOOM, 1f).takeIf { it in 0.5f..8f } else null,
             )
         }
     }

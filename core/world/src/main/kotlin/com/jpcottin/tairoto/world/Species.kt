@@ -7,6 +7,15 @@ enum class Locomotion(val nativeId: Int) {
 
     /** Slow, rowing with flippers; rests on the sand and climbs up to breathe (turtle). */
     PADDLE(1),
+
+    /** Flaps and glides on wide wings; settles and buries itself in the sand (eagle ray). */
+    GLIDE(2),
+
+    /** Walks on its arms over the sand, jets away when frightened (octopus). */
+    CRAWL(3),
+
+    /** Steps on its legs, never leaves the sand (hermit crab). */
+    WALK(4),
 }
 
 /** Which water a species belongs to, so a tank stays realistic. */
@@ -30,7 +39,10 @@ data class Species(
     val tankType: TankType,
     val locomotion: Locomotion,
     val visualId: Int,
-    /** Body length range on screen, nose to tail tip, in mm. */
+    /**
+     * Body length range on screen, in mm: nose to tail tip for a fish or a turtle, snout to the root
+     * of the tail for a ray, mantle to arm tips for an octopus, the shell for a hermit crab.
+     */
     val lengthMm: ClosedFloatingPointRange<Float>,
     /** Cruising and burst speed in body lengths per second. */
     val cruiseBodyLengthsPerS: Float,
@@ -43,7 +55,7 @@ data class Species(
     val shyness: Float,
     /** Fastest turn, in radians per second, at cruising speed. */
     val turnRateRadPerS: Float,
-    /** Body width as a fraction of its length (seen from above). */
+    /** Body width as a fraction of its length, seen from above (a ray's span is wider than it is long). */
     val bodyWidth: Float,
     /** Tail beats per second at one body length per second. */
     val tailBeatHz: Float,
@@ -69,7 +81,7 @@ data class Species(
         require(cruiseBodyLengthsPerS > 0f && burstBodyLengthsPerS >= cruiseBodyLengthsPerS)
         require(depthBand.start in 0f..1f && depthBand.endInclusive in 0f..1f && depthBand.start <= depthBand.endInclusive)
         require(schooling in 0f..1f && shyness in 0f..1f)
-        require(bodyWidth in 0.05f..1f)
+        require(bodyWidth in 0.05f..2f) { "body width is a fraction of the length, up to a ray's span" }
         require(addBatch >= 1 && defaultCount >= 0)
         require(smell >= 0f && biteMg > 0f && messiness in 0f..1f && stomachMg > 0f && hungerPerSecond >= 0f)
     }
@@ -185,7 +197,97 @@ object SpeciesCatalog {
         addBatch = 1,
     )
 
-    val all: List<Species> = listOf(GreenChromis, GreenSeaTurtle)
+    val SpottedEagleRay = Species(
+        id = "spotted_eagle_ray",
+        // Tetiaroa Society (spotted eagle ray, fai manu); the Pacific species is Aetobatus ocellatus.
+        tahitianName = "Fai manu",
+        commonName = "Ocellated eagle ray",
+        scientificName = "Aetobatus ocellatus",
+        description = "The ray that flies: it beats its wide wings like a bird over the sand, a dark back " +
+            "covered in white spots, a tail like a whip. It digs in the sand for shellfish and lies under it to rest.",
+        tankType = TankType.REEF,
+        locomotion = Locomotion.GLIDE,
+        visualId = 3,
+        lengthMm = 30f..36f,
+        cruiseBodyLengthsPerS = 0.5f,
+        burstBodyLengthsPerS = 2.2f,
+        depthBand = 0.35f..0.8f,
+        schooling = 0f,
+        shyness = 0.55f,
+        turnRateRadPerS = 0.7f,
+        bodyWidth = 1.8f,
+        tailBeatHz = 0.45f,
+        smell = 0.9f,
+        biteMg = 1.2f,
+        messiness = 0.5f,
+        stomachMg = 20f,
+        hungerPerSecond = 1f / 300f,
+        bottomFeeder = true,
+        defaultCount = 1,
+        addBatch = 1,
+    )
+
+    val DayOctopus = Species(
+        id = "day_octopus",
+        // Pollex, FEKE (Tahitian feʻe, octopus); Octopus cyanea is the reef octopus of French Polynesia.
+        tahitianName = "Feʻe",
+        commonName = "Day octopus",
+        scientificName = "Octopus cyanea",
+        description = "Hunts by day, walking over the sand on its arms. It takes on the colours of what it " +
+            "sits on, flashes dark when frightened, and leaves a cloud of ink behind as it jets away.",
+        tankType = TankType.REEF,
+        locomotion = Locomotion.CRAWL,
+        visualId = 4,
+        lengthMm = 30f..38f,
+        cruiseBodyLengthsPerS = 0.22f,
+        burstBodyLengthsPerS = 3f,
+        depthBand = 0.92f..1f,
+        schooling = 0f,
+        shyness = 0.8f,
+        turnRateRadPerS = 1.4f,
+        bodyWidth = 0.45f,
+        tailBeatHz = 0.9f,
+        smell = 1.2f,
+        biteMg = 0.8f,
+        messiness = 0.2f,
+        stomachMg = 12f,
+        hungerPerSecond = 1f / 250f,
+        bottomFeeder = true,
+        defaultCount = 1,
+        addBatch = 1,
+    )
+
+    val HermitCrab = Species(
+        id = "hermit_crab",
+        // Tetiaroa Society, invertebrates (uʻa, hermit crab).
+        tahitianName = "Uʻa",
+        commonName = "White-spotted hermit crab",
+        scientificName = "Dardanus megistos",
+        description = "A red hermit crab with black-ringed white spots, carrying a borrowed turban shell. It " +
+            "scavenges whatever reaches the sand and slams into its shell at the first knock.",
+        tankType = TankType.REEF,
+        locomotion = Locomotion.WALK,
+        visualId = 5,
+        lengthMm = 13f..17f,
+        cruiseBodyLengthsPerS = 0.35f,
+        burstBodyLengthsPerS = 0.8f,
+        depthBand = 1f..1f,
+        schooling = 0f,
+        shyness = 0.9f,
+        turnRateRadPerS = 1.6f,
+        bodyWidth = 0.7f,
+        tailBeatHz = 2.2f,
+        smell = 1f,
+        biteMg = 0.25f,
+        messiness = 0.45f,
+        stomachMg = 3f,
+        hungerPerSecond = 1f / 200f,
+        bottomFeeder = true,
+        defaultCount = 2,
+        addBatch = 1,
+    )
+
+    val all: List<Species> = listOf(GreenChromis, GreenSeaTurtle, SpottedEagleRay, DayOctopus, HermitCrab)
 
     private val byId = all.associateBy { it.id }
 

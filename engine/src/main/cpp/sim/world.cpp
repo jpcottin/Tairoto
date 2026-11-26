@@ -63,6 +63,7 @@ bool World::spawn(int64_t id, Visual visual, Locomotion loco, const SpeciesParam
         c.target = Vec3(tank_.width * 0.5f, tank_.height * 0.5f, at.z);
     }
     clampInside(c, c.length * 0.5f);
+    if (loco == Locomotion::Glide || loco == Locomotion::Crawl || loco == Locomotion::Walk) initBottomDweller(c);
     creatures_.push_back(c);
     return true;
 }
@@ -111,9 +112,14 @@ void World::startle(Vec2 at, float strength) {
     }
     for (auto& c : creatures_) {
         float d = length(c.pos.xy() - at);
-        float radius = c.loco == Locomotion::Paddle
-                           ? c.length * 0.9f
-                           : (18.0f + 35.0f * c.sp.shyness) * strength;
+        float radius;
+        switch (c.loco) {
+            case Locomotion::Paddle: radius = c.length * 0.9f; break;
+            case Locomotion::Glide: radius = c.length * 1.1f + 6.0f; break;   // the wings span far
+            case Locomotion::Crawl: radius = c.length * 0.8f + 6.0f; break;
+            case Locomotion::Walk: radius = c.length * 2.0f + 14.0f; break;   // crabs feel the knock through the sand
+            default: radius = (18.0f + 35.0f * c.sp.shyness) * strength; break;
+        }
         if (d > radius) continue;
         c.startleFrom = at;
         c.startleDelay = d / 420.0f;  // the fright spreads outwards as a wave
@@ -126,15 +132,29 @@ void World::stepFixed(float h) {
     if (current_.columns() == 0) current_.resize(tank_.width, tank_.height);
     current_.step(h);
     stepFood(h);
+    stepClouds(h);
     buildScents(h);
     float cell = 15.0f;
     for (auto& c : creatures_)
         if (c.loco == Locomotion::Swim) cell = std::max(cell, c.length * 5.0f);
     grid_.rebuild(creatures_, tank_, cell);
+    grounded_.clear();
+    for (int i = 0; i < (int)creatures_.size(); i++) {
+        const Creature& c = creatures_[i];
+        bool down = c.loco == Locomotion::Walk || c.loco == Locomotion::Crawl ||
+                    (c.loco == Locomotion::Paddle && c.rest > 0.5f) ||
+                    (c.loco == Locomotion::Glide && c.behavior == Behavior::Hide && c.pos.z > tank_.depth - 2.5f);
+        if (down && c.pos.z > tank_.depth - 0.3f * c.length - 2.0f) grounded_.push_back(i);
+    }
     for (auto& c : creatures_) {
         c.age += h;
-        if (c.loco == Locomotion::Paddle) stepTurtle(c, h);
-        else stepFish(c, h);
+        switch (c.loco) {
+            case Locomotion::Paddle: stepTurtle(c, h); break;
+            case Locomotion::Glide: stepRay(c, h); break;
+            case Locomotion::Crawl: stepOctopus(c, h); break;
+            case Locomotion::Walk: stepCrab(c, h); break;
+            default: stepFish(c, h); break;
+        }
     }
     settleFood();
 }
@@ -187,8 +207,10 @@ void World::stepFish(Creature& c, float h) {
         Vec2 d = o.pos.xy() - p;
         float dist = length(d);
         if (dist < 1e-4f) return;
-        bool big = o.loco == Locomotion::Paddle || o.length > 2.5f * L;
+        bool big = o.loco != Locomotion::Swim || o.length > 2.5f * L;
         if (big) {
+            // A ray under the sand or a crab far below is no obstacle to a fish swimming over it.
+            if (std::fabs(o.pos.z - c.pos.z) > o.length * 0.5f + 2.0f * L) return;
             float r = o.length * 0.7f + 2.0f * L;
             if (dist < r) avoid -= d / dist * ((r - dist) / r * 3.0f);
             return;
@@ -296,7 +318,7 @@ void World::stepFish(Creature& c, float h) {
     float vzWant = clamp((c.depthTarget - c.pos.z) * (feeding ? 1.5f : 0.6f), -0.6f * L, 0.6f * L);
     if (frightened) vzWant -= 0.2f * L;  // a startled fish dives a little, then comes back
     c.vz = damp(c.vz, vzWant, 2.0f, h);
-    c.pos.z = clamp(c.pos.z + c.vz * h, 2.0f, tank_.depth - 4.0f);
+    c.pos.z = std::max(2.0f, riseAbove(c, clamp(c.pos.z + c.vz * h, 2.0f, tank_.depth - 4.0f), h));
 
     Vec2 np = p + fromAngle(c.heading) * (c.speed * h);
     c.pos.x = np.x;
@@ -480,6 +502,10 @@ void World::stepTurtle(Creature& c, float h) {
             }
             break;
         }
+        case Behavior::Hide:
+        case Behavior::Emerge:
+            c.behavior = Behavior::Cruise;  // not a turtle's
+            break;
     }
 
     c.rest = damp(c.rest, restWant, restWant > c.rest ? 0.9f : 2.5f, h);
@@ -509,7 +535,7 @@ void World::stepTurtle(Creature& c, float h) {
     if (c.behavior == Behavior::Flee) zWant = clamp(c.pos.z - L * 0.2f, L * 0.1f, D - L * 0.2f);
     float vzMax = 0.14f * L * (c.behavior == Behavior::Flee ? 2.0f : 1.0f);
     c.vz = damp(c.vz, clamp((zWant - c.pos.z) * 0.45f, -vzMax, vzMax), 1.2f, h);
-    c.pos.z = clamp(c.pos.z + c.vz * h, L * 0.02f, D - L * 0.08f);
+    c.pos.z = std::max(L * 0.02f, riseAbove(c, clamp(c.pos.z + c.vz * h, L * 0.02f, D - L * 0.08f), h));
 
     Vec2 np = p + fromAngle(c.heading) * (c.speed * h);
     c.pos.x = np.x;

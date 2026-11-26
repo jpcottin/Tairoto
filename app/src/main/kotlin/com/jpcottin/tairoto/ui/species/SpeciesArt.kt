@@ -10,6 +10,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -17,6 +18,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.jpcottin.tairoto.world.SpeciesCatalog
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -30,6 +32,9 @@ fun SpeciesArt(speciesId: String, modifier: Modifier = Modifier) {
         drawSandDisc()
         when (speciesId) {
             SpeciesCatalog.GreenSeaTurtle.id -> drawTurtle()
+            SpeciesCatalog.SpottedEagleRay.id -> drawEagleRay()
+            SpeciesCatalog.DayOctopus.id -> drawOctopus()
+            SpeciesCatalog.HermitCrab.id -> drawHermitCrab()
             else -> drawChromisTrio()
         }
     }
@@ -161,6 +166,138 @@ private fun DrawScope.drawTurtle() {
                 radius = s * 0.08f,
                 center = Offset((cos(a) * s * 0.02).toFloat(), (sin(a) * s * 0.06).toFloat()),
             )
+        }
+    }
+}
+
+private fun DrawScope.drawEagleRay() {
+    val s = size.minDimension
+    val c = Offset(s * 0.5f, s * 0.48f)
+    rotate(-35f, c) {
+        translate(c.x, c.y) {
+            val ink = Color(0xFF22262F)
+            // The whip of a tail.
+            val tail = Path().apply {
+                moveTo(-s * 0.2f, 0f)
+                cubicTo(-s * 0.32f, s * 0.02f, -s * 0.4f, -s * 0.05f, -s * 0.5f, -s * 0.02f)
+            }
+            drawPath(tail, ink, style = Stroke(width = s * 0.012f))
+            // A diamond of a disc: head in front, pointed wings swept back.
+            val disc = Path().apply {
+                moveTo(s * 0.21f, 0f)
+                cubicTo(s * 0.2f, -s * 0.035f, s * 0.15f, -s * 0.045f, s * 0.13f, -s * 0.045f)
+                cubicTo(s * 0.06f, -s * 0.2f, -s * 0.02f, -s * 0.32f, -s * 0.05f, -s * 0.38f)
+                cubicTo(-s * 0.08f, -s * 0.2f, -s * 0.14f, -s * 0.08f, -s * 0.2f, -s * 0.04f)
+                lineTo(-s * 0.21f, 0f)
+                lineTo(-s * 0.2f, s * 0.04f)
+                cubicTo(-s * 0.14f, s * 0.08f, -s * 0.08f, s * 0.2f, -s * 0.05f, s * 0.38f)
+                cubicTo(-s * 0.02f, s * 0.32f, s * 0.06f, s * 0.2f, s * 0.13f, s * 0.045f)
+                cubicTo(s * 0.15f, s * 0.045f, s * 0.2f, s * 0.035f, s * 0.21f, 0f)
+                close()
+            }
+            drawPath(disc, Brush.radialGradient(listOf(Color(0xFF39404F), ink), center = Offset(0f, 0f), radius = s * 0.35f))
+            // White spots all over the back, smaller toward the tips.
+            val spot = Color(0xFFE8EDF0)
+            var k = 0
+            for (i in -3..3) {
+                for (j in -5..5) {
+                    k++
+                    val x = s * (0.045f * i - 0.02f + 0.012f * ((k * 7) % 3))
+                    val y = s * (0.06f * j + 0.015f * ((k * 5) % 3 - 1))
+                    if (x > s * 0.14f || x < -s * 0.18f) continue
+                    val reach = s * (0.36f - 1.3f * abs(x + s * 0.05f) / s)
+                    if (abs(y) > reach * 0.85f) continue
+                    val r = s * (0.016f - 0.008f * abs(y) / (s * 0.38f))
+                    drawCircle(spot, radius = r, center = Offset(x, y))
+                }
+            }
+            drawCircle(Color(0xFF0B0C10), radius = s * 0.013f, center = Offset(s * 0.165f, -s * 0.04f))
+            drawCircle(Color(0xFF0B0C10), radius = s * 0.013f, center = Offset(s * 0.165f, s * 0.04f))
+        }
+    }
+}
+
+private fun DrawScope.drawOctopus() {
+    val s = size.minDimension
+    val c = Offset(s * 0.48f, s * 0.54f)
+    val skin = Color(0xFF9A6446)
+    val skinDark = Color(0xFF5A3424)
+    // Eight curling arms.
+    for (k in 0 until 8) {
+        val base = Math.toRadians(-60.0 + k * 45.0 + 8.0 * (k % 2))
+        val curl = if (k % 2 == 0) 1f else -1f
+        val path = Path()
+        var x = c.x
+        var y = c.y
+        var a = base
+        path.moveTo(x, y)
+        val steps = 14
+        for (i in 1..steps) {
+            val t = i / steps.toFloat()
+            a += curl * 0.06 * (1 + 4 * t * t)
+            x += (cos(a) * s * 0.028).toFloat()
+            y += (sin(a) * s * 0.028).toFloat()
+            path.lineTo(x, y)
+        }
+        drawPath(path, Brush.linearGradient(listOf(skinDark, skin), start = c, end = Offset(x, y)), style = Stroke(width = s * 0.04f, cap = StrokeCap.Round))
+        drawPath(path, Color(0x55F1D9C0), style = Stroke(width = s * 0.012f))
+    }
+    // The web, then the mantle trailing up and left.
+    drawCircle(skin, radius = s * 0.085f, center = c)
+    rotate(-130f, c) {
+        drawOval(
+            Brush.radialGradient(listOf(Color(0xFFB9805D), skinDark), center = Offset(c.x + s * 0.17f, c.y - s * 0.02f), radius = s * 0.2f),
+            topLeft = Offset(c.x + s * 0.03f, c.y - s * 0.09f),
+            size = Size(s * 0.27f, s * 0.18f),
+        )
+        for (side in listOf(-1f, 1f)) {
+            drawCircle(Color(0xFFE0C07A), radius = s * 0.025f, center = Offset(c.x + s * 0.05f, c.y + side * s * 0.065f))
+            drawRect(Color(0xFF111111), topLeft = Offset(c.x + s * 0.043f, c.y + side * s * 0.065f - s * 0.016f), size = Size(s * 0.014f, s * 0.032f))
+        }
+    }
+}
+
+private fun DrawScope.drawHermitCrab() {
+    val s = size.minDimension
+    val c = Offset(s * 0.46f, s * 0.54f)
+    rotate(-40f, c) {
+        translate(c.x, c.y) {
+            val red = Color(0xFFC8381E)
+            // Legs out to the sides.
+            for (side in listOf(-1f, 1f)) {
+                for (pair in 0..1) {
+                    val root = Offset(s * (0.16f - 0.04f * pair), side * s * 0.05f)
+                    val knee = Offset(s * (0.22f - 0.1f * pair), side * s * (0.17f + 0.02f * pair))
+                    val foot = Offset(s * (0.27f - 0.16f * pair), side * s * (0.27f + 0.02f * pair))
+                    drawLine(red, root, knee, strokeWidth = s * 0.03f, cap = StrokeCap.Round)
+                    drawLine(red, knee, foot, strokeWidth = s * 0.022f, cap = StrokeCap.Round)
+                    drawCircle(Color(0xFF1C0F0A), radius = s * 0.012f, center = foot)
+                }
+            }
+            // The turban shell, spire at the back.
+            val shell = Path().apply {
+                moveTo(s * 0.16f, 0f)
+                cubicTo(s * 0.16f, -s * 0.15f, -s * 0.1f, -s * 0.15f, -s * 0.24f, -s * 0.01f)
+                cubicTo(-s * 0.1f, s * 0.15f, s * 0.16f, s * 0.15f, s * 0.16f, 0f)
+                close()
+            }
+            drawPath(shell, Brush.radialGradient(listOf(Color(0xFFB37440), Color(0xFF6E3A17), Color(0xFF3A1F0C)), center = Offset(-s * 0.04f, -s * 0.03f), radius = s * 0.22f))
+            for (i in 0 until 4) {
+                val r = s * (0.03f + 0.035f * i)
+                drawArc(Color(0xCCEAD9B4), startAngle = 200f - i * 20f, sweepAngle = 220f, useCenter = false,
+                    topLeft = Offset(-s * 0.13f - r, -r), size = Size(r * 2f, r * 2f), style = Stroke(width = s * 0.012f))
+            }
+            drawCircle(Brush.radialGradient(listOf(Color(0x88FFFFFF), Color.Transparent), radius = s * 0.06f, center = Offset(-s * 0.03f, -s * 0.06f)), radius = s * 0.06f, center = Offset(-s * 0.03f, -s * 0.06f))
+            // Claws, the left one bigger, and eyes on stalks.
+            for ((side, k) in listOf(-1f to 1.25f, 1f to 0.9f)) {
+                drawOval(red, topLeft = Offset(s * 0.17f, side * s * 0.05f - s * 0.035f * k), size = Size(s * 0.12f * k, s * 0.07f * k))
+                drawCircle(Color(0xFFF3EEE4), radius = s * 0.01f * k, center = Offset(s * (0.2f + 0.02f * k), side * s * 0.05f))
+            }
+            for (side in listOf(-1f, 1f)) {
+                drawLine(red, Offset(s * 0.17f, side * s * 0.015f), Offset(s * 0.26f, side * s * 0.04f), strokeWidth = s * 0.012f)
+                drawCircle(Color(0xFF0A0D14), radius = s * 0.014f, center = Offset(s * 0.265f, side * s * 0.042f))
+                drawLine(Color(0xFFD85A3A), Offset(s * 0.2f, side * s * 0.01f), Offset(s * 0.46f, side * s * 0.16f), strokeWidth = s * 0.005f)
+            }
         }
     }
 }

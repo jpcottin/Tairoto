@@ -135,3 +135,51 @@ vec3 throughWater(vec3 c, float z) {
     float scatter = 1.0 - exp(-0.007 * z);
     return c * t + waterColor() * scatter * 0.55 * F.sun.w;
 }
+
+// ------------------------------------------------------------------ sand
+// The sand of the lagoon floor, shared by the floor and by whatever hides in
+// it (a buried ray, a camouflaged octopus, a cloud of stirred-up sand), so
+// they match it exactly.
+
+float rippleHeight(vec2 q0) {
+    vec2 p = q0 * 2.0;  // features were drawn for a world twice as large
+    // Ripples run across the tank and meander, with their strength in patches.
+    vec2 warp = vec2(fbm(p * 0.018), fbm(p * 0.018 + 9.7)) - 0.5;
+    vec2 q = p + warp * 26.0;
+    float phase = dot(q, normalize(vec2(0.28, 1.0))) * (TAU / 8.5);
+    float crest = pow(0.5 + 0.5 * sin(phase + 0.6 * sin(phase * 0.5)), 1.7);
+    float strength = mix(0.25, 1.0, smoothstep(0.3, 0.7, fbm(p * 0.011 + 3.1)));
+    return crest * 0.55 * strength + vnoise(p * 1.7) * 0.07;
+}
+
+/** The sand's colour at p (mm): two tones in drifts, patches of algae, grains light and dark. */
+vec3 sandAlbedo(vec2 p) {
+    vec3 sandA = srgb(vec3(0.95, 0.88, 0.72));
+    vec3 sandB = srgb(vec3(0.84, 0.75, 0.58));
+    vec2 pf = p * 2.0;
+    vec3 albedo = mix(sandA, sandB, smoothstep(0.35, 0.75, fbm(pf * 0.04)));
+    float algae = smoothstep(0.6, 0.78, fbm(pf * 0.009 + 7.0));
+    albedo = mix(albedo, srgb(vec3(0.42, 0.5, 0.33)), algae * 0.45);
+    // Odd grains, darker or brighter: round, not square, when seen up close.
+    vec2 g = pf * 2.4;
+    vec2 gid = floor(g);
+    float gk = hash12(gid);
+    float grain = 1.0 - smoothstep(0.2, 0.34, length(fract(g) - 0.5 - (hash22(gid) - 0.5) * 0.3));
+    albedo *= mix(1.0, gk > 0.96 ? 0.8 : (gk < 0.03 ? 1.15 : 1.0), grain);
+    albedo *= 0.94 + 0.12 * vnoise(pf * 4.1);
+    // Crests catch the light, troughs gather darker grains.
+    albedo *= 0.9 + 0.18 * smoothstep(0.1, 0.5, rippleHeight(p));
+    return albedo;
+}
+
+/** Big slow patches of brighter and darker water above. */
+float skyPatches(vec2 p, float t) { return mix(0.75, 1.15, fbm(p * 2.0 * 0.006 + t * 0.012)); }
+
+/** The sand at p as the floor draws it (before the water): lit by the sun through the caustics. */
+vec3 sandLitAt(vec2 p, float t) {
+    int layers = quality() < 0.5 ? 1 : 2;
+    float c = causticsAt(p, t, layers);
+    vec3 sunLight = srgb(vec3(1.0, 0.97, 0.9)) * F.sun.w * skyPatches(p, t);
+    vec3 light = sunLight * normalize(F.sun.xyz).z * (0.62 + 0.95 * c) + srgb(vec3(0.4, 0.62, 0.75)) * 0.3;
+    return sandAlbedo(p) * light;
+}

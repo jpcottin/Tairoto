@@ -40,6 +40,11 @@ class EntitiesTest {
         val scene = Population.defaultScene(size, EntityIdAllocator(0), Random(42))
         assertEquals(SpeciesCatalog.GreenChromis.defaultCount, scene.count("green_chromis"))
         assertEquals(1, scene.count("green_sea_turtle"))
+        assertEquals(1, scene.count("spotted_eagle_ray"))
+        assertEquals(1, scene.count("day_octopus"))
+        assertEquals(2, scene.count("hermit_crab"))
+        assertEquals(SpeciesCatalog.all.sumOf { it.defaultCount }, scene.creatures.size)
+        scene.creatures.filter { it.speciesId == "hermit_crab" }.forEach { assertEquals(size.depthMm, it.spawnDepthMm, 1e-3f) }
         scene.creatures.forEach {
             val s = SpeciesCatalog.require(it.speciesId)
             assertTrue(size.contains(it.spawnAt))

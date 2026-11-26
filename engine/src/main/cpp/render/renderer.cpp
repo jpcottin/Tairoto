@@ -437,13 +437,14 @@ bool Renderer::createPipelines() {
     };
 
     VkVertexInputBindingDescription bind{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
-    VkVertexInputAttributeDescription attrs[6] = {
+    VkVertexInputAttributeDescription attrs[7] = {
         {0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, x)},
         {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, u)},
         {2, 0, VK_FORMAT_R32_SFLOAT, offsetof(Vertex, z)},
         {3, 0, VK_FORMAT_R32_SFLOAT, offsetof(Vertex, kind)},
         {4, 0, VK_FORMAT_R32_SFLOAT, offsetof(Vertex, seed)},
         {5, 0, VK_FORMAT_R32_SFLOAT, offsetof(Vertex, frame)},
+        {6, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Vertex, aux)},
     };
 
     for (const Spec& s : specs) {
@@ -466,7 +467,7 @@ bool Renderer::createPipelines() {
         if (s.vertices) {
             vi.vertexBindingDescriptionCount = 1;
             vi.pVertexBindingDescriptions = &bind;
-            vi.vertexAttributeDescriptionCount = 6;
+            vi.vertexAttributeDescriptionCount = 7;
             vi.pVertexAttributeDescriptions = attrs;
         }
         VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};

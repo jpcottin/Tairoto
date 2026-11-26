@@ -70,7 +70,7 @@ class TankViewModelTest {
         attach(vm)
         val ui = vm.ui.value
         assertTrue(ui.ready)
-        assertEquals(SpeciesCatalog.GreenChromis.defaultCount + 1, ui.total)
+        assertEquals(SpeciesCatalog.all.sumOf { it.defaultCount }, ui.total)
         assertEquals(ui.total, engine.creatures.size)
         assertEquals(1, ui.counts["green_sea_turtle"])
         assertNotNull(engine.lastTank)
@@ -167,7 +167,7 @@ class TankViewModelTest {
         vm.sprinkle(Vec2(300f + pxPerMm * 11.5f, 1000f), first = false)
         assertEquals(3, engine.drops.last().count)
         assertEquals(TankScene.MAX_CREATURES, TankScene.MAX_CREATURES) // the scene is untouched by food
-        assertEquals(SpeciesCatalog.GreenChromis.defaultCount + 1, vm.ui.value.total)
+        assertEquals(SpeciesCatalog.all.sumOf { it.defaultCount }, vm.ui.value.total)
     }
 
     @Test fun `food lands where the finger is, on the surface`() = runTest(dispatcher) {
@@ -312,5 +312,14 @@ class TankViewModelTest {
     @Test fun `a launch extra forces the overlay on`() = runTest(dispatcher) {
         val vm = vm(options = LaunchOptions(stats = true))
         assertTrue(vm.ui.value.showStats)
+    }
+
+    @Test fun `a launch population replaces the default lagoon`() = runTest(dispatcher) {
+        val vm = vm(options = LaunchOptions(seed = 7, population = mapOf("hermit_crab" to 3, "day_octopus" to 1)))
+        attach(vm)
+        assertEquals(4, vm.ui.value.total)
+        assertEquals(3, vm.ui.value.counts["hermit_crab"])
+        assertEquals(1, vm.ui.value.counts["day_octopus"])
+        assertEquals(4, engine.creatures.size)
     }
 }

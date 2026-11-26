@@ -93,6 +93,12 @@ object Population {
         return TankScene(size, creatures)
     }
 
+    /** A lagoon of just these creatures, species id to count (for tests and close looks). */
+    fun sceneOf(counts: Map<String, Int>, size: TankSize, ids: EntityIdAllocator, random: Random): TankScene =
+        TankScene(size, counts.flatMap { (id, n) ->
+            release(SpeciesCatalog.require(id), n, size, ids, random, around = Vec2(size.widthMm / 2f, size.heightMm / 2f))
+        })
+
     /**
      * [count] creatures of [species]. Schooling species are released together
      * around one point (near [around] if given), the others anywhere.

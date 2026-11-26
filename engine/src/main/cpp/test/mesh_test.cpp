@@ -207,3 +207,117 @@ TEST(Mesh, NoTriangleIsEverStretchedAcrossTheTank) {
         }
     }
 }
+
+// ---------------------------------------------------------------- bottom dwellers
+
+namespace {
+World bottomLagoon(uint64_t seed) {
+    World w;
+    w.setTank({200, 300, 55});
+    w.setSeed(seed);
+    w.spawn(1, Visual::EagleRay, Locomotion::Glide, SpeciesParams::eagleRay(), 32, 5, Vec3(100, 150, 25));
+    w.spawn(2, Visual::Octopus, Locomotion::Crawl, SpeciesParams::octopus(), 34, 6, Vec3(60, 90, 55));
+    w.spawn(3, Visual::HermitCrab, Locomotion::Walk, SpeciesParams::hermitCrab(), 15, 7, Vec3(140, 220, 55));
+    return w;
+}
+
+int count(const Mesh& m, int visual, int part) {
+    int n = 0;
+    for (auto& v : m.vertices) n += visualOf(v) == visual && partOf(v) == part;
+    return n;
+}
+}  // namespace
+
+TEST(Mesh, EachBottomDwellerHasItsParts) {
+    World w = bottomLagoon(2);
+    for (int s = 0; s < 120; s++) w.step(1.0f / 60.0f);
+    Mesh m;
+    MeshBuilder().build(w, cameraOver(w), m);
+    EXPECT_GT(count(m, 3, kPartRayDisc), 300);
+    EXPECT_GT(count(m, 3, kPartRayTail), 20);
+    EXPECT_EQ(8 * 19 * 3, count(m, 4, kPartArm)) << "eight arms";
+    EXPECT_GT(count(m, 4, kPartWeb), 10);
+    EXPECT_GT(count(m, 4, kPartMantle), 20);
+    EXPECT_EQ(2 * 13, count(m, 4, kPartOctopusEye));
+    EXPECT_EQ(4 * 5 * 3, count(m, 5, kPartLeg)) << "four walking legs";
+    EXPECT_EQ(2 * 7 * 3, count(m, 5, kPartClaw));
+    EXPECT_GT(count(m, 5, kPartCrabShell), 100);
+    EXPECT_GT(count(m, 5, kPartAntenna), 0);
+}
+
+TEST(Mesh, AWithdrawnCrabIsOnlyItsShell) {
+    World w = bottomLagoon(2);
+    w.startle({140, 220});
+    for (int s = 0; s < 30; s++) w.step(1.0f / 60.0f);
+    ASSERT_GT(w.find(3)->cover, 0.97f);
+    Mesh m;
+    MeshBuilder().build(w, cameraOver(w), m);
+    EXPECT_GT(count(m, 5, kPartCrabShell), 100);
+    EXPECT_EQ(0, count(m, 5, kPartClaw));
+    EXPECT_EQ(0, count(m, 5, kPartLeg));
+    EXPECT_EQ(0, count(m, 5, kPartAntenna));
+}
+
+TEST(Mesh, TheRaySpanFollowsTheSpeciesAndWingsFold) {
+    World w = bottomLagoon(2);
+    w.step(1.0f / 60.0f);
+    Mesh m;
+    const Creature& c = *w.find(1);
+    float semi = 0.5f * c.length * c.sp.bodyWidth;
+    float widest = 0;
+    for (int s = 0; s < 600; s++) {
+        w.step(1.0f / 60.0f);
+        MeshBuilder().build(w, cameraOver(w), m);
+        Vec2 side = perp(fromAngle(w.find(1)->heading));
+        for (auto& v : m.vertices) {
+            if (visualOf(v) != 3 || partOf(v) != kPartRayDisc) continue;
+            float y = std::fabs(dot(Vec2(v.x, v.y) - w.find(1)->pos.xy(), side));
+            widest = std::max(widest, y);
+            ASSERT_LE(y, semi * 1.001f);
+            ASSERT_GE(v.aux[3], 0.0f);
+            ASSERT_LE(v.aux[3], 1.0f);
+        }
+    }
+    EXPECT_GT(widest, semi * 0.9f);
+}
+
+TEST(Mesh, CloudsAreDrawnAmongTheCreatures) {
+    World w = bottomLagoon(2);
+    w.puff(CloudKind::Ink, Vec3(100, 150, 40), Vec2(), 4, 0.9f, 8);
+    w.puff(CloudKind::Sand, Vec3(110, 150, 54), Vec2(), 4, 0.6f, 3);
+    w.step(1.0f / 60.0f);
+    Mesh m;
+    MeshBuilder().build(w, cameraOver(w), m);
+    EXPECT_EQ(2, m.cloudsDrawn);
+    EXPECT_GT(count(m, kVisualCloud, kPartInkCloud), 0);
+    EXPECT_GT(count(m, kVisualCloud, kPartSandCloud), 0);
+}
+
+TEST(Mesh, NoBottomDwellerTriangleIsEverStretched) {
+    // Five minutes of ray, octopus and crab, frightened now and then: every
+    // triangle stays creature-sized and every value is finite.
+    World w = bottomLagoon(5);
+    w.dropFood({100, 150}, FoodKind::Pellet, 3);
+    CameraParams cam = cameraOver(w);
+    cam.pxPerMm = 4;
+    Mesh m;
+    MeshBuilder b;
+    for (int s = 0; s < 60 * 300; s++) {
+        w.step(1.0f / 60.0f);
+        if (s % 900 == 450) w.startle(w.find(2 + (s / 900) % 2)->pos.xy());
+        if (s % 7) continue;
+        b.build(w, cam, m);
+        for (auto& v : m.vertices) {
+            ASSERT_TRUE(std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z) && std::isfinite(v.frame));
+            for (float a : v.aux) ASSERT_TRUE(std::isfinite(a));
+        }
+        for (size_t k = 0; k < m.indices.size(); k += 3) {
+            const Vertex* v[3] = {&m.vertices[m.indices[k]], &m.vertices[m.indices[k + 1]], &m.vertices[m.indices[k + 2]]};
+            if (visualOf(*v[0]) == kVisualCloud) continue;  // a cloud is one soft disc, as large as it has grown
+            for (int e = 0; e < 3; e++) {
+                float d = length(Vec2(v[e]->x, v[e]->y) - Vec2(v[(e + 1) % 3]->x, v[(e + 1) % 3]->y));
+                ASSERT_LT(d, 25.0f) << "step " << s << " visual " << visualOf(*v[e]) << " part " << partOf(*v[e]);
+            }
+        }
+    }
+}

@@ -30,13 +30,16 @@ import org.junit.runner.RunWith
 /** The whole app on a device: the Vulkan tank, its HUD, the creature sheet and settings. */
 @RunWith(AndroidJUnit4::class)
 class TankAppTest {
+    /** Creatures in a new lagoon. */
+    private val DEFAULT = SpeciesCatalog.all.sumOf { it.defaultCount }
+
     @get:Rule val compose = createEmptyComposeRule()
 
     private fun count() = compose.onNodeWithTag(TankTags.COUNT).text()
 
     @Test fun theTankOpensWithTheDefaultReef() {
         AppLauncher.launch().use {
-            compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
             compose.onNodeWithTag(TankTags.TITLE).assertIsDisplayed()
             compose.onNodeWithTag(TankTags.ADD).assertIsDisplayed()
             compose.onNodeWithTag(TankTags.SETTINGS).assertIsDisplayed()
@@ -51,28 +54,28 @@ class TankAppTest {
             }
             val text = compose.onNodeWithTag(TankTags.STATS).text()
             assertTrue(text, text.contains("CI"))
-            assertTrue(text, Regex("(\\d+)/23 drawn").containsMatchIn(text))
+            assertTrue(text, Regex("(\\d+)/$DEFAULT drawn").containsMatchIn(text))
         }
     }
 
     @Test fun releasingChromisAddsASchool() {
         AppLauncher.launch().use {
-            compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
             compose.onNodeWithTag(TankTags.ADD).performClick()
             compose.waitForTag(SheetTags.release(SpeciesCatalog.GreenChromis.id))
             compose.onNodeWithTag(SheetTags.release(SpeciesCatalog.GreenChromis.id)).performClick()
             compose.waitForText(SheetTags.count(SpeciesCatalog.GreenChromis.id)) { it == "28 in the lagoon" }
             Espresso.pressBack()
-            compose.waitForText(TankTags.COUNT) { it == "29 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "${DEFAULT + SpeciesCatalog.GreenChromis.addBatch} creatures" }
         }
     }
 
     @Test fun releasingATurtle() {
         AppLauncher.launch().use {
-            compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
             compose.onNodeWithTag(TankTags.ADD).performClick()
             compose.waitForTag(SheetTags.release(SpeciesCatalog.GreenSeaTurtle.id))
-            compose.onNodeWithText("Release one").performClick()
+            compose.onNodeWithTag(SheetTags.release(SpeciesCatalog.GreenSeaTurtle.id)).performClick()
             compose.waitForText(SheetTags.count(SpeciesCatalog.GreenSeaTurtle.id)) { it == "2 in the lagoon" }
         }
     }
@@ -85,7 +88,7 @@ class TankAppTest {
             compose.onNodeWithText("Performance overlay").assertIsDisplayed()
             compose.onNodeWithTag(SettingsTags.BACK).performClick()
             compose.waitForTag(TankTags.TITLE)
-            compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
         }
     }
 
@@ -124,25 +127,25 @@ class TankAppTest {
 
     @Test fun restoringTheReefAfterChanges() {
         AppLauncher.launch().use {
-            compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
             compose.onNodeWithTag(TankTags.ADD).performClick()
             compose.waitForTag(SheetTags.release(SpeciesCatalog.GreenChromis.id))
             compose.onNodeWithTag(SheetTags.release(SpeciesCatalog.GreenChromis.id)).performClick()
             Espresso.pressBack()
-            compose.waitForText(TankTags.COUNT) { it == "29 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "${DEFAULT + SpeciesCatalog.GreenChromis.addBatch} creatures" }
             compose.onNodeWithTag(TankTags.SETTINGS).performClick()
             compose.waitForTag(SettingsTags.RESET)
             compose.onNodeWithTag(SettingsTags.RESET).performClick()
             compose.waitForTag(SettingsTags.RESET_CONFIRM)
             compose.onNodeWithTag(SettingsTags.RESET_CONFIRM).performClick()
             compose.onNodeWithTag(SettingsTags.BACK).performClick()
-            compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
         }
     }
 
     @Test fun aDragSprinklesFoodAndTheFishEatIt() {
         AppLauncher.launch(stats = true).use {
-            compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
             compose.onNodeWithTag(TankTags.GESTURES).performTouchInput {
                 swipe(start = center - Offset(200f, 0f), end = center + Offset(200f, 100f), durationMillis = 800)
             }
@@ -157,7 +160,7 @@ class TankAppTest {
 
     @Test fun aLongPressDropsAPellet() {
         AppLauncher.launch(stats = true).use {
-            compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
             compose.onNodeWithTag(TankTags.GESTURES).performTouchInput { longClick(center, durationMillis = 900) }
             compose.waitForText(TankTags.STATS) { text ->
                 Regex("food (\\d+)").find(text)?.groupValues?.get(1)?.toInt() == 1
@@ -167,7 +170,7 @@ class TankAppTest {
 
     @Test fun aDoubleTapZoomsIn() {
         AppLauncher.launch().use {
-            compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
             compose.onNodeWithTag(TankTags.GESTURES).performTouchInput { doubleClick(center) }
             compose.waitForText(TankTags.ZOOM) { it == "2.0×" }
         }
@@ -175,7 +178,7 @@ class TankAppTest {
 
     @Test fun aPinchZooms() {
         AppLauncher.launch().use {
-            compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
             compose.onNodeWithTag(TankTags.GESTURES).performTouchInput {
                 pinch(
                     start0 = center - Offset(60f, 0f), end0 = center - Offset(260f, 0f),
@@ -191,17 +194,17 @@ class TankAppTest {
 
     @Test fun theTankSurvivesRotation() {
         AppLauncher.launch().use { scenario ->
-            compose.waitForText(TankTags.COUNT) { it == "23 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
             compose.onNodeWithTag(TankTags.ADD).performClick()
             compose.waitForTag(SheetTags.release(SpeciesCatalog.GreenSeaTurtle.id))
             compose.onNodeWithTag(SheetTags.release(SpeciesCatalog.GreenSeaTurtle.id)).performClick()
             Espresso.pressBack()
-            compose.waitForText(TankTags.COUNT) { it == "24 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "${DEFAULT + 1} creatures" }
             scenario.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
             compose.waitForIdle()
-            compose.waitForText(TankTags.COUNT) { it == "24 creatures" }
+            compose.waitForText(TankTags.COUNT) { it == "${DEFAULT + 1} creatures" }
             scenario.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
-            assertEquals("24 creatures", count())
+            assertEquals("${DEFAULT + 1} creatures", count())
         }
     }
 }
