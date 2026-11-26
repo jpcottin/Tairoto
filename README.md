@@ -6,7 +6,8 @@ coral sand, under moving caustic light. It is built to grow into one lagoon
 shared by several devices on a table, fish swimming from one screen to the next.
 
 > Work in progress, kept local for now. Milestones 1 (the solo lagoon),
-> 2 (food and feeding), 3 (the bottom dwellers) and 4 (arranging the lagoon) of 10.
+> 2 (food and feeding), 3 (the bottom dwellers), 4 (arranging the lagoon) and
+> 5 (one lagoon across several devices) of 10.
 
 Tahitian names are checked against a reference before they are used, and the
 source is noted next to each species in `Species.kt`.
@@ -39,6 +40,13 @@ source is noted next to each species in `Species.kt`.
   goes to the background, every creature where it is at that moment, and
   restored at the next launch (a versioned file that tolerates damage and
   species it does not know).
+- **One lagoon across several devices**: lay phones, foldables and tablets side
+  by side and share the lagoon (the Share button). Each screen is a life-size
+  window onto one tank on the table; a fish swimming off one screen comes in on
+  the next, and food dropped on one draws fish from the others. On a local
+  network the host device runs the relay itself and announces it (NSD); the
+  others find it in the share sheet. Emulators, which cannot see each other, go
+  through a relay on the computer. More in *Sharing* below.
 - **Adaptive layout**: on a tablet, an unfolded foldable or a desktop window the
   species picker and the settings open as a pane beside the running lagoon; on a
   phone or a cover screen the picker is a sheet over it. Folding and unfolding
@@ -62,7 +70,11 @@ source is noted next to each species in `Species.kt`.
 - **Quality tiers** Low / High / Ultra / CI, with an automatic governor fed by
   frame rate and thermal headroom; ADPF performance hints from the render thread.
 - **Kotlin core** (`core/world`): geometry, camera, species catalogue, entity
-  ownership with epochs, a `Link` abstraction (loopback for now), the session.
+  ownership with epochs, the `Link` abstraction, the session, and `SharedTank`,
+  which runs a shared lagoon on each device (handoffs, leases, food, clock).
+- **Transport** (`core/net`, `relay`): a small framed-TCP relay and the link to
+  it; the same relay runs on a computer for emulators and inside the host
+  device on a local network.
 - **Compose app**: full-bleed tank, glass HUD, creature picker with drawn
   species portraits, settings (Navigation 3, DataStore).
 
@@ -89,14 +101,58 @@ adb shell am start -n com.jpcottin.tairoto/.MainActivity --ez tairoto.ci true --
 #       --es tairoto.population "day_octopus:1,hermit_crab:2"  --ef tairoto.zoom 2.5   (a close look)
 #       --es tairoto.decor "coral_head:1,giant_clam:2"   (these decorations, in a column down the middle)
 #       --ez tairoto.fresh true   (a new lagoon, the saved one left alone; ci, population and decor imply it)
+#       --es tairoto.share host|join --es tairoto.relay 10.0.2.2:7171 --es tairoto.session name
+#       --ez tairoto.trace true   (log every ownership message of a shared lagoon)
 ```
 
 ## Gestures
 
-Tap the water: a ripple, and the fish nearby dart away. Double tap: zoom.
-Two fingers: pan and pinch. Mouse: drag to pan, wheel to zoom. One finger
+Tap the water: a ripple, and the fish nearby dart away (on the next screen too,
+when shared). Double tap: zoom. Two fingers: pan and pinch (not when shared:
+each screen then shows its own place on the table, life size). Mouse: drag to pan, wheel to zoom. One finger
 dragging sprinkles flakes; hold for a pellet.
 
 Arranging (the pencil button): tap a decoration to select it, drag it to move
 it, twist two fingers to turn it; drag over open water to pan. With the net:
 tap a creature. Back or Done to finish.
+
+## Sharing
+
+Every creature and every piece of food has exactly one owner, the only device
+that simulates it. The others show a ghost: animated there like anything else
+(so a fish crossing an edge looks the same on both screens) and pulled toward
+the owner's states, which come 15 times a second to the screens near it and a
+few times a second to the others.
+
+When a creature swims onto another screen its owner stops simulating it and
+offers it with the next epoch; the receiver claims it and the host, the
+referee, confirms. The receiver starts only on that word, so a creature is
+never simulated by two devices at once (for a tick or two it is simulated by
+none, and its ghosts drift on). An offer nobody claims runs out after half a
+second. A device simulates only while the host answered one of its pings less
+than 2 s ago, and the host takes over a silent device's creatures only after
+2.5 s, so this holds even when the network splits. Food changes hands the same
+way, a bite at food on another screen is decided by the device that owns the
+food, and the scent of food spreads to the other screens. Shared time is the
+host's, estimated NTP-style.
+
+From the share sheet: *Share on this network*, or join a lagoon found nearby
+(Android 17 asks for the local-network permission first). For emulators, run
+the relay on the computer and use *Through a computer*:
+
+```sh
+./gradlew :relay:installDist && relay/build/install/relay/bin/relay --port 7171
+# emulators reach it at 10.0.2.2:7171; or launch them straight into it:
+adb shell am start -S -n com.jpcottin.tairoto/.MainActivity \
+  --es tairoto.share host --es tairoto.relay 10.0.2.2:7171 --es tairoto.session demo   # then "join" on the others
+```
+
+`scripts/share-e2e.sh` does that with three emulators, feeds a frenzy on the
+middle screen, and checks every device's log (`files/net-log.jsonl`, one JSON
+line per hand-over, in debug builds): no creature simulated twice at any
+moment, none left without an owner longer than a hand-over takes, and every
+milligram of food accounted for across the screens.
+
+For now the screens lie side by side in the order they joined; the layout
+editor (milestone 6) will let you move them. A device that goes to the
+background leaves the lagoon, handing its creatures over.

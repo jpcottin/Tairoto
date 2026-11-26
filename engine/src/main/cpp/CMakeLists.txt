@@ -34,6 +34,7 @@ add_library(tairoto SHARED
     sim/feeding.cpp
     sim/bottom.cpp
     sim/decor.cpp
+    sim/net.cpp
     sim/current.cpp
     render/mesh.cpp
     render/renderer.cpp

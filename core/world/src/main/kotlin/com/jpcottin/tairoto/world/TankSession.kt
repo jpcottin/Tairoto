@@ -243,7 +243,7 @@ class TankSession(
             }
             is Msg.Handoff -> registry.handoff(m.id, m.from, m.to, m.epoch)
             is Msg.Claim -> registry.claim(m.id, m.by, m.epoch)
-            is Msg.Owner, is Msg.Hello -> Unit // multi-device sessions (milestone 5)
+            else -> Unit // the shared lagoon's own messages: [SharedTank] handles them
         }
     }
 }

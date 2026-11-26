@@ -46,6 +46,10 @@ struct Vec3 {
     constexpr Vec3(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}
     Vec2 xy() const { return {x, y}; }
 };
+inline Vec3 operator+(Vec3 a, Vec3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
+inline Vec3 operator-(Vec3 a, Vec3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+inline Vec3 operator*(Vec3 a, float k) { return {a.x * k, a.y * k, a.z * k}; }
+inline float length(Vec3 a) { return std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z); }
 
 template <typename T> inline T clamp(T v, T lo, T hi) { return v < lo ? lo : (v > hi ? hi : v); }
 inline float saturate(float v) { return clamp(v, 0.0f, 1.0f); }

@@ -11,7 +11,10 @@ import com.jpcottin.tairoto.world.CreatureSpec
 import com.jpcottin.tairoto.world.DecorKind
 import com.jpcottin.tairoto.world.DecorSpec
 import com.jpcottin.tairoto.world.EntityId
+import com.jpcottin.tairoto.world.NetCreature
 import com.jpcottin.tairoto.world.QualityTier
+import com.jpcottin.tairoto.world.SimInput
+import com.jpcottin.tairoto.world.SimOutput
 import com.jpcottin.tairoto.world.Species
 import com.jpcottin.tairoto.world.TankSize
 import com.jpcottin.tairoto.world.Vec2
@@ -38,9 +41,33 @@ class FakeEngine : TankEngine {
     override fun setQuality(tier: QualityTier) { lastQuality = tier }
     override fun setDeterministic(on: Boolean, seed: Long) { deterministic = on to seed }
     override fun setPaused(paused: Boolean) = Unit
-    override fun spawn(creature: CreatureSpec, species: Species) { creatures[creature.id] = creature }
-    override fun remove(id: EntityId) { creatures.remove(id) }
-    override fun clear() = creatures.clear()
+    override fun spawn(creature: CreatureSpec, species: Species, ghost: Boolean) {
+        creatures[creature.id] = creature
+        if (ghost) ghosts += creature.id else ghosts -= creature.id
+    }
+    override fun remove(id: EntityId) { creatures.remove(id); ghosts -= id }
+    override fun clear() { creatures.clear(); ghosts.clear() }
+
+    // A shared lagoon: which creatures are ghosts of another device's, and what came in.
+    val ghosts = HashSet<EntityId>()
+    /** The slot food made here carries. */
+    var slotOfFood = 0
+        private set
+    val remoteTaps = mutableListOf<Vec2>()
+    var exchanges = 0
+    override fun setFoodSlot(slot: Int) { slotOfFood = slot }
+    override fun exchange(input: SimInput): SimOutput {
+        exchanges++
+        val released = input.release.filter { it in creatures && it !in ghosts }.map { id -> ghosts += id; state(id) }
+        input.take.forEach { ghosts -= it.id }
+        input.ghosts.forEach { g -> if (g.state.id in ghosts) places[g.state.id] = CreatureState(g.state.id, g.state.x, g.state.y, g.state.z, g.state.speed, g.state.behavior) }
+        remoteTaps += input.taps
+        return SimOutput(owned = creatures.keys.filter { it !in ghosts }.map { state(it) }, released = released)
+    }
+    private fun state(id: EntityId): NetCreature {
+        val p = snapshot().first { it.id == id }
+        return NetCreature(id, p.x, p.y, p.z, 0f, p.speed, behavior = p.behavior)
+    }
     val decor = LinkedHashMap<EntityId, DecorSpec>()
     /** Where creatures are now, if a test moved them; otherwise where they were released. */
     val places = HashMap<EntityId, CreatureState>()

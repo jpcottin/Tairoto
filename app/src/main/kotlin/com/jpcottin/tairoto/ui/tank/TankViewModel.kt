@@ -10,6 +10,23 @@ import com.jpcottin.tairoto.data.LagoonStore
 import com.jpcottin.tairoto.data.SettingsStore
 import com.jpcottin.tairoto.engine.EngineStats
 import com.jpcottin.tairoto.engine.FoodKind
+import com.jpcottin.tairoto.engine.EngineSim
+import com.jpcottin.tairoto.share.JoinTarget
+import com.jpcottin.tairoto.share.NearbyLagoon
+import com.jpcottin.tairoto.share.RelayAddress
+import com.jpcottin.tairoto.share.ShareConnection
+import com.jpcottin.tairoto.share.ShareConnector
+import com.jpcottin.tairoto.share.ShareRoute
+import com.jpcottin.tairoto.world.DeviceId
+import com.jpcottin.tairoto.world.Layout
+import com.jpcottin.tairoto.world.RectMm
+import com.jpcottin.tairoto.world.ShareEvent
+import com.jpcottin.tairoto.world.ShareStatus
+import com.jpcottin.tairoto.world.SharedTank
+import com.jpcottin.tairoto.world.SimInput
+import com.jpcottin.tairoto.world.Take
+import kotlinx.coroutines.SupervisorJob
+import java.util.Locale
 import com.jpcottin.tairoto.engine.SceneSync
 import com.jpcottin.tairoto.engine.TankEngine
 import com.jpcottin.tairoto.engine.VulkanState
@@ -92,7 +109,42 @@ data class TankUiState(
     val decorRoomLeft: Int = TankScene.MAX_DECOR,
     /** Arranging the lagoon: moving decorations, netting creatures. */
     val edit: EditUi = EditUi(),
+    /** The lagoon shared with other devices, or not. */
+    val share: ShareUi = ShareUi(),
 )
+
+enum class SharePhase { OFF, CONNECTING, SHARED }
+
+/** Hosting: the lagoon is this device's and the others join it. Guest: in another device's lagoon. */
+enum class ShareRole { HOST, GUEST }
+
+/** One screen of a shared lagoon, where it lies on the table. */
+data class ShareDeviceUi(val name: String, val rect: RectMm, val self: Boolean, val host: Boolean)
+
+data class ShareUi(
+    val phase: SharePhase = SharePhase.OFF,
+    val role: ShareRole? = null,
+    val devices: List<ShareDeviceUi> = emptyList(),
+    /** The shared tank, for drawing the table to scale. */
+    val tank: TankSize? = null,
+    val nearby: List<NearbyLagoon> = emptyList(),
+    /** Where to find a relay (a computer, for emulators), as typed. */
+    val relay: String = RelayAddress.EMULATOR_HOST.toString(),
+    /** Something to tell: it could not connect, the lagoon ended. */
+    val message: String? = null,
+    /** False while this device has lost touch with the host (its creatures wait). */
+    val connected: Boolean = true,
+    val rttMs: Float? = null,
+    /** Creatures swum here from other screens, and swum away. */
+    val arrived: Int = 0,
+    val left: Int = 0,
+    /** Creatures this device simulates right now. */
+    val here: Int = 0,
+    /** May the app reach the local network (a runtime permission from Android 17)? */
+    val localNetwork: Boolean = true,
+) {
+    val hostName: String? get() = devices.firstOrNull { it.host }?.name
+}
 
 /** What the hand does in edit mode. */
 enum class EditTool { MOVE, NET }
@@ -123,6 +175,13 @@ class TankViewModel(
     private val signals: DeviceSignals,
     private val background: CoroutineDispatcher = Dispatchers.Default,
     private val lagoonStore: LagoonStore = InMemoryLagoonStore(),
+    private val connector: ShareConnector? = null,
+    /** This device's name, as other devices of a shared lagoon see it. */
+    private val deviceName: String = "This device",
+    /** One line of JSON per thing that happens in a shared lagoon (handoffs, losses), for logs and tests. */
+    private val netLog: (String) -> Unit = {},
+    /** A monotonic clock in seconds, for the shared lagoon's timing. */
+    private val clockS: () -> Double = { System.nanoTime() / 1e9 },
 ) : ViewModel() {
 
     private val state = MutableStateFlow(TankUiState(hintVisible = options.hints))
@@ -145,6 +204,16 @@ class TankViewModel(
     private var restored: Result<TankScene?>? = if (options.persist) null else Result.success(null)
     private var pendingSurface: IntArray? = null
     private var pendingDpi: FloatArray? = null
+
+    // Sharing
+    private var sessionJob: Job? = null
+    private var shareJob: Job? = null
+    private var connection: ShareConnection? = null
+    private var shared: SharedTank? = null
+    private var role: ShareRole? = null
+    private var screenMm: ScreenMm? = null
+    private var autoShared = false
+    private var lastStatusLog = 0.0
 
     // Edit mode
     private var selected: EntityId? = null
@@ -202,6 +271,14 @@ class TankViewModel(
         val vp = Viewport(widthPx.toFloat(), heightPx.toFloat(), ScreenMm.pxPerMm((xdpi + ydpi) / 2f))
         viewport = vp
         val screen = ScreenMm.fromPixels(widthPx, heightPx, xdpi, ydpi)
+        screenMm = screen
+        val sh = shared
+        if (sh != null) {
+            // Shared: the table's layout sets the tank and where this screen looks.
+            viewModelScope.launch { sh.screenChanged(screen) }
+            applySharedCamera(sh.layout.value)
+            return
+        }
         val s = session ?: createSession(screen)
         // Unfolded, or in a much bigger window: the lagoon widens to fill it. Not
         // when the same screen is turned sideways: then the camera just pans.
@@ -213,6 +290,7 @@ class TankViewModel(
             options.zoom?.let { c.zoomedAbout(vp.center, it, vp, size) } ?: c
         }).clamped(vp, size)
         pushCamera()
+        autoShare()
     }
 
     fun onSurfaceGone() {
@@ -239,10 +317,23 @@ class TankViewModel(
                 } ?: sc
             }
         val s = TankSession(scene, LoopbackLink(), random)
+        attach(s, persist = options.persist) { s.run() }
+        return s
+    }
+
+    /**
+     * Makes [s] the session the screen shows: [runner] applies what comes in
+     * (a loopback, or a shared lagoon's coordinator). Whatever ran for the
+     * session before stops.
+     */
+    private fun attach(s: TankSession, persist: Boolean, runner: suspend () -> Unit) {
+        sessionJob?.cancel()
+        val job = SupervisorJob(viewModelScope.coroutineContext[Job])
+        sessionJob = job
         session = s
-        sync.apply(scene)
-        viewModelScope.launch { s.run() }
-        viewModelScope.launch {
+        sync.apply(s.scene.value)
+        viewModelScope.launch(job) { runner() }
+        viewModelScope.launch(job) {
             s.scene.collect { sc ->
                 sync.apply(sc)
                 state.update {
@@ -260,15 +351,14 @@ class TankViewModel(
                 refreshSelection()
             }
         }
-        viewModelScope.launch {
+        viewModelScope.launch(job) {
             s.undo.collect { u -> state.update { it.copy(edit = it.edit.copy(undo = u)) } }
         }
-        if (options.persist) {
+        if (persist) {
             // Saved a moment after every change; [saveNow] catches the creatures' places on leaving.
             @OptIn(FlowPreview::class)
-            viewModelScope.launch { s.scene.drop(1).debounce(SAVE_DEBOUNCE_MS).collect { save() } }
+            viewModelScope.launch(job) { s.scene.drop(1).debounce(SAVE_DEBOUNCE_MS).collect { save() } }
         }
-        return s
     }
 
     /**
@@ -278,13 +368,14 @@ class TankViewModel(
      * cancelled with the view model.
      */
     fun saveNow() {
-        if (!options.persist) return
+        if (!options.persist || role == ShareRole.GUEST) return
         val s = session ?: return
         val scene = s.scene.value.withPlaces(places())
         viewModelScope.launch(NonCancellable) { lagoonStore.save(scene) }
     }
 
     private suspend fun save() {
+        if (role == ShareRole.GUEST) return // another device's lagoon: this one's own was saved on joining
         val s = session ?: return
         val places = withContext(background) { places() }
         lagoonStore.save(s.scene.value.withPlaces(places))
@@ -296,6 +387,7 @@ class TankViewModel(
     // ------------------------------------------------------------ gestures
 
     fun pan(deltaPx: Vec2) {
+        if (shared != null) return // each screen is its own window onto the table
         val vp = viewport ?: return
         val size = session?.scene?.value?.size ?: return
         camera = camera?.panned(deltaPx, vp, size)
@@ -304,6 +396,7 @@ class TankViewModel(
     }
 
     fun zoom(focusPx: Vec2, factor: Float) {
+        if (shared != null) return // life size, so a fish keeps its size from screen to screen
         val vp = viewport ?: return
         val size = session?.scene?.value?.size ?: return
         camera = camera?.zoomedAbout(focusPx, factor, vp, size)
@@ -322,7 +415,9 @@ class TankViewModel(
             }
             return
         }
-        engine.tap(cam.screenToWorld(screenPx, 0f, vp))
+        val at = cam.screenToWorld(screenPx, 0f, vp)
+        engine.tap(at)
+        shared?.let { sh -> viewModelScope.launch { sh.tapped(at) } }
         val now = signals.nowMs()
         val previous = lastTap
         if (previous != null && now - previous.first < DOUBLE_TAP_MS && (screenPx - previous.second).length < DOUBLE_TAP_PX) {
@@ -561,6 +656,303 @@ class TankViewModel(
         if (sel != state.value.edit.selection) state.update { it.copy(edit = it.edit.copy(selection = sel)) }
     }
 
+    // ------------------------------------------------------------ sharing
+
+    /** Shares this lagoon: the other devices join it, and the fish swim from screen to screen. */
+    fun shareLagoon(route: ShareRoute) {
+        val c = connector ?: return
+        val s = session ?: return
+        val screen = screenMm ?: return
+        if (shared != null || state.value.share.phase == SharePhase.CONNECTING) return
+        setShare { it.copy(phase = SharePhase.CONNECTING, message = null) }
+        shareJob = viewModelScope.launch {
+            val conn = try {
+                c.host(deviceName, route)
+            } catch (e: Exception) {
+                failShare(e, "Could not share the lagoon")
+                return@launch
+            }
+            // The same lagoon, every creature where it swims, now on the network.
+            val scene = s.scene.value.withPlaces(withContext(background) { places() })
+            val random = options.seed?.let { Random(it + 1) } ?: Random.Default
+            val ns = TankSession(scene, conn.link, random)
+            val sh = SharedTank(
+                ns, conn.link, EngineSim(engine, background), clockS,
+                SharedTank.soloLayout(conn.link.self, screen, scene.size), owners = emptyList(), onEvent = ::logEvent,
+            )
+            engine.setFoodSlot(conn.link.self.slot)
+            begin(conn, ns, sh, ShareRole.HOST)
+        }
+    }
+
+    /** Joins another device's lagoon. This device's own is saved and comes back on leaving. */
+    fun joinLagoon(target: JoinTarget) {
+        val c = connector ?: return
+        val screen = screenMm ?: return
+        if (shared != null || state.value.share.phase == SharePhase.CONNECTING) return
+        setShare { it.copy(phase = SharePhase.CONNECTING, message = null) }
+        shareJob = viewModelScope.launch {
+            val conn = try {
+                c.join(deviceName, target)
+            } catch (e: Exception) {
+                failShare(e, "Could not join the lagoon")
+                return@launch
+            }
+            val join = SharedTank.requestJoin(conn.link, screen, JOIN_TIMEOUT_MS)
+            if (join == null) {
+                conn.close()
+                failShare(null, "The lagoon did not answer")
+                return@launch
+            }
+            saveNow()
+            sync.reset()
+            val random = options.seed?.let { Random(it + conn.link.self.slot) } ?: Random.Default
+            val ns = TankSession(join.scene, conn.link, random)
+            val sh = SharedTank(ns, conn.link, EngineSim(engine, background), clockS, join.layout, join.owners, onEvent = ::logEvent)
+            engine.setFoodSlot(conn.link.self.slot)
+            begin(conn, ns, sh, ShareRole.GUEST)
+        }
+    }
+
+    private fun begin(conn: ShareConnection, ns: TankSession, sh: SharedTank, r: ShareRole) {
+        connection = conn
+        shared = sh
+        role = r
+        selected = null
+        // What this device does not simulate arrives as a ghost of another device's.
+        sync.simulatesHere = { sh.shouldSimulate(it) }
+        if (options.trace) sh.trace = { line -> netLog(json("trace", "t" to sh.sharedNow(), "self" to sh.self.slot, "m" to line)) }
+        attach(ns, persist = options.persist && r == ShareRole.HOST) { sh.run() }
+        val job = sessionJob!!
+        viewModelScope.launch(job) {
+            sh.layout.collect { layout ->
+                applySharedCamera(layout)
+                setShare { it.copy(devices = devicesOnTable(layout, sh.self), tank = layout.tank) }
+            }
+        }
+        viewModelScope.launch(job) {
+            var lostSince: Double? = null
+            sh.status.collect { st ->
+                setShare {
+                    it.copy(
+                        phase = SharePhase.SHARED, role = r, connected = st.connected, rttMs = st.rttMs,
+                        arrived = st.handoffsIn, left = st.handoffsOut, here = st.owned,
+                    )
+                }
+                val now = clockS()
+                if (now - lastStatusLog >= STATUS_LOG_S) {
+                    lastStatusLog = now
+                    logStatus(sh, st)
+                }
+                if (st.gone) {
+                    endShare("The lagoon went on without this device")
+                } else if (!st.connected && r == ShareRole.GUEST) {
+                    val since = lostSince ?: now.also { lostSince = it }
+                    if (now - since > GIVE_UP_S) endShare("Lost touch with ${state.value.share.hostName ?: "the lagoon"}")
+                } else {
+                    lostSince = null
+                }
+            }
+        }
+        viewModelScope.launch(job) {
+            conn.ended.collect { reason ->
+                endShare(if (r == ShareRole.GUEST) "${state.value.share.hostName ?: "The host"} stopped sharing" else "Sharing stopped: $reason")
+            }
+        }
+        netLog(json("share", "role" to r.name.lowercase(), "self" to sh.self.slot, "name" to sh.self.name, "t" to sh.sharedNow()))
+        // Who is in the lagoon as it starts here, so a log can account for every one of them.
+        netLog(json("scene", "self" to sh.self.slot, "ids" to ns.scene.value.creatures.joinToString(",", "[", "]") { it.id.raw.toString() }))
+    }
+
+    /** The screens on the table; two devices of the same name (two of one model) are told apart by number. */
+    private fun devicesOnTable(layout: Layout, self: DeviceId): List<ShareDeviceUi> {
+        val names = layout.placements.groupingBy { it.device.name }.eachCount()
+        return layout.placements.map { p ->
+            val name = p.device.name.replace('_', ' ')
+            ShareDeviceUi(
+                name = if ((names[p.device.name] ?: 0) > 1) "$name ${p.device.slot + 1}" else name,
+                rect = p.rect,
+                self = p.device == self,
+                host = p.device.slot == SharedTank.HOST_SLOT,
+            )
+        }
+    }
+
+    /** Stops sharing: a guest goes back to its own lagoon, a host keeps its lagoon with every creature in it. */
+    fun stopSharing() {
+        if (shared == null) {
+            shareJob?.cancel()
+            setShare { it.copy(phase = SharePhase.OFF) }
+            return
+        }
+        viewModelScope.launch { finish(graceful = true, message = null) }
+    }
+
+    /**
+     * The app went to the background. Its lagoon only swims while it is on
+     * screen, so a shared one would leave its creatures frozen: it leaves
+     * instead, handing them over (a host ends the lagoon for everyone).
+     */
+    fun onBackground() {
+        if (shared != null) stopSharing()
+    }
+
+    private fun endShare(message: String) {
+        if (shared == null) return
+        viewModelScope.launch { finish(graceful = false, message = message) }
+    }
+
+    private suspend fun finish(graceful: Boolean, message: String?) {
+        val sh = shared ?: return
+        val conn = connection
+        val r = role
+        shared = null
+        connection = null
+        role = null
+        sessionJob?.cancel()
+        if (graceful) {
+            runCatching { sh.leave() }
+            delay(GOODBYE_MS) // the goodbye goes out before the connection closes
+        }
+        conn?.close()
+        netLog(json("left", "self" to sh.self.slot, "why" to (message ?: "stopped")))
+        sync.simulatesHere = { true }
+        engine.setFoodSlot(0)
+        val screen = screenMm
+        val vp = viewport
+        if (r == ShareRole.HOST) {
+            // Everything in the lagoon is this device's again, where it swims.
+            val scene = sh.session.scene.value
+            withContext(background) { engine.exchange(SimInput(take = scene.creatures.map { Take(it.id, null) })) }
+            val places = withContext(background) { places() }
+            val random = options.seed?.let { Random(it + 2) } ?: Random.Default
+            val s = TankSession(scene.withPlaces(places), LoopbackLink(), random)
+            attach(s, persist = options.persist) { s.run() }
+        } else {
+            // Back to this device's own lagoon, as it was saved on joining.
+            sync.reset()
+            session = null
+            restored = if (options.persist) Result.success(runCatching { lagoonStore.load() }.getOrNull()) else Result.success(null)
+            if (screen != null) createSession(screen)
+        }
+        camera = null
+        setShare { ShareUi(relay = it.relay, message = message) }
+        if (vp != null && screen != null) {
+            val size = session?.scene?.value?.size
+            if (size != null) {
+                camera = Camera.initial(vp, size)
+                pushCamera()
+            }
+        }
+    }
+
+    private fun failShare(e: Exception?, what: String) {
+        val why = e?.message?.takeIf { it.isNotBlank() }
+        setShare { it.copy(phase = SharePhase.OFF, message = if (why != null) "$what: $why" else what) }
+    }
+
+    /** Starts looking for lagoons shared nearby (while the share sheet is open). */
+    fun lookForLagoons(on: Boolean) {
+        val c = connector ?: return
+        if (on) {
+            c.discover()
+            if (nearbyJob == null) nearbyJob = viewModelScope.launch { c.nearby.collect { n -> setShare { it.copy(nearby = n) } } }
+        } else {
+            c.stopDiscovery()
+            nearbyJob?.cancel()
+            nearbyJob = null
+        }
+    }
+
+    private var nearbyJob: Job? = null
+
+    fun setRelayAddress(text: String) = setShare { it.copy(relay = text) }
+
+    /** Whether the local network may be reached; without it, nothing can be shared. */
+    fun setLocalNetworkAllowed(allowed: Boolean) {
+        setShare { it.copy(localNetwork = allowed) }
+        if (!allowed) lookForLagoons(false)
+    }
+
+    fun localNetworkRefused() = setShare {
+        it.copy(localNetwork = false, message = "Sharing needs access to the local network: allow it in the app's settings.")
+    }
+
+    fun dismissShareMessage() = setShare { it.copy(message = null) }
+
+    private fun setShare(f: (ShareUi) -> ShareUi) = state.update { it.copy(share = f(it.share)) }
+
+    /** Shared, the camera looks life size at this screen's place on the table, around the parallax point all share. */
+    private fun applySharedCamera(layout: Layout) {
+        val vp = viewport ?: return
+        val sh = shared ?: return
+        val rect = layout.rectOf(sh.self) ?: return
+        camera = Camera(center = rect.center, zoom = vp.widthPx / (vp.basePxPerMm * rect.w), parallaxOrigin = layout.origin)
+        pushCamera()
+    }
+
+    /** Shares or joins as the launch asked (tests across emulators), once the lagoon is up. */
+    private fun autoShare() {
+        val launch = options.share ?: return
+        if (autoShared) return
+        autoShared = true
+        val relay = RelayAddress.parse(launch.relay) ?: RelayAddress.EMULATOR_HOST
+        setShare { it.copy(relay = relay.toString()) }
+        if (launch.host) {
+            shareLagoon(ShareRoute.Relay(relay, launch.session))
+        } else {
+            // The host may not be up yet: try for a while.
+            viewModelScope.launch {
+                val until = clockS() + AUTO_JOIN_S
+                while (shared == null && clockS() < until) {
+                    if (state.value.share.phase == SharePhase.OFF) joinLagoon(JoinTarget.Relay(relay, launch.session))
+                    delay(AUTO_JOIN_RETRY_MS)
+                }
+            }
+        }
+    }
+
+    private fun logEvent(e: ShareEvent) {
+        val self = shared?.self?.slot ?: -1
+        netLog(
+            when (e) {
+                is ShareEvent.Took -> json("took", "t" to e.t, "self" to self, "id" to e.id.raw, "epoch" to e.epoch)
+                is ShareEvent.Released -> json("released", "t" to e.t, "self" to self, "id" to e.id.raw, "to" to (e.to?.slot ?: -1))
+                is ShareEvent.FoodSent -> json("food_sent", "t" to e.t, "self" to self, "id" to e.id, "to" to e.to.slot, "mg" to e.mg)
+                is ShareEvent.FoodTaken -> json("food_taken", "t" to e.t, "self" to self, "id" to e.id, "mg" to e.mg)
+                is ShareEvent.DeviceLost -> json("lost", "t" to e.t, "self" to self, "device" to e.device.slot, "taken" to e.taken)
+                is ShareEvent.Fenced -> json("fenced", "t" to e.t, "self" to self, "fenced" to e.fenced)
+            },
+        )
+    }
+
+    private fun logStatus(sh: SharedTank, st: ShareStatus) {
+        val l = sh.ledger
+        netLog(
+            json(
+                "status", "t" to sh.sharedNow(), "self" to sh.self.slot, "devices" to st.devices, "owned" to st.owned,
+                "creatures" to sh.session.scene.value.creatures.size,
+                "in" to st.handoffsIn, "out" to st.handoffsOut, "connected" to st.connected,
+                "rtt" to (st.rttMs ?: -1f), "dropped" to l.dropped, "eaten" to l.eaten, "decomposed" to l.decomposed,
+                "sent" to l.sent, "received" to l.received, "water" to l.inWater,
+            ),
+        )
+    }
+
+    private fun json(event: String, vararg fields: Pair<String, Any>): String = buildString {
+        append("{\"ev\":\"").append(event).append('"')
+        for ((k, v) in fields) {
+            append(",\"").append(k).append("\":")
+            when (v) {
+                is String -> if (v.startsWith("[")) append(v) else append('"').append(v.replace("\\", "\\\\").replace("\"", "\\\"")).append('"')
+                is Double -> append(String.format(Locale.US, "%.4f", v))
+                is Float -> append(String.format(Locale.US, "%.4f", v))
+                else -> append(v)
+            }
+        }
+        append('}')
+    }
+
     // ------------------------------------------------------------ tank
 
     /** Releases a batch of a species where the camera is looking. */
@@ -634,6 +1026,8 @@ class TankViewModel(
     }
 
     override fun onCleared() {
+        connection?.close()
+        connector?.stopDiscovery()
         engine.close()
     }
 
@@ -650,6 +1044,13 @@ class TankViewModel(
         const val DOUBLE_TAP_MS = 300L
         const val DOUBLE_TAP_PX = 60f
         const val SAVE_DEBOUNCE_MS = 1_500L
+        const val JOIN_TIMEOUT_MS = 8_000L
+        const val GOODBYE_MS = 150L
+        /** A guest out of touch with the host this long gives up and goes back to its own lagoon. */
+        const val GIVE_UP_S = 6.0
+        const val STATUS_LOG_S = 2.0
+        const val AUTO_JOIN_S = 90.0
+        const val AUTO_JOIN_RETRY_MS = 2_000L
         /** How far from a decoration's outline a finger still picks it up. */
         const val TOUCH_SLOP_PX = 24f
         /** The net's sweep, at least this wide on screen. */

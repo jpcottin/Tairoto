@@ -25,6 +25,32 @@ namespace dt {
 
 class PerfHint;
 
+/** What the network changes in the simulation, one tick's worth (see sim/net.cpp). */
+struct NetIn {
+    std::vector<int64_t> release;
+    std::vector<std::pair<NetState, bool>> take;  // the owner's last word, if any
+    std::vector<std::pair<NetState, float>> ghosts;
+    std::vector<std::pair<Food, float>> ghostFood;
+    std::vector<Food> adopt;
+    std::vector<uint32_t> releaseFood;
+    std::vector<BiteWant> bites;
+    std::vector<std::pair<int64_t, float>> fed;
+    bool hasScents = false;
+    std::vector<Scent> scents;
+    std::vector<Vec2> taps;
+};
+
+/** What the network needs from the simulation after a tick's changes. */
+struct NetOut {
+    std::vector<NetState> owned, released;
+    std::vector<Food> food, releasedFood;
+    std::vector<Scent> scents;
+    std::vector<BiteWant> wants;
+    std::vector<float> granted;
+    FoodLedger ledger;
+    double inWater = 0;
+};
+
 struct EngineStats {
     float fps = 0;
     float workMs = 0;       // CPU per frame: simulation, meshes, recording
@@ -64,7 +90,11 @@ public:
     /** Fixed 1/60 s steps and a fixed seed, so frames are the same every run. */
     void setDeterministic(bool on, uint64_t seed);
     void setPaused(bool paused);
-    void spawn(int64_t id, Visual v, Locomotion l, const SpeciesParams& sp, float length, uint32_t seed, Vec3 at);
+    void spawn(int64_t id, Visual v, Locomotion l, const SpeciesParams& sp, float length, uint32_t seed, Vec3 at,
+               bool ghost = false);
+    void setFoodSlot(int slot);
+    /** One tick of a shared lagoon: applies what came in, answers what goes out. Blocks. */
+    NetOut exchange(const NetIn& in);
     void remove(int64_t id);
     void clearCreatures();
     void placeDecor(int64_t id, DecorKind kind, uint32_t seed, Vec2 at, float angle, float radius, float height);

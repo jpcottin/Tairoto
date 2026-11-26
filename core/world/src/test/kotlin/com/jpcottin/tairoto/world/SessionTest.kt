@@ -24,8 +24,29 @@ class SessionTest {
             Msg.Claim(EntityId(5), DeviceId(2, "b"), 3),
             Msg.Owner(EntityId(5), DeviceId(2, "b"), 3),
             Msg.Reset(TankScene(size, listOf(spec))),
+            Msg.Handoff(EntityId(5), DeviceId(1, "a"), DeviceId(2, "b"), 3, NetCreature(EntityId(5), 1f, 2f, 3f, 0.5f, 20f, behavior = 4, den = true), 12.5),
+            Msg.Join(TankScene(size, listOf(spec)), listOf(OwnerEntry(EntityId(5), DeviceId(1, "a"), 2)),
+                Layout.sideBySide(listOf(DeviceId(0, "h") to ScreenMm(60f, 120f)), size), 3.0),
+            Msg.LayoutChanged(Layout.sideBySide(listOf(DeviceId(0, "h") to ScreenMm(60f, 120f)), size)),
+            Msg.Ping(1.5), Msg.Pong(1.5, 99.0),
+            Msg.States(2.0, listOf(NetCreature(EntityId(5), 1f, 2f, 3f, 0.5f, 20f))),
+            Msg.Foods(2.0, listOf(NetFood((1L shl 24) or 7, 1, 2, 1f, 2f, 54f, massMg = 4.5f))),
+            Msg.FoodHandoff(2.0, NetFood(7, 0, 0, 1f, 2f, 0f, massMg = 1f), DeviceId(2, "b")),
+            Msg.Scents(listOf(NetScent(1f, 2f, 3f, 4f, 5f, 6, 7f))),
+            Msg.Bite(BiteWant(7, EntityId(5), 0.3f, 0.2f)),
+            Msg.FedMsg(Fed(EntityId(5), 0.3f), hops = 2),
+            Msg.Tap(Vec2(3f, 4f)),
+            Msg.Bye(DeviceId(1, "a")),
+            Msg.Gone(DeviceId(1, "a")),
         )
         msgs.forEach { assertEquals(it, Wire.decode(Wire.encode(it))) }
+    }
+
+    @Test fun `a state on the wire is short`() {
+        val st = NetCreature(EntityId(5), 123.456789f, 98.7654321f, 30.123456f, 1.23456789f, 25.4321f, hunger = 0.4567891f).compact()
+        assertEquals(123.46f, st.x)
+        val text = Wire.encode(Msg.States(2.0, listOf(st)))
+        assertTrue("$text is ${text.length} long", text.length < 140)
     }
 
     @Test fun `the wire format ignores fields from a newer version`() {

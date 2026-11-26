@@ -23,7 +23,12 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import com.jpcottin.tairoto.BuildConfig
+import com.jpcottin.tairoto.share.JoinTarget
+import com.jpcottin.tairoto.share.ShareRoute
 import com.jpcottin.tairoto.ui.settings.SettingsScreen
+import com.jpcottin.tairoto.ui.share.ShareActions
+import com.jpcottin.tairoto.ui.share.ShareSheet
+import com.jpcottin.tairoto.ui.share.rememberLocalNetworkAccess
 import com.jpcottin.tairoto.ui.settings.SettingsUi
 import com.jpcottin.tairoto.ui.tank.SpeciesPicker
 import com.jpcottin.tairoto.ui.tank.TankScreen
@@ -44,6 +49,10 @@ data object SettingsKey : NavKey
 /** The picker, open on its decorations. */
 @Serializable
 data object DecorKey : NavKey
+
+/** Sharing the lagoon with other devices. */
+@Serializable
+data object ShareKey : NavKey
 
 /**
  * How many panes fit side by side: two on a tablet, an unfolded foldable or a
@@ -107,7 +116,31 @@ fun TairotoNavigation(vm: TankViewModel) {
                     onOpenSettings = { open(SettingsKey) },
                     onOpenSpecies = { vm.dismissHint(); open(SpeciesKey) },
                     onOpenDecor = { open(DecorKey) },
+                    onOpenShare = { vm.dismissHint(); open(ShareKey) },
                 )
+            }
+            entry<ShareKey>(metadata = SupportingPaneSceneStrategy.supportingPane() + BottomSheetSceneStrategy.bottomSheet()) {
+                val localNetwork = rememberLocalNetworkAccess(
+                    onGranted = { vm.setLocalNetworkAllowed(true) },
+                    onRefused = vm::localNetworkRefused,
+                )
+                // Looks for lagoons nearby while the sheet is open (and the network may be reached).
+                DisposableEffect(localNetwork.granted) {
+                    vm.setLocalNetworkAllowed(localNetwork.granted)
+                    if (localNetwork.granted) vm.lookForLagoons(true)
+                    onDispose { vm.lookForLagoons(false) }
+                }
+                val actions = remember(vm, localNetwork) {
+                    object : ShareActions {
+                        override fun share(route: ShareRoute) = localNetwork.then { vm.shareLagoon(route) }
+                        override fun join(target: JoinTarget) = localNetwork.then { vm.joinLagoon(target) }
+                        override fun stop() = vm.stopSharing()
+                        override fun relayChanged(text: String) = vm.setRelayAddress(text)
+                        override fun dismissMessage() = vm.dismissShareMessage()
+                        override fun allowLocalNetwork() = localNetwork.then { vm.lookForLagoons(true) }
+                    }
+                }
+                ShareSheet(state.share, actions, onClose = if (twoPane) ({ close(ShareKey) }) else null)
             }
             entry<DecorKey>(metadata = SupportingPaneSceneStrategy.supportingPane() + BottomSheetSceneStrategy.bottomSheet()) {
                 Picker(vm, state, twoPane, startOnDecor = true, close = { close(DecorKey) })

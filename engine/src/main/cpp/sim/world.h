@@ -55,9 +55,9 @@ public:
     const Tank& tank() const { return tank_; }
     void setSeed(uint64_t seed) { rng_.reseed(seed); }
 
-    /** Adds a creature at a point; false if the id is taken. */
+    /** Adds a creature at a point; false if the id is taken. A ghost is simulated by another device. */
     bool spawn(int64_t id, Visual visual, Locomotion loco, const SpeciesParams& sp, float length,
-               uint32_t seed, Vec3 at);
+               uint32_t seed, Vec3 at, bool ghost = false);
     bool remove(int64_t id);
     void clear() { creatures_.clear(); }
 
@@ -138,7 +138,40 @@ public:
     /** How far below its centre a creature's body reaches (mm), for clearances. */
     static float bodyBelow(const Creature& c);
 
+    // ---- a lagoon shared by several devices (sim/net.cpp)
+    /** Stops simulating a creature here: it becomes a ghost of another device's. False if unknown or a ghost already. */
+    bool release(int64_t id, NetState* last = nullptr);
+    /**
+     * Takes a creature over: it is simulated here from now on, carrying on
+     * from its owner's last word (hunger, what it was doing) from the pose
+     * its ghost had here, unless that was far off.
+     */
+    bool takeOver(int64_t id, const NetState* state);
+    /** The owner's word on a ghost, [age] seconds old. */
+    void ghostUpdate(const NetState& s, float age);
+    static NetState stateOf(const Creature& c);
+    /** Food ids carry the device's slot in their top byte, so two devices never make the same one. */
+    void setFoodSlot(int slot);
+    /** Another device's word on its food, [age] seconds old: shown and smelled here. */
+    void ghostFood(const Food& f, float age);
+    /** Hands a piece of food over: it becomes a ghost here. */
+    bool releaseFood(uint32_t id, Food* last);
+    /** Takes a piece of food over from another device. */
+    void adoptFood(const Food& f);
+    /** Another device's creature bit this device's food: how much it got (it breaks crumbs off here). */
+    float remoteBite(uint32_t food, float wantMg, float messiness);
+    /** What a bite at another device's food got, for one of this device's creatures. */
+    void credit(int64_t creature, float mg);
+    /** The scent of other devices' food, replacing the last. */
+    void setRemoteScents(std::vector<Scent> scents) { remoteScents_ = std::move(scents); }
+    /** Bites taken at other devices' food since the last call. */
+    std::vector<BiteWant> takeWants();
+    /** The scent of this device's own food only, for the other devices. */
+    std::vector<Scent> ownScents() const;
+    FoodLedger& ledgerForTest() { return ledger_; }
+
 private:
+    void correctGhost(Creature& c, float h);
     void stepFixed(float h);
     void stepFish(Creature& c, float h);
     void stepTurtle(Creature& c, float h);
@@ -177,6 +210,9 @@ private:
     /** Eats from the food it is chasing if the mouth reaches it. */
     void tryBite(Creature& c, Vec2 mouth, float mouthZ, float reach);
     void bite(Creature& c, Food& f);
+    /** A messy eater: part of what is left breaks off and scatters as crumbs. */
+    void breakCrumbs(Food& f, float messiness);
+    uint32_t newFoodId();
     int scentCellOf(Vec2 p) const;
     Food* findFoodMutable(uint32_t id);
 
@@ -192,6 +228,7 @@ private:
     std::unordered_map<uint32_t, size_t> foodIndex_;
     FoodLedger ledger_;
     uint32_t nextFoodId_ = 1;
+    uint32_t foodSlot_ = 0;
     std::vector<Scent> scents_;
     std::vector<int> scentOfCell_;
     std::vector<float> activity_;
@@ -201,6 +238,8 @@ private:
     std::vector<Cloud> clouds_;
     std::vector<int> grounded_;  // creatures on the sand, rebuilt every step
     std::vector<Decor> decor_;
+    std::vector<Scent> remoteScents_;
+    std::vector<BiteWant> wants_;
 };
 
 }  // namespace dt

@@ -57,6 +57,18 @@ import com.jpcottin.tairoto.world.EntityId
 import com.jpcottin.tairoto.world.QualityMode
 import com.jpcottin.tairoto.world.UndoState
 import com.jpcottin.tairoto.world.Vec2
+import com.jpcottin.tairoto.share.JoinTarget
+import com.jpcottin.tairoto.share.NearbyLagoon
+import com.jpcottin.tairoto.share.ShareRoute
+import com.jpcottin.tairoto.ui.share.ShareActions
+import com.jpcottin.tairoto.ui.share.ShareSheet
+import com.jpcottin.tairoto.ui.tank.ShareDeviceUi
+import com.jpcottin.tairoto.ui.tank.SharePhase
+import com.jpcottin.tairoto.ui.tank.ShareRole
+import com.jpcottin.tairoto.ui.tank.ShareUi
+import com.jpcottin.tairoto.world.DeviceId
+import com.jpcottin.tairoto.world.Layout
+import com.jpcottin.tairoto.world.ScreenMm
 import com.jpcottin.tairoto.world.QualityTier
 import com.jpcottin.tairoto.world.SpeciesCatalog
 import com.jpcottin.tairoto.world.TankSize
@@ -95,6 +107,30 @@ object PreviewData {
         selection = if (selected) SelectionUi(EntityId(9), Vec2(520f, 1100f), 260f, "Toʻa") else null,
         undo = UndoState(undo = "moving Toʻa"),
     )
+
+    /** Three screens on the table: a tablet hosting, a phone (this one) and an opened foldable. */
+    val table: Layout = Layout.sideBySide(
+        listOf(DeviceId(0, "Tablet") to ScreenMm(250f, 160f), DeviceId(1, "Pixel 9") to ScreenMm(68f, 150f), DeviceId(2, "Fold") to ScreenMm(118f, 150f)),
+        TankSize(190f, 420f, 55f),
+    )
+
+    private fun onTable(self: Int) = table.placements.map {
+        ShareDeviceUi(it.device.name, it.rect, self = it.device.slot == self, host = it.device.slot == 0)
+    }
+
+    /** Nothing shared yet; two lagoons found on the network. */
+    val shareStart = ShareUi(
+        nearby = listOf(NearbyLagoon("Tablet", "192.168.1.20", 41234), NearbyLagoon("Living room TV", "192.168.1.31", 39001)),
+    )
+
+    val sharedGuest = ShareUi(
+        phase = SharePhase.SHARED, role = ShareRole.GUEST, devices = onTable(self = 1), tank = table.tank,
+        here = 13, arrived = 54, left = 41, rttMs = 9f,
+    )
+
+    val sharedHost = sharedGuest.copy(role = ShareRole.HOST, devices = onTable(self = 0), here = 27)
+
+    val outOfTouch = sharedGuest.copy(connected = false)
 
     val settings = SettingsUi(
         quality = QualityMode.Auto, activeTier = QualityTier.HIGH, showStats = true, creatures = total,
@@ -138,35 +174,44 @@ fun LagoonScreenPreviewContent(state: TankUiState = PreviewData.lagoon) {
  */
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
-fun LagoonWithPanePreviewContent(pane: PreviewPane, state: TankUiState = PreviewData.lagoon) {
+fun LagoonWithPanePreviewContent(pane: PreviewPane, state: TankUiState = PreviewData.lagoon, share: ShareUi = PreviewData.shareStart) {
     val directive = rememberLagoonDirective()
     val twoPane = directive.maxHorizontalPartitions > 1
     if (twoPane) {
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxHeight()) { LagoonScreenPreviewContent(state.copy(hintVisible = false)) }
-            Box(Modifier.width(directive.defaultPanePreferredWidth).fillMaxHeight()) { PaneContent(pane, inPane = true) }
+            Box(Modifier.width(directive.defaultPanePreferredWidth).fillMaxHeight()) { PaneContent(pane, inPane = true, share) }
         }
         return
     }
     when (pane) {
-        PreviewPane.Species, PreviewPane.Decor -> Box(Modifier.fillMaxSize()) {
-            LagoonScreenPreviewContent(state.copy(hintVisible = false))
+        PreviewPane.Species, PreviewPane.Decor, PreviewPane.Share -> Box(Modifier.fillMaxSize()) {
+            LagoonScreenPreviewContent(state.copy(hintVisible = false, share = share))
             Box(Modifier.fillMaxSize().background(Color(0x66000000)))
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(0.8f),
-            ) { Column(Modifier.padding(top = 22.dp)) { PaneContent(pane, inPane = false) } }
+            ) { Column(Modifier.padding(top = 22.dp)) { PaneContent(pane, inPane = false, share) } }
         }
-        PreviewPane.Settings -> PaneContent(pane, inPane = false)
+        PreviewPane.Settings -> PaneContent(pane, inPane = false, share)
     }
 }
 
-enum class PreviewPane { Species, Decor, Settings }
+enum class PreviewPane { Species, Decor, Settings, Share }
+
+private object NoShareActions : ShareActions {
+    override fun share(route: ShareRoute) = Unit
+    override fun join(target: JoinTarget) = Unit
+    override fun stop() = Unit
+    override fun relayChanged(text: String) = Unit
+    override fun dismissMessage() = Unit
+}
 
 @Composable
-private fun PaneContent(pane: PreviewPane, inPane: Boolean) {
+private fun PaneContent(pane: PreviewPane, inPane: Boolean, share: ShareUi) {
     when (pane) {
+        PreviewPane.Share -> ShareSheet(share, NoShareActions, onClose = if (inPane) ({}) else null)
         PreviewPane.Species -> SpeciesPicker(PreviewData.counts, 160 - PreviewData.total, onRelease = {}, onClose = if (inPane) ({}) else null)
         PreviewPane.Decor -> SpeciesPicker(
             PreviewData.counts, 160 - PreviewData.total, onRelease = {}, onClose = if (inPane) ({}) else null,
@@ -319,3 +364,17 @@ private fun DecorGalleryPreview() = TairotoTheme { DecorGalleryPreviewContent() 
 @androidx.compose.ui.tooling.preview.Preview(widthDp = 360, heightDp = 420)
 @Composable
 private fun SpeciesGalleryPreview() = TairotoTheme { SpeciesGalleryPreviewContent() }
+
+@FormFactorPreviews
+@Composable
+private fun ShareStartPreview() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Share, share = PreviewData.shareStart) }
+
+@FormFactorPreviews
+@Composable
+private fun SharedHostPreview() = TairotoTheme {
+    LagoonWithPanePreviewContent(PreviewPane.Share, PreviewData.lagoon.copy(share = PreviewData.sharedHost), PreviewData.sharedHost)
+}
+
+@NarrowPreviews
+@Composable
+private fun OutOfTouchPreview() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Share, share = PreviewData.outOfTouch) }

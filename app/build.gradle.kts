@@ -77,6 +77,7 @@ screenshotTests {
 
 dependencies {
     implementation(project(":engine"))
+    implementation(project(":core:net"))
 
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
@@ -109,6 +110,8 @@ dependencies {
     screenshotTestImplementation(libs.screenshot.validation.api)
 
     testImplementation(libs.junit)
+    testImplementation(testFixtures(project(":core:world")))
+    androidTestImplementation(testFixtures(project(":core:world")))
     testImplementation(libs.kotlinx.coroutines.test)
 
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

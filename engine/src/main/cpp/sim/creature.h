@@ -17,6 +17,21 @@ enum class Behavior : int32_t {
  * One creature's whole dynamic state. Positions are in mm on the table plane,
  * z in mm below the surface.
  */
+/**
+ * What another device says of a creature it simulates: where it was, how it
+ * moved, what it was doing. A ghost here follows it.
+ */
+struct NetState {
+    int64_t id = 0;
+    Vec3 pos;
+    float heading = 0, speed = 0, vz = 0;
+    Behavior behavior = Behavior::Cruise;
+    float stateTimer = 0, hunger = 0.5f, cover = 0, rest = 0, alarm = 0;
+    Vec3 target;
+    bool den = false;
+    float eatenMg = 0, startle = 0;
+};
+
 struct Creature {
     static constexpr int kJoints = 12;
     static constexpr int kArms = 8;       // octopus
@@ -102,6 +117,13 @@ struct Creature {
     float swing[kLegs] = {-1, -1, -1, -1};  // < 0 planted, 0 .. 1 stepping
 
     float age = 0;
+
+    // A ghost: another device simulates it. It is animated here like any
+    // other, but steered back every step toward its owner's word, and it
+    // never eats (the owner's copy does).
+    bool ghost = false;
+    bool hasNet = false;
+    NetState net;          // the owner's last word, dead-reckoned forward to now
 };
 
 }  // namespace dt

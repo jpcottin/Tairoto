@@ -83,3 +83,21 @@ fun EveryDecorCard() = TairotoTheme { DecorCardsPreviewContent() }
 @Preview(name = "decor", widthDp = 480, heightDp = 150)
 @Composable
 fun DecorGallery() = TairotoTheme { DecorGalleryPreviewContent() }
+
+// The lagoon shared with other devices (milestone 5).
+@PreviewTest
+@FormFactorPreviews
+@Composable
+fun LagoonWithShareSheet() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Share, share = PreviewData.shareStart) }
+
+@PreviewTest
+@FormFactorPreviews
+@Composable
+fun LagoonSharedOnThreeScreens() = TairotoTheme {
+    LagoonWithPanePreviewContent(PreviewPane.Share, PreviewData.lagoon.copy(share = PreviewData.sharedHost), PreviewData.sharedHost)
+}
+
+@PreviewTest
+@NarrowPreviews
+@Composable
+fun SharedLagoonOutOfTouch() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Share, share = PreviewData.outOfTouch) }

@@ -8,6 +8,8 @@ import com.jpcottin.tairoto.world.DecorSpec
 import com.jpcottin.tairoto.world.DepthProjection
 import com.jpcottin.tairoto.world.EntityId
 import com.jpcottin.tairoto.world.QualityTier
+import com.jpcottin.tairoto.world.SimInput
+import com.jpcottin.tairoto.world.SimOutput
 import com.jpcottin.tairoto.world.Species
 import com.jpcottin.tairoto.world.TankSize
 import com.jpcottin.tairoto.world.Vec2
@@ -76,10 +78,18 @@ class NativeTank : TankEngine {
 
     override fun setPaused(paused: Boolean) = nativeSetPaused(h(), paused)
 
-    override fun spawn(creature: CreatureSpec, species: Species) = nativeSpawn(
+    override fun spawn(creature: CreatureSpec, species: Species, ghost: Boolean) = nativeSpawn(
         h(), creature.id.raw, species.visualId, species.locomotion.nativeId, species.nativeParams(),
-        creature.lengthMm, creature.seed, creature.spawnAt.x, creature.spawnAt.y, creature.spawnDepthMm,
+        creature.lengthMm, creature.seed, creature.spawnAt.x, creature.spawnAt.y, creature.spawnDepthMm, ghost,
     )
+
+    override fun setFoodSlot(slot: Int) = nativeSetFoodSlot(h(), slot)
+
+    override fun exchange(input: SimInput): SimOutput {
+        val p = NetPacking.pack(input)
+        val r = nativeExchange(h(), p.header, p.longs, p.floats)
+        return NetPacking.unpack(input, r[0] as IntArray, r[1] as LongArray, r[2] as FloatArray, r[3] as DoubleArray)
+    }
 
     override fun remove(id: EntityId) = nativeRemove(h(), id.raw)
 
@@ -161,7 +171,9 @@ class NativeTank : TankEngine {
         @JvmStatic external fun nativeSetQuality(h: Long, q: Int)
         @JvmStatic external fun nativeSetDeterministic(h: Long, on: Boolean, seed: Long)
         @JvmStatic external fun nativeSetPaused(h: Long, paused: Boolean)
-        @JvmStatic external fun nativeSpawn(h: Long, id: Long, visual: Int, loco: Int, params: FloatArray, length: Float, seed: Int, x: Float, y: Float, z: Float)
+        @JvmStatic external fun nativeSpawn(h: Long, id: Long, visual: Int, loco: Int, params: FloatArray, length: Float, seed: Int, x: Float, y: Float, z: Float, ghost: Boolean)
+        @JvmStatic external fun nativeSetFoodSlot(h: Long, slot: Int)
+        @JvmStatic external fun nativeExchange(h: Long, header: IntArray, longs: LongArray, floats: FloatArray): Array<Any>
         @JvmStatic external fun nativeRemove(h: Long, id: Long)
         @JvmStatic external fun nativeClear(h: Long)
         @JvmStatic external fun nativePlaceDecor(h: Long, id: Long, kind: Int, seed: Int, x: Float, y: Float, angle: Float, radius: Float, height: Float)

@@ -23,7 +23,11 @@ rootProject.name = "Tairoto"
 //              camera, species, ownership and links. JVM tests in seconds.
 // :engine      the C++ simulation and the Vulkan renderer, behind a small
 //              Kotlin facade (JNI).
+// :core:net    the relay and the link to it: how devices of a shared lagoon talk.
+// :relay       the relay as a program, for emulators on a computer.
 // :app         the Compose shell: tank screen, creature picker, settings.
 include(":core:world")
+include(":core:net")
+include(":relay")
 include(":engine")
 include(":app")

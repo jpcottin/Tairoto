@@ -10,11 +10,14 @@ namespace dt {
 namespace {
 constexpr float kFullHunger = 0.12f;  // below this a creature does not look for food
 constexpr float kSinkFlake = 3.2f, kSinkPellet = 9.0f, kSinkCrumb = 2.2f;  // mm/s
+constexpr float kFoodForget = 1.0f;  // s without word from its owner: another device's food is gone
 }  // namespace
 
 double World::foodMass() const {
+    // This device's own food: what another device owns is in its ledger, not this one's.
     double m = 0;
-    for (auto& f : food_) m += f.mass;
+    for (auto& f : food_)
+        if (!f.remote) m += f.mass;
     for (auto& f : pendingFood_) m += f.mass;
     return m;
 }
@@ -36,7 +39,7 @@ int World::dropFood(Vec2 at, FoodKind kind, int count) {
     for (int i = 0; i < count; i++) {
         if ((int)(food_.size() + pendingFood_.size()) >= FoodConstants::kMaxParticles) break;
         Food f;
-        f.id = nextFoodId_++;
+        f.id = newFoodId();
         f.kind = kind;
         f.state = FoodState::Floating;
         f.seed = rng_.next();
@@ -74,6 +77,19 @@ void World::stepFood(float h) {
     const float D = tank_.depth;
     for (Food& f : food_) {
         if (f.mass <= 0) continue;
+        if (f.remote) {
+            // Another device's: it moves as its owner says, and goes when its owner stops saying.
+            if (time_ - f.seen > kFoodForget) {
+                f.mass = 0;
+                continue;
+            }
+            f.netPos = f.netPos + Vec3(f.vel.x, f.vel.y, f.vz) * h;
+            f.netPos.z = clamp(f.netPos.z, 0.0f, D);
+            f.pos = f.pos + (f.netPos - f.pos) * (1.0f - std::exp(-h / 0.15f));
+            f.spin += f.spinRate * h;
+            f.tumble += f.tumbleRate * h;
+            continue;
+        }
         Vec2 cur = current_.at(f.pos.xy());
         switch (f.state) {
             case FoodState::Floating:
@@ -179,6 +195,12 @@ void World::buildScents(float h) {
         if (c.foodTarget && c.scentCell >= 0 && c.scentCell < cells && scentOfCell_[c.scentCell] >= 0)
             scents_[scentOfCell_[c.scentCell]].eaters++;
     }
+    // The scent of food on other screens: fish here can follow it there.
+    for (Scent s : remoteScents_) {
+        s.remote = true;
+        s.cell = -1;
+        scents_.push_back(s);
+    }
 }
 
 bool World::forage(Creature& c, Vec2 mouth, float h, Vec3& foodAt) {
@@ -210,6 +232,13 @@ bool World::forage(Creature& c, Vec2 mouth, float h, Vec3& foodAt) {
             }
         }
         f = nullptr;
+        if (best && best->remote) {
+            // Food on another screen: nothing here to snap at, so head for it.
+            c.foodTarget = 0;
+            c.scentCell = -1;
+            foodAt = Vec3(best->at.x, best->at.y, best->z);
+            return true;
+        }
         if (best) {
             // The nearest piece it can eat in that patch or right next to it.
             int cx = best->cell % scentCols_, cy = best->cell / scentCols_;
@@ -242,7 +271,8 @@ bool World::forage(Creature& c, Vec2 mouth, float h, Vec3& foodAt) {
 }
 
 void World::tryBite(Creature& c, Vec2 mouth, float mouthZ, float reach) {
-    if (!c.foodTarget || c.biteCooldown > 0) return;
+    // A ghost never eats: its owner's copy does, on the owner's word.
+    if (c.ghost || !c.foodTarget || c.biteCooldown > 0) return;
     Food* f = findFoodMutable(c.foodTarget);
     if (!f) return;
     float d = length(f->pos.xy() - mouth);
@@ -251,17 +281,26 @@ void World::tryBite(Creature& c, Vec2 mouth, float mouthZ, float reach) {
 }
 
 void World::bite(Creature& c, Food& f) {
+    c.biteCooldown = 0.22f + c.length * 0.008f;
+    int cell = scentCellOf(f.pos.xy());
+    if (f.remote) {
+        // Another device's food: ask it. It decides how much, and breaks the crumbs off.
+        wants_.push_back({f.id, c.id, std::min(f.mass, c.sp.biteMg), c.sp.messiness});
+        if (cell >= 0 && cell < (int)activity_.size()) activity_[cell] += 1.0f;
+        return;
+    }
     float eaten = std::min(f.mass, c.sp.biteMg);
     f.mass -= eaten;
     ledger_.eaten += eaten;
     c.eatenMg += eaten;
     c.hunger = std::max(0.0f, c.hunger - eaten / c.sp.stomachMg);
-    c.biteCooldown = 0.22f + c.length * 0.008f;
-    int cell = scentCellOf(f.pos.xy());
     if (cell >= 0 && cell < (int)activity_.size()) activity_[cell] += 1.0f;
+    breakCrumbs(f, c.sp.messiness);
+    if (f.mass <= 0) c.foodTarget = 0;
+}
 
-    // A messy eater: part of what is left breaks off and scatters as crumbs.
-    float crumbs = f.mass * c.sp.messiness * rng_.range(0.6f, 1.0f);
+void World::breakCrumbs(Food& f, float messiness) {
+    float crumbs = f.mass * messiness * rng_.range(0.6f, 1.0f);
     if (crumbs > FoodConstants::kMinMg * 0.5f) {
         f.mass -= crumbs;
         int n = 2 + (int)(rng_.uniform() * 3.0f);
@@ -274,7 +313,7 @@ void World::bite(Creature& c, Food& f) {
                 continue;
             }
             Food k;
-            k.id = nextFoodId_++;
+            k.id = newFoodId();
             k.kind = FoodKind::Crumb;
             k.state = f.state == FoodState::Resting ? FoodState::Resting : FoodState::Sinking;
             k.seed = rng_.next();
@@ -295,7 +334,6 @@ void World::bite(Creature& c, Food& f) {
         ledger_.decomposed += f.mass;
         f.mass = 0;
     }
-    if (f.mass <= 0) c.foodTarget = 0;
 }
 
 }  // namespace dt

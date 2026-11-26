@@ -27,6 +27,10 @@ data class LaunchOptions(
     val fresh: Boolean = false,
     /** With [population], a floor of just these decorations (kind id to count) around the middle. */
     val decor: Map<String, Int>? = null,
+    /** Share the lagoon, or join one, through a relay as soon as it is up (tests across emulators). */
+    val share: ShareLaunch? = null,
+    /** Log every ownership message of a shared lagoon (to chase a bug across devices). */
+    val trace: Boolean = false,
 ) {
     val deterministic: Boolean get() = ci
 
@@ -45,6 +49,12 @@ data class LaunchOptions(
         const val FRESH = "tairoto.fresh"
         /** For example `coral_head:1,giant_clam:2`. */
         const val DECOR = "tairoto.decor"
+        /** `host` or `join`: share the lagoon through the relay, or join the one shared there. */
+        const val SHARE = "tairoto.share"
+        /** The relay, `host:port` (default 10.0.2.2:7171, the computer an emulator runs on). */
+        const val RELAY = "tairoto.relay"
+        const val SESSION = "tairoto.session"
+        const val TRACE = "tairoto.trace"
 
         /** Reads `kind:count,kind:count` of decorations; unknown or malformed entries are skipped. */
         fun parseDecor(text: String?): Map<String, Int>? {
@@ -84,7 +94,23 @@ data class LaunchOptions(
                 zoom = if (intent.hasExtra(ZOOM)) intent.getFloatExtra(ZOOM, 1f).takeIf { it in 0.5f..8f } else null,
                 fresh = intent.getBooleanExtra(FRESH, false),
                 decor = parseDecor(intent.getStringExtra(DECOR)),
+                share = ShareLaunch.parse(intent.getStringExtra(SHARE), intent.getStringExtra(RELAY), intent.getStringExtra(SESSION)),
+                trace = intent.getBooleanExtra(TRACE, false),
             )
+        }
+    }
+}
+
+/** A shared lagoon to start or join at launch. */
+data class ShareLaunch(val host: Boolean, val relay: String?, val session: String) {
+    companion object {
+        fun parse(mode: String?, relay: String?, session: String?): ShareLaunch? {
+            val host = when (mode?.trim()?.lowercase()) {
+                "host" -> true
+                "join" -> false
+                else -> return null
+            }
+            return ShareLaunch(host, relay?.trim()?.takeIf { it.isNotEmpty() }, session?.trim()?.takeIf { it.isNotEmpty() } ?: "lagoon")
         }
     }
 }

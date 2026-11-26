@@ -34,7 +34,7 @@ void World::setTank(const Tank& t) {
 }
 
 bool World::spawn(int64_t id, Visual visual, Locomotion loco, const SpeciesParams& sp, float length,
-                  uint32_t seed, Vec3 at) {
+                  uint32_t seed, Vec3 at, bool ghost) {
     if (find(id)) return false;
     Creature c;
     c.id = id;
@@ -62,6 +62,7 @@ bool World::spawn(int64_t id, Visual visual, Locomotion loco, const SpeciesParam
         c.stateTimer = 6.0f + hash01(seed ^ 0x5u) * 8.0f;
         c.target = Vec3(tank_.width * 0.5f, tank_.height * 0.5f, at.z);
     }
+    c.ghost = ghost;
     clampInside(c, c.length * 0.5f);
     if (loco == Locomotion::Glide || loco == Locomotion::Crawl || loco == Locomotion::Walk) initBottomDweller(c);
     creatures_.push_back(c);
@@ -160,6 +161,7 @@ void World::stepFixed(float h) {
             case Locomotion::Walk: stepCrab(c, h); break;
             default: stepFish(c, h); break;
         }
+        correctGhost(c, h);
     }
     settleFood();
 }

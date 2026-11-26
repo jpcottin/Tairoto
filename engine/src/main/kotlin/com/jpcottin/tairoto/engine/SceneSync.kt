@@ -12,13 +12,26 @@ import com.jpcottin.tairoto.world.TankSize
  * Keeps the native tank level with the session's scene. Holds the ids it has
  * already handed over, so every new scene becomes one small diff.
  */
-class SceneSync(private val tank: TankEngine) {
+class SceneSync(
+    private val tank: TankEngine,
+    /** In a shared lagoon, whether this device simulates a creature (or shows a ghost of another's). */
+    var simulatesHere: (EntityId) -> Boolean = { true },
+) {
     private val applied = HashSet<EntityId>()
     private val appliedDecor = HashMap<EntityId, DecorSpec>()
     private var size: TankSize? = null
 
     val appliedCount: Int get() = applied.size
     val appliedDecorCount: Int get() = appliedDecor.size
+
+    /** Forgets what was handed over, and empties the tank: the next [apply] starts from nothing. */
+    fun reset() {
+        tank.clear()
+        appliedDecor.keys.forEach { tank.removeDecor(it) }
+        applied.clear()
+        appliedDecor.clear()
+        size = null
+    }
 
     fun apply(scene: TankScene) {
         if (scene.size != size) {
@@ -45,7 +58,7 @@ class SceneSync(private val tank: TankEngine) {
         }
         diff.added.forEach { spec ->
             val species = SpeciesCatalog[spec.speciesId] ?: return@forEach
-            tank.spawn(spec, species)
+            tank.spawn(spec, species, ghost = !simulatesHere(spec.id))
             applied += spec.id
         }
     }

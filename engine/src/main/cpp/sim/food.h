@@ -25,6 +25,11 @@ struct Food {
     float tumble = 0, tumbleRate = 0;
     uint32_t seed = 0;
 
+    // Food another device owns: shown and smelled here, eaten by asking it.
+    bool remote = false;
+    float seen = 0;        // world time of its owner's last word
+    Vec3 netPos;           // where the owner says it is, dead-reckoned forward
+
     /** Radius on the table plane, in mm, from the mass. */
     float radius() const {
         switch (kind) {
@@ -41,6 +46,16 @@ struct FoodLedger {
     double dropped = 0;
     double eaten = 0;
     double decomposed = 0;
+    double sent = 0;       // handed to another device with the food
+    double received = 0;   // taken over from another device
+};
+
+/** A bite this device's creature took at food another device owns: that device decides. */
+struct BiteWant {
+    uint32_t food = 0;
+    int64_t creature = 0;
+    float wantMg = 0;
+    float messiness = 0;
 };
 
 /** A patch of food and how strongly it draws fish: it grows with the food and with the fish feeding there. */
@@ -52,6 +67,8 @@ struct Scent {
     int eaters = 0;
     float activity = 0;   // recent bites, fading
     int cell = -1;
+
+    bool remote = false;  // the scent of another device's food: no pieces here to find
 
     float strength(bool bottomFeeder) const {
         float m = waterMass + (bottomFeeder ? sandMass : 0.0f);

@@ -4,6 +4,8 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
+    // A fake simulation and a lagoon of fake devices, shared with the other modules' tests.
+    `java-test-fixtures`
 }
 
 kotlin {

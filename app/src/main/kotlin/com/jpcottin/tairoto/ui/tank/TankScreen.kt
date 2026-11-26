@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.jpcottin.tairoto.engine.EngineStats
+import com.jpcottin.tairoto.ui.share.SharePill
 import com.jpcottin.tairoto.ui.theme.TairotoTheme
 import com.jpcottin.tairoto.ui.theme.GlassBorder
 import com.jpcottin.tairoto.ui.theme.Ocean
@@ -78,6 +79,7 @@ fun TankScreen(
     onOpenSettings: () -> Unit,
     onOpenSpecies: () -> Unit,
     onOpenDecor: () -> Unit = {},
+    onOpenShare: () -> Unit = {},
 ) {
     val vm by rememberUpdatedState(viewModel)
     val handler = remember {
@@ -142,13 +144,21 @@ fun TankScreen(
                 onAdd = onOpenSpecies,
                 onSettings = onOpenSettings,
                 onArrange = { vm.setEditing(true) },
+                onShare = onOpenShare,
             )
         }
     }
 }
 
 @Composable
-fun TankHud(state: TankUiState, onAdd: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier, onArrange: () -> Unit = {}) {
+fun TankHud(
+    state: TankUiState,
+    onAdd: () -> Unit,
+    onSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+    onArrange: () -> Unit = {},
+    onShare: () -> Unit = {},
+) {
     Box(modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(14.dp)) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
@@ -166,8 +176,13 @@ fun TankHud(state: TankUiState, onAdd: () -> Unit, onSettings: () -> Unit, modif
                 }
             }
             // Below the bar, never beside it: a long GPU name must not push the buttons away.
-            AnimatedVisibility(state.showStats, enter = fadeIn(), exit = fadeOut()) {
-                StatsPanel(state.stats, state.tier, state.gpu, state.thermalHeadroom, state.thermalIgnored)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Box(Modifier.weight(1f)) {
+                    androidx.compose.animation.AnimatedVisibility(state.showStats, enter = fadeIn(), exit = fadeOut()) {
+                        StatsPanel(state.stats, state.tier, state.gpu, state.thermalHeadroom, state.thermalIgnored)
+                    }
+                }
+                SharePill(state.share, onShare, Modifier.padding(start = 8.dp))
             }
         }
         ZoomChip(state.zoom, Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp))

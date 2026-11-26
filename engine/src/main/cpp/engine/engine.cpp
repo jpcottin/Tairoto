@@ -81,8 +81,49 @@ void Engine::setDeterministic(bool on, uint64_t seed) {
     });
 }
 
-void Engine::spawn(int64_t id, Visual v, Locomotion l, const SpeciesParams& sp, float length, uint32_t seed, Vec3 at) {
-    post([=] { world_.spawn(id, v, l, sp, length, seed, at); });
+void Engine::spawn(int64_t id, Visual v, Locomotion l, const SpeciesParams& sp, float length, uint32_t seed, Vec3 at,
+                   bool ghost) {
+    post([=] { world_.spawn(id, v, l, sp, length, seed, at, ghost); });
+}
+
+void Engine::setFoodSlot(int slot) { post([this, slot] { world_.setFoodSlot(slot); }); }
+
+NetOut Engine::exchange(const NetIn& in) {
+    NetOut out;
+    runOnThread([this, &in, &out] {
+        for (int64_t id : in.release) {
+            NetState last;
+            if (world_.release(id, &last)) out.released.push_back(last);
+        }
+        for (auto& [s, has] : in.take) world_.takeOver(s.id, has ? &s : nullptr);
+        for (auto& [s, age] : in.ghosts) world_.ghostUpdate(s, age);
+        for (auto& [f, age] : in.ghostFood) world_.ghostFood(f, age);
+        for (const Food& f : in.adopt) world_.adoptFood(f);
+        for (uint32_t id : in.releaseFood) {
+            Food last;
+            if (world_.releaseFood(id, &last)) out.releasedFood.push_back(last);
+        }
+        for (const BiteWant& b : in.bites) out.granted.push_back(world_.remoteBite(b.food, b.wantMg, b.messiness));
+        for (auto& [id, mg] : in.fed) world_.credit(id, mg);
+        if (in.hasScents) world_.setRemoteScents(in.scents);
+        for (Vec2 at : in.taps) {
+            world_.startle(at);
+            Ripple& r = ripples_[nextRipple_];
+            nextRipple_ = (nextRipple_ + 1) % Renderer::kMaxRipples;
+            r.at = at;
+            r.start = world_.time();
+            r.amplitude = 1.0f;
+        }
+        for (const Creature& c : world_.creatures())
+            if (!c.ghost) out.owned.push_back(World::stateOf(c));
+        for (const Food& f : world_.food())
+            if (!f.remote && f.mass > 0) out.food.push_back(f);
+        out.scents = world_.ownScents();
+        out.wants = world_.takeWants();
+        out.ledger = world_.ledger();
+        out.inWater = world_.foodMass();
+    });
+    return out;
 }
 
 void Engine::remove(int64_t id) { post([this, id] { world_.remove(id); }); }
