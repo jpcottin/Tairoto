@@ -9,7 +9,7 @@ namespace dt {
 struct CameraParams {
     Vec2 center{100, 150};
     float pxPerMm = 16.5f;
-    float camHeight = 360.0f;
+    float camHeight = 180.0f;
     Vec2 origin{100, 150};   // parallax origin; equals center on a device alone
     Vec2 outSize{1080, 2400};
 };

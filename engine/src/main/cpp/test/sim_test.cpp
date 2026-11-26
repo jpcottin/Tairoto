@@ -180,7 +180,7 @@ TEST(World, AStartleSpreadsAsAWave) {
     World w;
     w.setTank({400, 400, 100});
     w.spawn(1, Visual::GreenChromis, Locomotion::Swim, SpeciesParams::greenChromis(), 22, 1, Vec3(200, 200, 40));
-    w.spawn(2, Visual::GreenChromis, Locomotion::Swim, SpeciesParams::greenChromis(), 22, 2, Vec3(280, 200, 40));
+    w.spawn(2, Visual::GreenChromis, Locomotion::Swim, SpeciesParams::greenChromis(), 22, 2, Vec3(235, 200, 40));
     w.startle({200, 200});
     EXPECT_LT(w.find(1)->startleDelay, w.find(2)->startleDelay);
 }

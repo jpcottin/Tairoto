@@ -132,7 +132,7 @@ fun TankHud(state: TankUiState, onAdd: () -> Unit, onSettings: () -> Unit, modif
             }
             // Below the bar, never beside it: a long GPU name must not push the buttons away.
             AnimatedVisibility(state.showStats, enter = fadeIn(), exit = fadeOut()) {
-                StatsPanel(state.stats, state.tier, state.gpu)
+                StatsPanel(state.stats, state.tier, state.gpu, state.thermalHeadroom)
             }
         }
         ZoomChip(state.zoom, Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp))
@@ -217,12 +217,16 @@ private fun GlassIconButton(onClick: () -> Unit, label: String, tag: String, ico
 }
 
 @Composable
-fun StatsPanel(stats: EngineStats, tier: QualityTier, gpu: String) {
+fun StatsPanel(stats: EngineStats, tier: QualityTier, gpu: String, thermalHeadroom: Float? = null) {
     Surface(color = Ocean.GlassStrong, border = GlassBorder, shape = MaterialTheme.shapes.small, modifier = Modifier.widthIn(max = 420.dp).testTag(TankTags.STATS).semantics(mergeDescendants = true) {}) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Text(String.format(Locale.US, "%.0f fps  ·  %.1f ms", stats.fps, stats.workMs), style = StatsText)
             Text("${tier.label}  ·  ${stats.sceneWidth}×${stats.sceneHeight} → ${stats.width}×${stats.height}", style = StatsText)
             Text("${stats.drawn}/${stats.creatures} drawn  ·  ${stats.frames} frames", style = StatsText)
+            Text(
+                "thermal headroom " + (thermalHeadroom?.let { String.format(Locale.US, "%.2f", it) } ?: "n/a"),
+                style = StatsText,
+            )
             if (gpu.isNotEmpty()) Text(gpu, style = StatsText.copy(color = Ocean.Mist), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }

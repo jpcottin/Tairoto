@@ -60,6 +60,8 @@ data class TankUiState(
     val hintVisible: Boolean = true,
     val vulkanUnsupported: Boolean = false,
     val gpu: String = "",
+    /** Thermal headroom as last read (1.0 = about to throttle), or null when the device does not say. */
+    val thermalHeadroom: Float? = null,
 )
 
 /**
@@ -87,6 +89,7 @@ class TankViewModel(
     private var settings = AppSettings()
     private var statsJob: Job? = null
     private var lastTap: Pair<Long, Vec2>? = null
+    private var firstRenderMs: Long? = null
 
     init {
         if (options.deterministic) engine.setDeterministic(true, options.seed ?: 7L)
@@ -261,8 +264,13 @@ class TankViewModel(
     fun onPerfSample(stats: EngineStats, nowMs: Long) {
         if (options.quality != null || settings.quality !is QualityMode.Auto) return
         if (stats.vulkan != VulkanState.RENDERING || stats.fps <= 0f) return
+        val headroom = signals.thermalHeadroom()
+        state.update { it.copy(thermalHeadroom = headroom) }
+        // The first seconds include pipeline creation and shader warm-up: not a verdict on the device.
+        val start = firstRenderMs ?: nowMs.also { firstRenderMs = it }
+        if (nowMs - start < WARMUP_MS) return
         val before = governor.tier
-        val sample = PerfSample(nowMs, stats.fps, signals.refreshRateHz(), stats.workMs, signals.thermalHeadroom())
+        val sample = PerfSample(nowMs, stats.fps, signals.refreshRateHz(), stats.workMs, headroom)
         if (governor.onSample(sample) != before) applyQuality()
     }
 
@@ -274,6 +282,7 @@ class TankViewModel(
         const val HINT_MS = 7_000L
         const val STATS_PERIOD_MS = 500L
         const val GOVERNOR_PERIOD_MS = 2_000L
+        const val WARMUP_MS = 6_000L
         const val DOUBLE_TAP_MS = 300L
         const val DOUBLE_TAP_PX = 60f
     }

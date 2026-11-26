@@ -35,11 +35,11 @@ data class TankSize(val widthMm: Float, val heightMm: Float, val depthMm: Float)
 
     companion object {
         /** The sand is this far below the surface on every device, so fish keep one size everywhere. */
-        const val DEFAULT_DEPTH_MM = 110f
+        const val DEFAULT_DEPTH_MM = 55f
 
         /** Tank sides are rounded to this so a saved tank reads as a sensible size. */
         private const val ROUND_TO_MM = 10f
-        private const val MIN_SIDE_MM = 160f
+        private const val MIN_SIDE_MM = 80f
         private const val MAX_SIDE_MM = 1200f
 
         /**
@@ -96,6 +96,6 @@ data class DepthProjection(val cameraHeightMm: Float) {
     fun scaleAt(depthMm: Float): Float = cameraHeightMm / (cameraHeightMm + depthMm.coerceAtLeast(0f))
 
     companion object {
-        val DEFAULT = DepthProjection(cameraHeightMm = 360f)
+        val DEFAULT = DepthProjection(cameraHeightMm = 180f)
     }
 }

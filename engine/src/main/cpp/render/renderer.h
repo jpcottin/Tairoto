@@ -96,9 +96,12 @@ private:
     void destroyOffscreen();
 
     bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buf, VkDeviceMemory& mem, void** map);
+    bool createDeviceBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buf, VkDeviceMemory& mem);
+    /** Records the mesh into the frame's buffers through the command stream (see inlineUpload_). */
+    void recordInlineUpload(VkCommandBuffer cb, PerFrame& f, const Mesh& mesh);
     uint32_t findMemoryType(uint32_t typeBits, VkMemoryPropertyFlags props);
     VkFormat pickSceneFormat();
-    void record(PerFrame& f, uint32_t imageIndex, uint32_t indexCount, int motes);
+    void record(PerFrame& f, uint32_t imageIndex, const Mesh& mesh, int motes);
 
     ANativeWindow* window_ = nullptr;
     VkInstance instance_ = VK_NULL_HANDLE;
@@ -151,6 +154,12 @@ private:
     bool deviceBroken_ = false;
     bool swapchainReady_ = false;
     bool unsupported_ = false;
+    // On the emulator's virtualised GPU (GFXStream), vertex data written
+    // through mapped memory was sometimes drawn torn, even with the queue idle
+    // between frames: the meshes were checked correct on the CPU side. There
+    // the per-frame vertices and indices travel inside the command buffer
+    // (vkCmdUpdateBuffer into GPU-local buffers) instead.
+    bool inlineUpload_ = false;
 };
 
 }  // namespace dt

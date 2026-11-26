@@ -191,7 +191,17 @@ class TankViewModelTest {
         val slow = EngineStats(vulkan = VulkanState.RENDERING, fps = 35f, workMs = 9f)
         vm.onPerfSample(slow, 0)
         vm.onPerfSample(slow, 2_000)
+        assertEquals("slow start-up frames are forgiven", QualityTier.HIGH, engine.lastQuality)
+        vm.onPerfSample(slow, 8_000)
+        vm.onPerfSample(slow, 10_000)
         assertEquals(QualityTier.LOW, engine.lastQuality)
+    }
+
+    @Test fun `the overlay shows the thermal headroom the governor sees`() = runTest(dispatcher) {
+        val vm = vm()
+        signals.headroom = 0.42f
+        vm.onPerfSample(EngineStats(vulkan = VulkanState.RENDERING, fps = 60f), 0)
+        assertEquals(0.42f, vm.ui.value.thermalHeadroom!!, 1e-6f)
     }
 
     @Test fun `a fixed quality ignores the governor`() = runTest(dispatcher) {

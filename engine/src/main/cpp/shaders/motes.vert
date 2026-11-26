@@ -23,10 +23,10 @@ void main() {
     float D = F.tank.z;
     float z = P.layer < 0.5 ? mix(D * 0.5, D * 0.96, h3) : mix(D * 0.03, D * 0.5, h3);
     float t = timeS();
-    vec2 drift = vec2(0.9, 0.35) * (0.5 + h4) * t + vec2(sin(t * 0.3 + h5 * 6.0), cos(t * 0.23 + h4 * 6.0)) * 2.0;
+    vec2 drift = vec2(0.45, 0.18) * (0.5 + h4) * t + vec2(sin(t * 0.3 + h5 * 6.0), cos(t * 0.23 + h4 * 6.0)) * 1.0;
     vec2 p = mod(vec2(h1 * F.tank.x, h2 * F.tank.y) + drift, F.tank.xy);
 
-    float size = mix(0.18, 0.55, h5 * h5);
+    float size = mix(0.09, 0.28, h5 * h5);
     float px = max(size * F.cam.z * depthScale(z), 1.3);
     vec2 s = worldToScreen(p, z) + cornerOffsets[corner] * px;
     gl_Position = vec4(s / F.outSize.xy * 2.0 - 1.0, 0.0, 1.0);

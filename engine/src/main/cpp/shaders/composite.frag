@@ -10,7 +10,8 @@ layout(set = 1, binding = 0) uniform sampler2D scene;
 layout(location = 0) out vec4 outColor;
 
 // Gradient of the surface height at p (mm), as d(height)/dx, d(height)/dy.
-vec2 surfaceSlope(vec2 p, float t) {
+vec2 surfaceSlope(vec2 p0, float t) {
+    vec2 p = p0 * 2.0;  // the surface was tuned for a world twice as large
     vec2 g = vec2(0.0);
     // A few long swells.
     const vec3 waves[5] = vec3[5](
@@ -34,12 +35,12 @@ vec2 surfaceSlope(vec2 p, float t) {
         if (r.w <= 0.0) continue;
         float age = t - r.z;
         if (age < 0.0 || age > 4.0) continue;
-        vec2 d = p - r.xy;
+        vec2 d = p0 - r.xy;
         float dist = length(d);
-        float front = 70.0 * age;
+        float front = 35.0 * age;
         float x = dist - front;
-        float envelope = exp(-x * x / (2.0 * 6.0 * 6.0)) * exp(-age * 1.1) * r.w;
-        float k = TAU / 5.5;
+        float envelope = exp(-x * x / (2.0 * 3.0 * 3.0)) * exp(-age * 1.1) * r.w;
+        float k = TAU / 2.75;
         float slope = envelope * k * cos(x * k) * 0.22;
         if (dist > 1e-3) g += d / dist * slope;
     }
@@ -79,7 +80,7 @@ void main() {
     vec3 L = normalize(F.sun.xyz);
     vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
     float ndh = max(dot(n, H), 0.0);
-    float cluster = smoothstep(0.45, 0.8, vnoise(p * 0.05 + t * 0.07));
+    float cluster = smoothstep(0.45, 0.8, vnoise(p * 0.1 + t * 0.07));
     float glint = pow(ndh, 1400.0) * 9.0 * (0.3 + cluster);
     color += srgb(vec3(1.0, 0.97, 0.88)) * glint * F.sun.w;
 

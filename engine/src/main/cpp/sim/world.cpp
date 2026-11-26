@@ -106,7 +106,7 @@ void World::startle(Vec2 at, float strength) {
         float d = length(c.pos.xy() - at);
         float radius = c.loco == Locomotion::Paddle
                            ? c.length * 0.9f
-                           : (35.0f + 70.0f * c.sp.shyness) * strength;
+                           : (18.0f + 35.0f * c.sp.shyness) * strength;
         if (d > radius) continue;
         c.startleFrom = at;
         c.startleDelay = d / 420.0f;  // the fright spreads outwards as a wave
@@ -116,7 +116,7 @@ void World::startle(Vec2 at, float strength) {
 
 void World::stepFixed(float h) {
     time_ += h;
-    float cell = 30.0f;
+    float cell = 15.0f;
     for (auto& c : creatures_)
         if (c.loco == Locomotion::Swim) cell = std::max(cell, c.length * 5.0f);
     grid_.rebuild(creatures_, tank_, cell);
@@ -169,7 +169,7 @@ void World::stepFish(Creature& c, float h) {
     int n = 0;
     Vec2 avoid;
     const float sepR = 1.3f * L, aliR = 4.0f * L, cohR = 5.0f * L;
-    grid_.query(p, std::max(cohR, 60.0f), [&](int i) {
+    grid_.query(p, std::max(cohR, 30.0f), [&](int i) {
         const Creature& o = creatures_[i];
         if (o.id == c.id) return;
         Vec2 d = o.pos.xy() - p;
@@ -204,12 +204,12 @@ void World::stepFish(Creature& c, float h) {
     }
     // A loose pull toward where the school is heading keeps it roaming the whole tank.
     Vec2 toAttractor = schoolAttractor(c.visual, time_) - p;
-    steer += normalize(toAttractor) * (0.35f * c.sp.schooling * smoothstep(10.0f, 90.0f, length(toAttractor)));
+    steer += normalize(toAttractor) * (0.35f * c.sp.schooling * smoothstep(5.0f, 45.0f, length(toAttractor)));
     // Wandering: each fish has its own slowly changing whim.
     float whim = noise1(c.age * 0.35f + c.wanderSeed, c.seed) * 1.1f;
     steer += rotate(fwd, whim) * 0.55f;
     steer += avoid;
-    float margin = std::max(3.0f * L, 18.0f);
+    float margin = std::max(3.0f * L, 9.0f);
     steer += wallAvoidance(p, fwd, 2.5f * L, margin) * 1.6f;
 
     bool frightened = false;

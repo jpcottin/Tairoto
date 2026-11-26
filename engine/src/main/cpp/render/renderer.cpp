@@ -160,6 +160,8 @@ bool Renderer::ensureDevice() {
     VkPhysicalDeviceProperties props;
     vkGetPhysicalDeviceProperties(phys_, &props);
     gpuName_ = props.deviceName;
+    inlineUpload_ = gpuName_.find("GFXStream") != std::string::npos;
+    if (inlineUpload_) DT_LOGI("virtualised GPU: mesh uploads go through the command stream");
     DT_LOGI("GPU: %s (Vulkan %d.%d.%d)", props.deviceName, VK_VERSION_MAJOR(props.apiVersion),
             VK_VERSION_MINOR(props.apiVersion), VK_VERSION_PATCH(props.apiVersion));
 
@@ -222,6 +224,41 @@ bool Renderer::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffe
     return true;
 }
 
+bool Renderer::createDeviceBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buf, VkDeviceMemory& mem) {
+    VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bci.size = size;
+    bci.usage = usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VK_CHECK(vkCreateBuffer(device_, &bci, nullptr, &buf));
+    VkMemoryRequirements req;
+    vkGetBufferMemoryRequirements(device_, buf, &req);
+    VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    mai.allocationSize = req.size;
+    mai.memoryTypeIndex = findMemoryType(req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (mai.memoryTypeIndex == UINT32_MAX) mai.memoryTypeIndex = findMemoryType(req.memoryTypeBits, 0);
+    VK_CHECK(vkAllocateMemory(device_, &mai, nullptr, &mem));
+    VK_CHECK(vkBindBufferMemory(device_, buf, mem, 0));
+    return true;
+}
+
+void Renderer::recordInlineUpload(VkCommandBuffer cb, PerFrame& f, const Mesh& mesh) {
+    auto upload = [&](VkBuffer dst, const void* data, size_t bytes) {
+        // vkCmdUpdateBuffer takes at most 65536 bytes, in multiples of 4.
+        const auto* p = static_cast<const uint8_t*>(data);
+        for (size_t off = 0; off < bytes; off += 65536) {
+            size_t n = std::min<size_t>(65536, bytes - off);
+            vkCmdUpdateBuffer(cb, dst, off, n, p + off);
+        }
+    };
+    upload(f.vbo, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex));
+    upload(f.ibo, mesh.indices.data(), mesh.indices.size() * sizeof(uint32_t));
+    VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    mb.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT;
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0, 1, &mb, 0, nullptr,
+                         0, nullptr);
+}
+
 bool Renderer::createDescriptors() {
     VkDescriptorSetLayoutBinding ub{};
     ub.binding = 0;
@@ -271,8 +308,13 @@ bool Renderer::createFrameBuffers(uint32_t vertexCap, uint32_t indexCap) {
     indexCap_ = indexCap;
     for (auto& f : frames_) {
         if (!createBuffer(sizeof(FrameUniforms), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, f.ubo, f.uboMem, &f.uboMap)) return false;
-        if (!createBuffer((VkDeviceSize)vertexCap * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, f.vbo, f.vboMem, &f.vboMap)) return false;
-        if (!createBuffer((VkDeviceSize)indexCap * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, f.ibo, f.iboMem, &f.iboMap)) return false;
+        if (inlineUpload_) {
+            if (!createDeviceBuffer((VkDeviceSize)vertexCap * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, f.vbo, f.vboMem)) return false;
+            if (!createDeviceBuffer((VkDeviceSize)indexCap * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, f.ibo, f.iboMem)) return false;
+        } else {
+            if (!createBuffer((VkDeviceSize)vertexCap * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, f.vbo, f.vboMem, &f.vboMap)) return false;
+            if (!createBuffer((VkDeviceSize)indexCap * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, f.ibo, f.iboMem, &f.iboMap)) return false;
+        }
 
         if (!f.set) {
             VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
@@ -751,11 +793,13 @@ void Renderer::checkResize() {
 
 // ================================================================ drawing
 
-void Renderer::record(PerFrame& f, uint32_t imageIndex, uint32_t indexCount, int motes) {
+void Renderer::record(PerFrame& f, uint32_t imageIndex, const Mesh& mesh, int motes) {
     VkCommandBuffer cb = f.cmd;
+    const uint32_t indexCount = (uint32_t)mesh.indices.size();
     VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(cb, &bi);
+    if (inlineUpload_ && indexCount > 0) recordInlineUpload(cb, f, mesh);
 
     // ---- scene
     VkClearValue clear{};
@@ -888,7 +932,7 @@ bool Renderer::draw(const FrameInput& in) {
     u.sun[3] = 1.0f;
     u.misc[0] = in.tilt.x;
     u.misc[1] = in.tilt.y;
-    u.misc[2] = qs.refraction ? 5.5f : 0.0f;
+    u.misc[2] = qs.refraction ? 2.8f : 0.0f;
     u.misc[3] = 1.08f;
     for (int i = 0; i < kMaxRipples; i++) {
         const Ripple& rp = in.ripples[i];
@@ -898,14 +942,30 @@ bool Renderer::draw(const FrameInput& in) {
         u.ripples[i][3] = rp.amplitude;
     }
     std::memcpy(f.uboMap, &u, sizeof(u));
-    if (!mesh.vertices.empty()) {
+    VkMappedMemoryRange ranges[3]{};
+    uint32_t nRanges = 0;
+    auto flush = [&](VkDeviceMemory mem) {
+        VkMappedMemoryRange& r = ranges[nRanges++];
+        r.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+        r.memory = mem;
+        r.offset = 0;
+        r.size = VK_WHOLE_SIZE;
+    };
+    flush(f.uboMem);
+    if (!mesh.vertices.empty() && !inlineUpload_) {
         std::memcpy(f.vboMap, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex));
         std::memcpy(f.iboMap, mesh.indices.data(), mesh.indices.size() * sizeof(uint32_t));
+        flush(f.vboMem);
+        flush(f.iboMem);
     }
+    // Host-coherent memory needs no flush by the spec, but a virtualised GPU
+    // (gfxstream on the emulator) was seen drawing with last frame's vertices
+    // without one: a flush is cheap and always valid.
+    vkFlushMappedMemoryRanges(device_, nRanges, ranges);
 
     vkResetFences(device_, 1, &f.inFlight);
     vkResetCommandBuffer(f.cmd, 0);
-    record(f, imageIndex, (uint32_t)mesh.indices.size(), qs.motesPerLayer);
+    record(f, imageIndex, mesh, qs.motesPerLayer);
 
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};

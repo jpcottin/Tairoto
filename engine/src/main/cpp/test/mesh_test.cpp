@@ -179,3 +179,31 @@ TEST(Mesh, TheBodyWidthMatchesTheSpecies) {
     }
     EXPECT_NEAR(25 * SpeciesParams::greenChromis().bodyWidth, widest, 0.6f);
 }
+
+TEST(Mesh, NoTriangleIsEverStretchedAcrossTheTank) {
+    // A swimming school seen for two minutes: every chromis triangle stays fish-sized.
+    World w;
+    w.setTank({200, 300, 110});
+    w.setSeed(3);
+    Rng r(3);
+    for (int i = 0; i < 30; i++)
+        w.spawn(i + 1, Visual::GreenChromis, Locomotion::Swim, SpeciesParams::greenChromis(), r.range(27, 35), r.next(),
+                Vec3(r.range(40, 160), r.range(40, 260), r.range(20, 60)));
+    CameraParams cam = cameraOver(w);
+    cam.pxPerMm = 4;  // everything in view
+    Mesh m;
+    MeshBuilder b;
+    for (int s = 0; s < 120 * 60; s++) {
+        w.step(1.0f / 60.0f);
+        if (s % 5) continue;
+        if (s % 600 == 0) w.startle({100, 150});
+        b.build(w, cam, m);
+        for (size_t k = 0; k < m.indices.size(); k += 3) {
+            const Vertex* v[3] = {&m.vertices[m.indices[k]], &m.vertices[m.indices[k + 1]], &m.vertices[m.indices[k + 2]]};
+            for (int e = 0; e < 3; e++) {
+                float d = length(Vec2(v[e]->x, v[e]->y) - Vec2(v[(e + 1) % 3]->x, v[(e + 1) % 3]->y));
+                ASSERT_LT(d, 20.0f) << "step " << s << " part " << partOf(*v[e]) << " u " << v[e]->u;
+            }
+        }
+    }
+}

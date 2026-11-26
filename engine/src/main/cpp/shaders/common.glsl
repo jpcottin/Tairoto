@@ -104,13 +104,13 @@ float causticEdge(vec2 p, float t) {
 }
 
 float causticsAt(vec2 pmm, float t, int layers) {
-    vec2 p = pmm / 26.0;
+    vec2 p = pmm / 13.0;
     // Large-scale warp so the cells drift, small-scale warp so their edges curve.
     vec2 w = vec2(vnoise(p * 0.7 + t * 0.05), vnoise(p * 0.7 - t * 0.04 + 17.0));
     p += (w - 0.5) * 0.9;
     p += (vec2(vnoise(p * 2.3 + t * 0.12), vnoise(p * 2.3 - t * 0.1 + 5.0)) - 0.5) * 0.32;
     // Where the surface focuses light more, lines are brighter and sharper.
-    float focus = smoothstep(0.2, 0.8, vnoise(pmm * 0.012 + vec2(t * 0.02, -t * 0.015)));
+    float focus = smoothstep(0.2, 0.8, vnoise(pmm * 0.024 + vec2(t * 0.02, -t * 0.015)));
     float k = mix(16.0, 34.0, focus);
     float gain = mix(0.45, 1.25, focus);
     float e1 = causticEdge(p, t * 0.55);
@@ -124,7 +124,7 @@ float causticsAt(vec2 pmm, float t, int layers) {
 
 /** Light absorbed by the water on its way down to depth z and back up (red goes first). */
 vec3 waterTransmittance(float z) {
-    return exp(-vec3(0.0034, 0.0011, 0.0006) * 2.0 * z);
+    return exp(-vec3(0.0068, 0.0022, 0.0012) * 2.0 * z);
 }
 
 vec3 waterColor() { return srgb(vec3(0.02, 0.3, 0.55)); }
@@ -132,6 +132,6 @@ vec3 waterColor() { return srgb(vec3(0.02, 0.3, 0.55)); }
 /** Absorption plus in-scattered blue-green: what a colour looks like seen through z mm of water. */
 vec3 throughWater(vec3 c, float z) {
     vec3 t = waterTransmittance(z);
-    float scatter = 1.0 - exp(-0.0035 * z);
+    float scatter = 1.0 - exp(-0.007 * z);
     return c * t + waterColor() * scatter * 0.55 * F.sun.w;
 }

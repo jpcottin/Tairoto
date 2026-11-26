@@ -8,7 +8,8 @@
 
 layout(location = 0) out vec4 outColor;
 
-float rippleHeight(vec2 p) {
+float rippleHeight(vec2 q0) {
+    vec2 p = q0 * 2.0;  // features were drawn for a world twice as large
     // Ripples run across the tank and meander, with their strength in patches.
     vec2 warp = vec2(fbm(p * 0.018), fbm(p * 0.018 + 9.7)) - 0.5;
     vec2 q = p + warp * 26.0;
@@ -25,7 +26,8 @@ struct Pebble {
     float mask;   // 1 on the pebble
 };
 
-Pebble pebbles(vec2 p) {
+Pebble pebbles(vec2 q0) {
+    vec2 p = q0 * 2.0;
     Pebble r;
     r.h = 0.0;
     r.color = vec3(0.0);
@@ -74,7 +76,7 @@ void main() {
     float t = timeS();
 
     // Surface normal from the height field (y grows down the screen).
-    float e = 0.35;
+    float e = 0.18;
     float h0 = heightAt(p);
     float hx = heightAt(p + vec2(e, 0.0));
     float hy = heightAt(p + vec2(0.0, e));
@@ -85,13 +87,14 @@ void main() {
     // Sand: two tones in drifts, patches of green algae, grains light and dark.
     vec3 sandA = srgb(vec3(0.95, 0.88, 0.72));
     vec3 sandB = srgb(vec3(0.84, 0.75, 0.58));
-    vec3 albedo = mix(sandA, sandB, smoothstep(0.35, 0.75, fbm(p * 0.04)));
-    float algae = smoothstep(0.6, 0.78, fbm(p * 0.009 + 7.0));
+    vec2 pf = p * 2.0;
+    vec3 albedo = mix(sandA, sandB, smoothstep(0.35, 0.75, fbm(pf * 0.04)));
+    float algae = smoothstep(0.6, 0.78, fbm(pf * 0.009 + 7.0));
     albedo = mix(albedo, srgb(vec3(0.42, 0.5, 0.33)), algae * 0.45);
-    vec2 grain = floor(p * 2.4);
+    vec2 grain = floor(pf * 2.4);
     float gk = hash12(grain);
     albedo *= gk > 0.96 ? 0.8 : (gk < 0.03 ? 1.15 : 1.0);
-    albedo *= 0.94 + 0.12 * vnoise(p * 4.1);
+    albedo *= 0.94 + 0.12 * vnoise(pf * 4.1);
     // Crests catch the light, troughs gather darker grains.
     albedo *= 0.9 + 0.18 * smoothstep(0.1, 0.5, rippleHeight(p));
 
@@ -114,7 +117,7 @@ void main() {
         caustic = vec3(c);
     }
     // Big slow patches of brighter and darker water above.
-    float cloud = mix(0.75, 1.15, fbm(p * 0.006 + t * 0.012));
+    float cloud = mix(0.75, 1.15, fbm(pf * 0.006 + t * 0.012));
 
     vec3 sunLight = srgb(vec3(1.0, 0.97, 0.9)) * F.sun.w * cloud;
     vec3 light = sunLight * diffuse * (0.62 + 0.95 * caustic) + srgb(vec3(0.4, 0.62, 0.75)) * 0.3;
@@ -122,7 +125,7 @@ void main() {
 
     // Darker in the corners where the glass meets the sand.
     float wall = min(min(p.x, p.y), min(F.tank.x - p.x, F.tank.y - p.y));
-    color *= mix(0.35, 1.0, smoothstep(-4.0, 22.0, wall));
+    color *= mix(0.35, 1.0, smoothstep(-2.0, 11.0, wall));
 
     outColor = vec4(throughWater(color, D), 1.0);
 }

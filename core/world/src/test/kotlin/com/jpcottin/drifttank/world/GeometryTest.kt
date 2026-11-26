@@ -36,7 +36,7 @@ class GeometryTest {
     }
 
     @Test fun `tank sides stay within sensible limits`() {
-        assertEquals(160f, TankSize.forScreen(ScreenMm(10f, 10f)).widthMm, 0f)
+        assertEquals(80f, TankSize.forScreen(ScreenMm(10f, 10f)).widthMm, 0f)
         assertEquals(1200f, TankSize.forScreen(ScreenMm(2000f, 2000f)).widthMm, 0f)
     }
 
