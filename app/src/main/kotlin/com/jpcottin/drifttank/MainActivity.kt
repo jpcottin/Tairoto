@@ -3,6 +3,7 @@ package com.jpcottin.drifttank
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.hardware.display.DisplayManager
+import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.os.SystemClock
@@ -118,4 +119,9 @@ private class AndroidSignals(private val context: Context) : DeviceSignals {
     private val displays = context.getSystemService(DisplayManager::class.java)
     override fun refreshRateHz(): Float = displays?.getDisplay(Display.DEFAULT_DISPLAY)?.refreshRate ?: 60f
     override fun nowMs(): Long = SystemClock.uptimeMillis()
+    override val thermalIsSimulated: Boolean = isEmulator()
+
+    private fun isEmulator(): Boolean =
+        Build.HARDWARE in setOf("ranchu", "goldfish", "cutf_cvm") ||
+            Build.PRODUCT.startsWith("sdk_") || (Build.FINGERPRINT.contains("generic") && Build.MODEL.contains("sdk"))
 }

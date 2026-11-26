@@ -45,6 +45,12 @@ interface DeviceSignals {
     fun thermalHeadroom(): Float?
     fun refreshRateHz(): Float
     fun nowMs(): Long
+
+    /**
+     * True on an emulator: its thermal HAL is simulated (a fixed headroom,
+     * unrelated to how hot the host really runs), so it must not steer quality.
+     */
+    val thermalIsSimulated: Boolean get() = false
 }
 
 data class TankUiState(
@@ -63,6 +69,8 @@ data class TankUiState(
     val gpu: String = "",
     /** Thermal headroom as last read (1.0 = about to throttle), or null when the device does not say. */
     val thermalHeadroom: Float? = null,
+    /** The headroom above is shown but not used (an emulator). */
+    val thermalIgnored: Boolean = false,
 )
 
 /**
@@ -304,12 +312,13 @@ class TankViewModel(
         if (options.quality != null || settings.quality !is QualityMode.Auto) return
         if (stats.vulkan != VulkanState.RENDERING || stats.fps <= 0f) return
         val headroom = signals.thermalHeadroom()
-        state.update { it.copy(thermalHeadroom = headroom) }
+        val ignored = signals.thermalIsSimulated
+        state.update { it.copy(thermalHeadroom = headroom, thermalIgnored = ignored) }
         // The first seconds include pipeline creation and shader warm-up: not a verdict on the device.
         val start = firstRenderMs ?: nowMs.also { firstRenderMs = it }
         if (nowMs - start < WARMUP_MS) return
         val before = governor.tier
-        val sample = PerfSample(nowMs, stats.fps, signals.refreshRateHz(), stats.workMs, headroom)
+        val sample = PerfSample(nowMs, stats.fps, signals.refreshRateHz(), stats.workMs, if (ignored) null else headroom)
         if (governor.onSample(sample) != before) applyQuality()
     }
 

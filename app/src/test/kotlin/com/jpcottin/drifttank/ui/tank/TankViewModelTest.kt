@@ -255,6 +255,28 @@ class TankViewModelTest {
         assertEquals(0.42f, vm.ui.value.thermalHeadroom!!, 1e-6f)
     }
 
+    @Test fun `on an emulator the simulated thermal headroom does not steer quality`() = runTest(dispatcher) {
+        signals.simulated = true
+        signals.headroom = 0.99f // would mean "about to throttle" on a phone
+        val vm = vm()
+        val smooth = EngineStats(vulkan = VulkanState.RENDERING, fps = 60f, workMs = 3f)
+        var t = 0L
+        repeat(25) { vm.onPerfSample(smooth, t); t += 2_000 }
+        assertEquals(QualityTier.ULTRA, engine.lastQuality)
+        assertTrue(vm.ui.value.thermalIgnored)
+        assertEquals(0.99f, vm.ui.value.thermalHeadroom!!, 1e-6f)
+    }
+
+    @Test fun `on a phone a hot forecast steps quality down`() = runTest(dispatcher) {
+        signals.headroom = 0.99f
+        val vm = vm()
+        val smooth = EngineStats(vulkan = VulkanState.RENDERING, fps = 60f, workMs = 3f)
+        vm.onPerfSample(smooth, 0)
+        vm.onPerfSample(smooth, 8_000)
+        assertEquals(QualityTier.LOW, engine.lastQuality)
+        assertFalse(vm.ui.value.thermalIgnored)
+    }
+
     @Test fun `a fixed quality ignores the governor`() = runTest(dispatcher) {
         val vm = vm(settings = AppSettings(quality = QualityMode.Fixed(QualityTier.ULTRA)))
         val slow = EngineStats(vulkan = VulkanState.RENDERING, fps = 20f)

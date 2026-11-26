@@ -45,7 +45,13 @@ class FakeEngine : TankEngine {
     override fun close() { closed = true }
 }
 
-class FakeSignals(var headroom: Float? = 0.3f, var refresh: Float = 60f, var now: Long = 0L) : DeviceSignals {
+class FakeSignals(
+    var headroom: Float? = 0.3f,
+    var refresh: Float = 60f,
+    var now: Long = 0L,
+    var simulated: Boolean = false,
+) : DeviceSignals {
+    override val thermalIsSimulated: Boolean get() = simulated
     override fun thermalHeadroom(): Float? = headroom
     override fun refreshRateHz(): Float = refresh
     override fun nowMs(): Long = now
