@@ -84,8 +84,8 @@ VkShaderModule makeModule(VkDevice dev, const uint32_t* code, size_t bytes) {
 bool Renderer::initInstance() {
     if (instance_) return true;
     VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
-    app.pApplicationName = "Drift Tank";
-    app.pEngineName = "drifttank";
+    app.pApplicationName = "Tairoto";
+    app.pEngineName = "tairoto";
     app.apiVersion = VK_API_VERSION_1_0;
     const char* exts[] = {"VK_KHR_surface", "VK_KHR_android_surface"};
     VkInstanceCreateInfo ci{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};

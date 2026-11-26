@@ -1,4 +1,4 @@
-// Shared by every Drift Tank shader: the frame block, the projection (the
+// Shared by every Tairoto shader: the frame block, the projection (the
 // same formula as Camera.kt and render/camera.h), noise, and the caustics.
 
 layout(std140, set = 0, binding = 0) uniform Frame {

@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.jpcottin.drifttank.engine"
+    namespace = "com.jpcottin.tairoto.engine"
     compileSdk {
         version = release(37) {
             minorApiLevel = 1

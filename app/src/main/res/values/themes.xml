@@ -1,6 +1,6 @@
 <resources>
     <!-- The window behind the Vulkan surface: deep water, so nothing flashes white on launch. -->
-    <style name="Theme.DriftTank" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.Tairoto" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/deep_water</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>

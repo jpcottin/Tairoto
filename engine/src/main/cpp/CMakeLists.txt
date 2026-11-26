@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(drifttank LANGUAGES C CXX)
+project(tairoto LANGUAGES C CXX)
 
 # --- GLSL -> SPIR-V as C arrays, with glslc from the NDK -----------------------
 file(GLOB GLSLC_CANDIDATES "${ANDROID_NDK}/shader-tools/*/glslc" "${ANDROID_NDK}/shader-tools/*/glslc.exe")
@@ -29,7 +29,7 @@ endforeach()
 add_custom_target(shaders DEPENDS ${SHADER_HEADERS})
 
 # --- The engine library ---------------------------------------------------------
-add_library(drifttank SHARED
+add_library(tairoto SHARED
     sim/world.cpp
     sim/feeding.cpp
     sim/current.cpp
@@ -37,10 +37,10 @@ add_library(drifttank SHARED
     render/renderer.cpp
     engine/engine.cpp
     jni/jni_bridge.cpp)
-add_dependencies(drifttank shaders)
-target_include_directories(drifttank PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${GEN_DIR}")
+add_dependencies(tairoto shaders)
+target_include_directories(tairoto PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${GEN_DIR}")
 # The `VkFoo ci{VK_STRUCTURE_TYPE_...}` idiom leaves the rest of each struct zeroed on purpose.
-target_compile_options(drifttank PRIVATE -Wall -Wextra -Werror -Wno-missing-field-initializers -O2)
-target_link_libraries(drifttank vulkan android log)
+target_compile_options(tairoto PRIVATE -Wall -Wextra -Werror -Wno-missing-field-initializers -O2)
+target_link_libraries(tairoto vulkan android log)
 # 16 KB pages (Android 15+ devices): align the segments.
-target_link_options(drifttank PRIVATE "-Wl,-z,max-page-size=16384")
+target_link_options(tairoto PRIVATE "-Wl,-z,max-page-size=16384")

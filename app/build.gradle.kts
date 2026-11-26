@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.jpcottin.drifttank"
+    namespace = "com.jpcottin.tairoto"
     compileSdk {
         version = release(37) {
             minorApiLevel = 1
@@ -16,7 +16,7 @@ android {
     experimentalProperties["android.experimental.enableScreenshotTest"] = true
 
     defaultConfig {
-        applicationId = "com.jpcottin.drifttank"
+        applicationId = "com.jpcottin.tairoto"
         minSdk = 30
         targetSdk = 37
         versionCode = 1

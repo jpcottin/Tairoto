@@ -1,14 +1,21 @@
-# Drift Tank
+# Tairoto
 
-A living aquarium for Android, seen from above: a school of green chromis and a
-green sea turtle swim over rippled sand under moving caustic light. Built to
-grow into one tank shared by several devices on a table, fish swimming from
-one screen to the next.
+*Tairoto* is Tahitian for lagoon. This is one, for Android, seen from above:
+a school of *ʻatoti* (green chromis) and a *honu* (green sea turtle) over white
+coral sand, under moving caustic light. It is built to grow into one lagoon
+shared by several devices on a table, fish swimming from one screen to the next.
 
-> Work in progress, kept local for now. Milestone 1 of 10: the solo tank.
+> Work in progress, kept local for now. Milestones 1 (the solo lagoon) and 2
+> (food and feeding) of 10.
+
+Tahitian names are checked against a reference before they are used, and the
+source is noted next to each species in `Species.kt`.
 
 ## What is in it
 
+- **Food and feeding**: drag to sprinkle flakes, hold for a pellet; a scent that grows
+  with the food and the feeders draws fish from further away; messy bites, crumbs,
+  decomposition, every milligram accounted for; a current grid stirred by tails.
 - **C++ simulation** (`engine/src/main/cpp/sim`): schooling with a spatial grid,
   beat-and-glide swimming, a spine that bends into turns, a caudal fin on a
   damped spring; a turtle that cruises, rests on the sand, climbs to breathe
@@ -41,8 +48,8 @@ one screen to the next.
 Deterministic launch for screenshots (debug builds):
 
 ```sh
-adb shell am start -n com.jpcottin.drifttank/.MainActivity --ez drifttank.ci true --el drifttank.seed 7
-# also: --es drifttank.quality low|high|ultra|ci  --ez drifttank.stats true  --ez drifttank.hints false
+adb shell am start -n com.jpcottin.tairoto/.MainActivity --ez tairoto.ci true --el tairoto.seed 7
+# also: --es tairoto.quality low|high|ultra|ci  --ez tairoto.stats true  --ez tairoto.hints false
 ```
 
 ## Gestures

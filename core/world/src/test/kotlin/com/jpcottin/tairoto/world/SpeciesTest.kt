@@ -1,0 +1,75 @@
+package com.jpcottin.tairoto.world
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class SpeciesTest {
+    @Test fun `species ids and visuals are unique`() {
+        val all = SpeciesCatalog.all
+        assertEquals(all.size, all.map { it.id }.toSet().size)
+        assertEquals(all.size, all.map { it.visualId }.toSet().size)
+    }
+
+    @Test fun `the lagoon creatures go by their Tahitian names`() {
+        assertEquals("ʻAtoti", SpeciesCatalog.GreenChromis.displayName)
+        assertEquals("Honu", SpeciesCatalog.GreenSeaTurtle.displayName)
+        assertEquals("Green chromis", SpeciesCatalog.GreenChromis.copy(tahitianName = null).displayName)
+    }
+
+    @Test fun `every species can be found by id`() {
+        SpeciesCatalog.all.forEach { assertEquals(it, SpeciesCatalog[it.id]) }
+        assertNull(SpeciesCatalog["kraken"])
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `requiring an unknown species fails`() {
+        SpeciesCatalog.require("kraken")
+    }
+
+    @Test fun `native params are in the documented order`() {
+        val p = SpeciesCatalog.GreenChromis.nativeParams()
+        assertEquals(NativeParam.COUNT, p.size)
+        assertEquals(1.3f, p[NativeParam.CRUISE], 0f)
+        assertEquals(5f, p[NativeParam.BURST], 0f)
+        assertEquals(0.18f, p[NativeParam.DEPTH_MIN], 0f)
+        assertEquals(0.62f, p[NativeParam.DEPTH_MAX], 0f)
+        assertEquals(0.85f, p[NativeParam.SCHOOLING], 0f)
+        assertEquals(0.24f, p[NativeParam.BODY_WIDTH], 0f)
+    }
+
+    @Test fun `a creature's length comes from its seed and stays in range`() {
+        val s = SpeciesCatalog.GreenSeaTurtle
+        for (seed in listOf(0, 1, -1, 65535, Int.MAX_VALUE, Int.MIN_VALUE, 123456789)) {
+            val l = s.lengthFor(seed)
+            assertTrue("$seed -> $l", l in s.lengthMm)
+            assertEquals(l, s.lengthFor(seed), 0f)
+        }
+    }
+
+    @Test fun `the reef has schooling fish and a turtle that paddles`() {
+        val reef = SpeciesCatalog.all.filter { it.tankType == TankType.REEF }
+        assertNotNull(reef.firstOrNull { it.locomotion == Locomotion.SWIM && it.schooling > 0.5f })
+        assertNotNull(reef.firstOrNull { it.locomotion == Locomotion.PADDLE })
+    }
+
+    @Test fun `a turtle is much bigger and slower than a chromis`() {
+        val c = SpeciesCatalog.GreenChromis
+        val t = SpeciesCatalog.GreenSeaTurtle
+        assertTrue(t.lengthMm.start > c.lengthMm.endInclusive * 2.5f)
+        assertTrue(t.cruiseBodyLengthsPerS * t.lengthMm.start < c.cruiseBodyLengthsPerS * c.lengthMm.endInclusive * 1.5f)
+        assertTrue(t.turnRateRadPerS < c.turnRateRadPerS)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `a species with a bad depth band is refused`() {
+        SpeciesCatalog.GreenChromis.copy(depthBand = 0.8f..1.2f)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `a species id must be snake case`() {
+        SpeciesCatalog.GreenChromis.copy(id = "Green Chromis")
+    }
+}

@@ -17,7 +17,7 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-rootProject.name = "DriftTank"
+rootProject.name = "Tairoto"
 
 // :core:world  the tank model with nothing Android in it: geometry in mm, the
 //              camera, species, ownership and links. JVM tests in seconds.
