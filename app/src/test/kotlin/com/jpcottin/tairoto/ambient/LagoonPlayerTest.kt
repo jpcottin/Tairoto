@@ -98,4 +98,20 @@ class LagoonPlayerTest {
         p.close()
         assertTrue(engine.closed)
     }
+
+    @Test fun `seen again, it shows what the app changed in the lagoon meanwhile`() = runTest {
+        val engine = FakeEngine()
+        val store = InMemoryLagoonStore(saved)
+        val p = player(drift = false, engine, store)
+        p.surface(null, 1080, 2400, 420f, 420f)
+        runCurrent()
+        p.visible(true)
+        p.visible(false)
+        // The app releases a turtle while the home screen is hidden.
+        val turtle = saved.creatures.first().copy(id = com.jpcottin.tairoto.world.EntityId(9_999), speciesId = "green_sea_turtle")
+        store.scene = saved.copy(creatures = saved.creatures + turtle)
+        p.visible(true)
+        runCurrent()
+        assertTrue(turtle.id in engine.creatures.keys)
+    }
 }

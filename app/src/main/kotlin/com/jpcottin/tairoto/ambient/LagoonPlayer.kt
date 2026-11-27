@@ -76,6 +76,17 @@ class LagoonPlayer(
     fun visible(seen: Boolean) {
         visible = seen
         engine.setPaused(!seen)
+        // Back on screen: the app may have changed the lagoon meanwhile (creatures released, coral moved).
+        if (seen && scene != null) {
+            scope.launch {
+                val now = runCatching { store.load() }.getOrNull() ?: return@launch
+                if (now != scene) {
+                    scene = now
+                    sync.apply(now)
+                    look()
+                }
+            }
+        }
         drifting?.cancel()
         drifting = null
         if (seen && drift) {
