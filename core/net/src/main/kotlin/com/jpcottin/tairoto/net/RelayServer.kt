@@ -60,6 +60,8 @@ class RelayServer(
         var name = ""
         var session: Session? = null
         @Volatile var open = true
+        /** Frames handed to [send] and not yet flushed onto the wire (taken off [out] is not sent yet). */
+        private val unsent = java.util.concurrent.atomic.AtomicInteger(0)
 
         private val writer = Thread({ writeLoop() }, "relay-write").apply { isDaemon = true }
 
@@ -69,7 +71,9 @@ class RelayServer(
         }
 
         fun send(f: Frame) {
-            if (open) out.offer(f)
+            if (!open) return
+            unsent.incrementAndGet()
+            out.offer(f)
         }
 
         private fun writeLoop() {
@@ -80,9 +84,14 @@ class RelayServer(
                 while (open) {
                     val f = out.poll(250, TimeUnit.MILLISECONDS) ?: continue
                     FrameIo.write(stream, f)
+                    var n = 1
                     // Write what is queued behind it in the same flush.
-                    while (true) FrameIo.write(stream, out.poll() ?: break)
+                    while (true) {
+                        FrameIo.write(stream, out.poll() ?: break)
+                        n++
+                    }
                     stream.flush()
+                    unsent.addAndGet(-n)
                 }
             } catch (e: IOException) {
                 // The other end went away; the reader notices too.
@@ -129,7 +138,7 @@ class RelayServer(
         fun closeSoon() {
             Thread {
                 val until = System.currentTimeMillis() + 500
-                while (out.isNotEmpty() && System.currentTimeMillis() < until) Thread.sleep(10)
+                while (unsent.get() > 0 && System.currentTimeMillis() < until) Thread.sleep(10)
                 close()
             }.apply { isDaemon = true; start() }
         }

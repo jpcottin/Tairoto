@@ -52,7 +52,7 @@ done
 launch() {
     # -S stops the app first, in the same breath: an instance left running would take the intent without its extras.
     adbs "$1" shell am start -S -W -n "$pkg/.MainActivity" \
-        --ez tairoto.fresh true --ez tairoto.hints false --ez tairoto.trace "${TRACE:-false}" \
+        --ez tairoto.fresh true --ez tairoto.hints false ${QUALITY:+--es tairoto.quality $QUALITY} ${FPS:+--ei tairoto.fps $FPS} ${POPULATION:+--es tairoto.population $POPULATION} ${DECOR:+--es tairoto.decor $DECOR} --ez tairoto.trace "${TRACE:-false}" \
         --es tairoto.share "$2" --es tairoto.relay "$route" --es tairoto.session "$session" > /dev/null
 }
 
@@ -87,6 +87,8 @@ for s in "${serials[@]}"; do
     adbs "$s" exec-out screencap -p > "$out/$s.png" || true
     # Logcat drops lines from a busy app: the app also writes every line to a file.
     adbs "$s" exec-out run-as "$pkg" cat files/net-log.jsonl > "$out/$s.log"
+    # If the app stopped answering, Android kept what its main thread was doing.
+    adbs "$s" shell dumpsys dropbox --print data_app_anr > "$out/$s-anr.txt" 2>/dev/null || true
 done
 echo "Logs and screenshots in $out"
 python3 scripts/share_e2e_check.py "$out" "${serials[@]}"

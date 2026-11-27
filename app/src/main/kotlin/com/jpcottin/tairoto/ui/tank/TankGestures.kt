@@ -31,10 +31,10 @@ interface TankGestureHandler {
     fun onRotate(radians: Float) = Unit
     /** Every finger has left the glass. */
     fun onGestureEnd() = Unit
-    /** One finger, put down at [start], began to move toward [toward] (it came on over an edge?). */
-    fun onStrokeStart(start: Vec2, toward: Vec2) = Unit
-    /** One finger, moving from [from] a moment before, was lifted at [end] (it went off over an edge?). */
-    fun onStrokeEnd(from: Vec2, end: Vec2) = Unit
+    /** One finger, put down at [start] at [atMs] (uptime), began to move toward [toward] (it came on over an edge?). */
+    fun onStrokeStart(start: Vec2, toward: Vec2, atMs: Long) = Unit
+    /** One finger, moving from [from] a moment before, was lifted at [end] at [atMs] (it went off over an edge?). */
+    fun onStrokeEnd(from: Vec2, end: Vec2, atMs: Long) = Unit
 }
 
 private fun Offset.vec() = Vec2(x, y)
@@ -68,6 +68,7 @@ fun Modifier.tankGestures(handler: TankGestureHandler): Modifier = this
             val trail = ArrayDeque<Pair<Long, Offset>>()
             trail.addLast(startTime to start)
             var end = start
+            var endTime = startTime
             while (true) {
                 val event = if (!moved && !multi && !longPressed && !mouse) {
                     val left = LONG_PRESS_MS - (currentEvent.changes.firstOrNull()?.uptimeMillis?.minus(startTime) ?: 0L)
@@ -84,6 +85,7 @@ fun Modifier.tankGestures(handler: TankGestureHandler): Modifier = this
                 val pressed = event.changes.filter { it.pressed }
                 if (pressed.isEmpty()) {
                     end = event.changes.firstOrNull()?.position ?: last
+                    endTime = event.changes.firstOrNull()?.uptimeMillis ?: endTime
                     break
                 }
                 if (pressed.size >= 2) {
@@ -105,7 +107,7 @@ fun Modifier.tankGestures(handler: TankGestureHandler): Modifier = this
                     if (!moved && (p - start).getDistance() > viewConfiguration.touchSlop) {
                         moved = true
                         dragging = !longPressed && handler.onDragStart(start.vec())
-                        if (!mouse) handler.onStrokeStart(start.vec(), p.vec())
+                        if (!mouse) handler.onStrokeStart(start.vec(), p.vec(), startTime)
                     }
                     val t = pressed.first().uptimeMillis
                     trail.addLast(t to p)
@@ -123,7 +125,7 @@ fun Modifier.tankGestures(handler: TankGestureHandler): Modifier = this
                 }
             }
             if (sprinkling) handler.onSprinkleEnd()
-            if (moved && !multi && !mouse) handler.onStrokeEnd(trail.first().second.vec(), end.vec())
+            if (moved && !multi && !mouse) handler.onStrokeEnd(trail.first().second.vec(), end.vec(), endTime)
             handler.onGestureEnd()
             val quick = (currentEvent.changes.firstOrNull()?.uptimeMillis ?: startTime) - startTime < LONG_PRESS_MS
             if (!multi && !moved && !longPressed && quick) handler.onTap(start.vec())

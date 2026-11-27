@@ -40,31 +40,36 @@ done
 host=${serials[0]}
 guest=${serials[1]}
 echo "Hosting on $host, arranging from the start"
-adbs "$host" shell am start -S -W -n "$pkg/.MainActivity" --ez tairoto.fresh true --ez tairoto.hints false \
+adbs "$host" shell am start -S -W -n "$pkg/.MainActivity" --ez tairoto.fresh true --ez tairoto.hints false ${QUALITY:+--es tairoto.quality $QUALITY} ${FPS:+--ei tairoto.fps $FPS} ${POPULATION:+--es tairoto.population $POPULATION} ${DECOR:+--es tairoto.decor $DECOR} \
     --es tairoto.share host --es tairoto.relay "10.0.2.2:$port" --es tairoto.session "$session" --ez tairoto.arrange true > /dev/null
 sleep 4
 echo "Joining from $guest"
-adbs "$guest" shell am start -S -W -n "$pkg/.MainActivity" --ez tairoto.fresh true --ez tairoto.hints false \
+adbs "$guest" shell am start -S -W -n "$pkg/.MainActivity" --ez tairoto.fresh true --ez tairoto.hints false ${QUALITY:+--es tairoto.quality $QUALITY} ${FPS:+--ei tairoto.fps $FPS} ${POPULATION:+--es tairoto.population $POPULATION} ${DECOR:+--es tairoto.decor $DECOR} \
     --es tairoto.share join --es tairoto.relay "10.0.2.2:$port" --es tairoto.session "$session" > /dev/null
 sleep 8
 
 size() { adbs "$1" shell wm size | awk -F'[ x]' '/Override|Physical/ {w=$(NF-1); h=$NF} END {print w, h}'; }
 read -r gw gh <<< "$(size "$guest")"
 read -r hw hh <<< "$(size "$host")"
+# Half way down: a finger coming on over the left or right edge is Android's back gesture,
+# except in the middle band the app takes for itself while arranging (200 dp, Android's most).
 gy=$(( gh * 45 / 100 ))
-hy=$(( hh * 60 / 100 ))
+hy=$(( hh * 52 / 100 ))
 adbs "$host" exec-out screencap -p > "$out/before-$host.png" || true
 echo "Swiping off $guest's right edge (y=$gy) onto $host's left edge (y=$hy)"
 echo "{\"ev\":\"swiped\",\"guest_y\":$gy,\"host_y\":$hy}" > "$out/swipe.json"
-adbs "$guest" shell input swipe $(( gw / 2 )) "$gy" $(( gw - 1 )) "$gy" 250 &
+# Both commands set off together, the delay counted on the device: on a busy machine adb itself
+# may take a second to start a command, far more than a finger takes to cross a frame.
+adbs "$guest" shell "input swipe $(( gw / 2 )) $gy $(( gw - 1 )) $gy 250" &
 swipe_pid=$!
-sleep 0.45
-adbs "$host" shell input swipe 0 "$hy" $(( hw / 3 )) "$hy" 250
+adbs "$host" shell "sleep 0.25; input swipe 0 $hy $(( hw / 3 )) $hy 250"
 wait "$swipe_pid"
 sleep 4
 for s in "${serials[@]}"; do
     adbs "$s" exec-out screencap -p > "$out/$s.png" || true
     adbs "$s" exec-out run-as "$pkg" cat files/net-log.jsonl > "$out/$s.log"
+    # If the app stopped answering, Android kept what its main thread was doing.
+    adbs "$s" shell dumpsys dropbox --print data_app_anr > "$out/$s-anr.txt" 2>/dev/null || true
 done
 echo "Logs and screenshots in $out"
 python3 scripts/arrange_e2e_check.py "$out" "$host" "$guest"

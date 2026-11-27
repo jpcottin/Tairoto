@@ -65,6 +65,32 @@ class SharedArrangeTest {
         assertTrue(host.events.any { it is ShareEvent.Stitched && it.from == b.link.self && it.to == a.link.self })
     }
 
+    @Test fun `the two halves of a swipe pair whichever the host hears of first`() = runTest {
+        val lagoon = lagoon(2)
+        lagoon.start()
+        advanceTimeBy(800)
+        val (host, a) = lagoon.devices
+        // The coming on is heard before the leaving (clocks a little apart, a device slow to say).
+        a.shared!!.edgeSwipe(Edge.LEFT, 40f, entering = true)
+        advanceTimeBy(150)
+        host.shared!!.edgeSwipe(Edge.RIGHT, 60f, entering = false)
+        advanceTimeBy(500)
+        assertTrue(host.events.any { it is ShareEvent.Stitched && it.from == host.link.self && it.to == a.link.self })
+    }
+
+    @Test fun `a swipe said late by a busy device counts from when the finger was there`() = runTest {
+        val lagoon = lagoon(2)
+        lagoon.start()
+        advanceTimeBy(800)
+        val (host, a) = lagoon.devices
+        host.shared!!.edgeSwipe(Edge.RIGHT, 60f, entering = false)
+        // A second and a half later the other says: a finger came on a second and a half ago.
+        advanceTimeBy(1_500)
+        a.shared!!.edgeSwipe(Edge.LEFT, 40f, entering = true, agoS = 1.45)
+        advanceTimeBy(500)
+        assertTrue(host.events.any { it is ShareEvent.Stitched })
+    }
+
     @Test fun `swipes too far apart in time, or both leaving, are no swipe across`() = runTest {
         val lagoon = lagoon(2)
         lagoon.start()
@@ -74,7 +100,8 @@ class SharedArrangeTest {
         host.shared!!.edgeSwipe(Edge.RIGHT, 50f, entering = false)
         advanceTimeBy(2_000)
         a.shared!!.edgeSwipe(Edge.TOP, 30f, entering = true)
-        advanceTimeBy(300)
+        // Well after that stray one: two fingers leaving, none coming on.
+        advanceTimeBy(1_000)
         host.shared!!.edgeSwipe(Edge.LEFT, 50f, entering = false)
         a.shared!!.edgeSwipe(Edge.LEFT, 50f, entering = false)
         advanceTimeBy(500)

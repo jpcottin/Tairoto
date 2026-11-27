@@ -274,6 +274,10 @@ JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeStats(J
     env->SetFloatArrayRegion(out, 0, n < 16 ? n : 16, v);
 }
 
+JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetMaxFps(JNIEnv*, jclass, jlong h, jint fps) {
+    engine(h)->setMaxFps(fps);
+}
+
 JNIEXPORT jstring JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeGpuName(JNIEnv* env, jclass, jlong h) {
     return env->NewStringUTF(engine(h)->stats().gpu.c_str());
 }
