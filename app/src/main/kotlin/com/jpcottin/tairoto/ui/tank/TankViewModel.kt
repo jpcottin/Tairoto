@@ -239,6 +239,7 @@ class TankViewModel(
 
     init {
         if (options.deterministic) engine.setDeterministic(true, options.seed ?: 7L)
+        options.maxFps?.let { engine.setMaxFps(it) }
         if (options.persist) {
             viewModelScope.launch {
                 restored = Result.success(runCatching { lagoonStore.load() }.getOrNull())

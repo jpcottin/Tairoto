@@ -111,6 +111,8 @@ class NativeTank : TankEngine {
 
     fun setTilt(x: Float, y: Float) = nativeSetTilt(h(), x, y)
 
+    override fun setMaxFps(fps: Int) = nativeSetMaxFps(h(), fps.coerceAtLeast(0))
+
     /** Runs the simulation for [seconds] without drawing. For tests. */
     fun stepForTest(seconds: Float) = nativeStepForTest(h(), seconds)
 
@@ -190,6 +192,7 @@ class NativeTank : TankEngine {
         @JvmStatic external fun nativeTap(h: Long, x: Float, y: Float)
         @JvmStatic external fun nativeDropFood(h: Long, x: Float, y: Float, kind: Int, count: Int)
         @JvmStatic external fun nativeSetTilt(h: Long, x: Float, y: Float)
+        @JvmStatic external fun nativeSetMaxFps(h: Long, fps: Int)
         @JvmStatic external fun nativeStepForTest(h: Long, seconds: Float)
         @JvmStatic external fun nativeStats(h: Long, out: FloatArray)
         @JvmStatic external fun nativeGpuName(h: Long): String

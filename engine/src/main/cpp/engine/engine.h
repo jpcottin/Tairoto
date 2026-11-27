@@ -105,6 +105,8 @@ public:
     /** Drops food at a point of the surface (kind: 0 flake, 1 pellet). */
     void dropFood(Vec2 world, int kind, int count);
     void setTilt(Vec2 tilt);
+    /** At most this many frames a second (0: as many as the display shows). Saves battery, and CPU. */
+    void setMaxFps(int fps);
 
     /** Advances the simulation without drawing, on the calling thread's behalf (tests). Blocks. */
     void stepForTest(float seconds);
@@ -140,6 +142,8 @@ private:
     Ripple ripples_[8];
     int nextRipple_ = 0;
     Vec2 tilt_;
+    int64_t minFrameNs_ = 0;
+    int64_t nextFrameNs_ = 0;
     int64_t lastFrameNs_ = 0;
     double fpsWindowStart_ = 0;
     int fpsFrames_ = 0;

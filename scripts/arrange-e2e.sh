@@ -40,11 +40,11 @@ done
 host=${serials[0]}
 guest=${serials[1]}
 echo "Hosting on $host, arranging from the start"
-adbs "$host" shell am start -S -W -n "$pkg/.MainActivity" --ez tairoto.fresh true --ez tairoto.hints false ${QUALITY:+--es tairoto.quality $QUALITY} \
+adbs "$host" shell am start -S -W -n "$pkg/.MainActivity" --ez tairoto.fresh true --ez tairoto.hints false ${QUALITY:+--es tairoto.quality $QUALITY} ${FPS:+--ei tairoto.fps $FPS} \
     --es tairoto.share host --es tairoto.relay "10.0.2.2:$port" --es tairoto.session "$session" --ez tairoto.arrange true > /dev/null
 sleep 4
 echo "Joining from $guest"
-adbs "$guest" shell am start -S -W -n "$pkg/.MainActivity" --ez tairoto.fresh true --ez tairoto.hints false ${QUALITY:+--es tairoto.quality $QUALITY} \
+adbs "$guest" shell am start -S -W -n "$pkg/.MainActivity" --ez tairoto.fresh true --ez tairoto.hints false ${QUALITY:+--es tairoto.quality $QUALITY} ${FPS:+--ei tairoto.fps $FPS} \
     --es tairoto.share join --es tairoto.relay "10.0.2.2:$port" --es tairoto.session "$session" > /dev/null
 sleep 8
 

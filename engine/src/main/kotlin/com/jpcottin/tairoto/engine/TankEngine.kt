@@ -27,6 +27,8 @@ interface TankEngine : Closeable {
     fun setQuality(tier: QualityTier)
     fun setDeterministic(on: Boolean, seed: Long)
     fun setPaused(paused: Boolean)
+    /** At most this many frames a second; 0 for as many as the display shows. */
+    fun setMaxFps(fps: Int) = Unit
     /** Adds a creature; a [ghost] is simulated by another device and only shown here. */
     fun spawn(creature: CreatureSpec, species: Species, ghost: Boolean = false)
     fun remove(id: EntityId)

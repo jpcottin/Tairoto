@@ -33,6 +33,8 @@ data class LaunchOptions(
     val trace: Boolean = false,
     /** Hosting, start arranging the screens at once (tests swipe across emulators). */
     val arrange: Boolean = false,
+    /** At most this many frames a second (tests on machines drawing in software). */
+    val maxFps: Int? = null,
 ) {
     val deterministic: Boolean get() = ci
 
@@ -58,6 +60,7 @@ data class LaunchOptions(
         const val SESSION = "tairoto.session"
         const val TRACE = "tairoto.trace"
         const val ARRANGE = "tairoto.arrange"
+        const val FPS = "tairoto.fps"
 
         /** Reads `kind:count,kind:count` of decorations; unknown or malformed entries are skipped. */
         fun parseDecor(text: String?): Map<String, Int>? {
@@ -100,6 +103,7 @@ data class LaunchOptions(
                 share = ShareLaunch.parse(intent.getStringExtra(SHARE), intent.getStringExtra(RELAY), intent.getStringExtra(SESSION)),
                 trace = intent.getBooleanExtra(TRACE, false),
                 arrange = intent.getBooleanExtra(ARRANGE, false),
+                maxFps = if (intent.hasExtra(FPS)) intent.getIntExtra(FPS, 0).takeIf { it in 1..240 } else null,
             )
         }
     }
