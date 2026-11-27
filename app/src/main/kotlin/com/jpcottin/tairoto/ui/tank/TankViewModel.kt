@@ -178,6 +178,8 @@ class TankViewModel(
     private val connector: ShareConnector? = null,
     /** This device's name, as other devices of a shared lagoon see it. */
     private val deviceName: String = "This device",
+    /** The frame around this screen, in mm: how far its picture sits from the next device's. */
+    private val bezelMm: Float = ScreenMm.PHONE_BEZEL_MM,
     /** One line of JSON per thing that happens in a shared lagoon (handoffs, losses), for logs and tests. */
     private val netLog: (String) -> Unit = {},
     /** A monotonic clock in seconds, for the shared lagoon's timing. */
@@ -270,7 +272,7 @@ class TankViewModel(
         }
         val vp = Viewport(widthPx.toFloat(), heightPx.toFloat(), ScreenMm.pxPerMm((xdpi + ydpi) / 2f))
         viewport = vp
-        val screen = ScreenMm.fromPixels(widthPx, heightPx, xdpi, ydpi)
+        val screen = ScreenMm.fromPixels(widthPx, heightPx, xdpi, ydpi, bezelMm)
         screenMm = screen
         val sh = shared
         if (sh != null) {
@@ -705,6 +707,8 @@ class TankViewModel(
                 return@launch
             }
             saveNow()
+            // This device's own lagoon stops feeding the engine before it is emptied for the shared one.
+            sessionJob?.cancel()
             sync.reset()
             val random = options.seed?.let { Random(it + conn.link.self.slot) } ?: Random.Default
             val ns = TankSession(join.scene, conn.link, random)
@@ -887,8 +891,21 @@ class TankViewModel(
         val vp = viewport ?: return
         val sh = shared ?: return
         val rect = layout.rectOf(sh.self) ?: return
-        camera = Camera(center = rect.center, zoom = vp.widthPx / (vp.basePxPerMm * rect.w), parallaxOrigin = layout.origin)
+        val cam = Camera(center = rect.center, zoom = vp.widthPx / (vp.basePxPerMm * rect.w), parallaxOrigin = layout.origin)
+        camera = cam
         pushCamera()
+        // What this screen shows of the table, and what lies on its floor: logs from every device must agree.
+        val scene = session?.scene?.value
+        netLog(
+            json(
+                "view", "self" to sh.self.slot, "t" to sh.sharedNow(),
+                "rect" to "[${rect.x},${rect.y},${rect.w},${rect.h}]",
+                "center" to "[${cam.center.x},${cam.center.y}]", "origin" to "[${cam.origin.x},${cam.origin.y}]",
+                "pxPerMm" to cam.pxPerMm(vp), "vp" to "[${vp.widthPx},${vp.heightPx}]",
+                "tank" to (scene?.size?.let { "[${it.widthMm},${it.heightMm},${it.depthMm}]" } ?: "[]"),
+                "decor" to (scene?.decor?.joinToString(",", "[", "]") { "[${it.id.raw},\"${it.kindId}\",${it.at.x},${it.at.y},${it.angle}]" } ?: "[]"),
+            ),
+        )
     }
 
     /** Shares or joins as the launch asked (tests across emulators), once the lagoon is up. */
@@ -927,6 +944,13 @@ class TankViewModel(
     }
 
     private fun logStatus(sh: SharedTank, st: ShareStatus) {
+        // What the scene says lies on the floor, against what the engine draws: they must be the same.
+        val synced = sync.describeDecor()
+        val t = sh.sharedNow()
+        viewModelScope.launch {
+            val drawn = withContext(background) { engine.describeDecor() }
+            netLog(json("floor", "t" to t, "self" to sh.self.slot, "scene" to synced, "engine" to drawn))
+        }
         val l = sh.ledger
         netLog(
             json(

@@ -495,6 +495,8 @@ class SharedTank(
             onEvent(ShareEvent.Released(t, st.id, to))
             val cur = mirror[st.id] ?: continue
             if (to == null || cur.owner != self || !leaseValid()) continue
+            // Gone since it was decided on: nobody to offer it to, so it simply swims on here.
+            if (to != self && to !in members()) continue
             awaiting[st.id] = to
             handoffsOut++
             val msg = Msg.Handoff(st.id, self, to, cur.epoch + 1, st.compact(), t)

@@ -59,11 +59,9 @@ data class Layout(
     fun without(device: DeviceId): Layout = copy(placements = placements.filterNot { it.device == device })
 
     companion object {
-        /** The gap left between two screens lying side by side, in mm: a bezel and a little water. */
-        const val GAP_MM = 12f
-
         /**
-         * Screens side by side in the order given, tops aligned, with the
+         * Screens side by side in the order given, tops aligned, edge to edge:
+         * between two pictures lie both devices' frames (or [gapMm] if given). With the
          * tank around them. The tank never gets smaller than [base], and it
          * reaches past the outer screens by what they see of the sand at
          * depth (deeper looks smaller, so the edge of a screen shows sand
@@ -72,14 +70,15 @@ data class Layout(
         fun sideBySide(
             screens: List<Pair<DeviceId, ScreenMm>>,
             base: TankSize,
-            gapMm: Float = GAP_MM,
+            gapMm: Float? = null,
             projection: DepthProjection = DepthProjection.DEFAULT,
         ): Layout {
             require(screens.isNotEmpty()) { "a layout needs a screen" }
             var x = 0f
-            val rects = screens.map { (d, s) ->
+            val rects = screens.mapIndexed { i, (d, s) ->
+                if (i > 0) x += gapMm ?: (screens[i - 1].second.bezelMm + s.bezelMm)
                 val r = RectMm(x, 0f, s.widthMm, s.heightMm)
-                x += s.widthMm + gapMm
+                x += s.widthMm
                 Placement(d, s, r)
             }
             val bw = rects.last().rect.right

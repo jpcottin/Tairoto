@@ -111,6 +111,8 @@ public:
 
     EngineStats stats();
     std::vector<CreatureSnapshot> snapshot();
+    /** The decorations the world holds, for logs and tests: id, kind, x, y each. Blocks. */
+    std::vector<double> decorSnapshot();
 
 private:
     void post(std::function<void()> fn);

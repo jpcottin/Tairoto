@@ -276,6 +276,14 @@ JNIEXPORT jstring JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeGpuN
     return env->NewStringUTF(engine(h)->stats().gpu.c_str());
 }
 
+/** Four doubles a decoration: id, kind, x, y. */
+JNIEXPORT jdoubleArray JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeDecor(JNIEnv* env, jclass, jlong h) {
+    auto v = engine(h)->decorSnapshot();
+    jdoubleArray out = env->NewDoubleArray((jsize)v.size());
+    env->SetDoubleArrayRegion(out, 0, (jsize)v.size(), v.data());
+    return out;
+}
+
 /** Six longs a creature: id, then the raw bits of x, y, z and speed, then the behaviour. */
 JNIEXPORT jlongArray JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSnapshot(JNIEnv* env, jclass,
                                                                                         jlong h) {

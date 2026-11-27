@@ -184,6 +184,26 @@ class EditTest {
         done()
     }
 
+    @Test fun `another lagoon's decoration under the same id is replaced, not moved`() {
+        val mine = DecorSpec(EntityId(1), "stone", 7, Vec2(10f, 10f), 0f, 0.2f)
+        val theirs = DecorSpec(EntityId(1), "coral_head", 3, Vec2(60f, 40f), 1f, 0.8f)
+        val diff = SceneDiff.between(emptySet(), TankScene(size, decor = listOf(theirs)), mapOf(mine.id to mine))
+        assertEquals(listOf(mine.id), diff.decorRemoved)
+        assertEquals(listOf(theirs), diff.decorAdded)
+        assertTrue(diff.decorMoved.isEmpty())
+    }
+
+    @Test fun `another lagoon's creature under the same id is replaced`() {
+        val mine = CreatureSpec(EntityId(4), "green_chromis", 1, 40f, Vec2(10f, 10f), 5f)
+        val theirs = CreatureSpec(EntityId(4), "bluestripe_snapper", 9, 150f, Vec2(50f, 50f), 30f)
+        val diff = SceneDiff.between(setOf(mine.id), TankScene(size, listOf(theirs)), appliedCreatures = mapOf(mine.id to mine))
+        assertEquals(listOf(mine.id), diff.removed)
+        assertEquals(listOf(theirs), diff.added)
+        // The same creature somewhere else is not new: it swims, the scene only says where it was released.
+        val same = SceneDiff.between(setOf(mine.id), TankScene(size, listOf(mine.copy(spawnAt = Vec2(70f, 70f)))), appliedCreatures = mapOf(mine.id to mine))
+        assertTrue(same.isEmpty)
+    }
+
     @Test fun `the scene diff follows decorations placed, moved and removed`() {
         val a = DecorSpec(EntityId(1), "stone", 1, Vec2(10f, 10f), 0f, 0.5f)
         val b = DecorSpec(EntityId(2), "coral_head", 2, Vec2(50f, 50f), 0f, 0.5f)

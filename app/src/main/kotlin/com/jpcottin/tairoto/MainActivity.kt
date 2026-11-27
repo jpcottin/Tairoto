@@ -25,6 +25,7 @@ import com.jpcottin.tairoto.ui.navigation.TairotoNavigation
 import com.jpcottin.tairoto.ui.tank.DeviceSignals
 import com.jpcottin.tairoto.ui.tank.TankViewModel
 import com.jpcottin.tairoto.ui.theme.TairotoTheme
+import com.jpcottin.tairoto.world.ScreenMm
 
 /** One JSON line per handoff, loss and status of a shared lagoon (scripts/share-e2e.sh reads them). */
 const val NET_TAG = "TairotoNet"
@@ -46,6 +47,7 @@ class MainActivity : ComponentActivity() {
                     lagoonStore = FileLagoonStore(applicationContext.filesDir),
                     connector = AndroidShareConnector(applicationContext),
                     deviceName = deviceName(),
+                    bezelMm = bezelMm(),
                     netLog = { line ->
                         Log.i(NET_TAG, line)
                         logFile?.append(line)
@@ -64,6 +66,15 @@ class MainActivity : ComponentActivity() {
     /** What the others see this device as: the name its owner gave it, or its model. */
     private fun deviceName(): String =
         Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME)?.takeIf { it.isNotBlank() } ?: Build.MODEL
+
+    /**
+     * The frame around the screen. An emulator's window has none: windows set
+     * side by side on a computer join with no gap.
+     */
+    private fun bezelMm(): Float = if (isEmulator()) 0f else ScreenMm.PHONE_BEZEL_MM
+
+    private fun isEmulator(): Boolean =
+        Build.HARDWARE in setOf("ranchu", "goldfish") || Build.PRODUCT.startsWith("sdk_") || Build.FINGERPRINT.startsWith("generic")
 
     /**
      * Leaving the app (or turning the screen off): the lagoon is saved with

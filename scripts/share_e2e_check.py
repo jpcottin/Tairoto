@@ -126,6 +126,23 @@ def main(out_dir, serials):
     sent = sum(1 for ev in logs.values() for e in ev if e["ev"] == "food_sent")
     print(f"  {sent} pieces of food drifted onto another screen")
 
+    # ---- one floor: every engine draws what its scene holds, and every screen the host's floor
+    floors = {s: [e for e in ev if e["ev"] == "floor"] for s, ev in logs.items()}
+    if all(floors.values()):
+        last_floor = {s: f[-1] for s, f in floors.items()}
+        kinds = ["coral_head", "branching_coral", "giant_clam", "stone"]
+
+        def drawn(f):
+            return sorted((d[0], kinds[d[1]], round(d[2], 2), round(d[3], 2)) for d in f["engine"])
+
+        def meant(f):
+            return sorted((d[0], d[1], round(d[2], 2), round(d[3], 2)) for d in f["scene"])
+
+        check(all(drawn(f) == meant(f) for f in last_floor.values()),
+              "every engine draws the decorations its lagoon holds")
+        check(all(meant(f) == meant(last_floor[host]) for f in last_floor.values()),
+              f"every screen shows the host's floor ({len(last_floor[host]['scene'])} decorations)")
+
     # ---- the frenzy drew fish onto the middle screen
     mid = serials[len(serials) // 2]
     arrived = sum(1 for e in logs[mid] if e["ev"] == "took")

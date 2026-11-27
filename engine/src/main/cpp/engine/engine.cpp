@@ -185,6 +185,19 @@ EngineStats Engine::stats() {
     return stats_;
 }
 
+std::vector<double> Engine::decorSnapshot() {
+    std::vector<double> out;
+    runOnThread([this, &out] {
+        for (const Decor& d : world_.decor()) {
+            out.push_back((double)d.id);
+            out.push_back((double)(int)d.kind);
+            out.push_back(d.pos.x);
+            out.push_back(d.pos.y);
+        }
+    });
+    return out;
+}
+
 std::vector<CreatureSnapshot> Engine::snapshot() {
     std::vector<CreatureSnapshot> out;
     runOnThread([this, &out] {

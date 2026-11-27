@@ -21,17 +21,36 @@ data class SceneDiff(
         get() = added.isEmpty() && removed.isEmpty() && decorAdded.isEmpty() && decorMoved.isEmpty() && decorRemoved.isEmpty()
 
     companion object {
-        fun between(appliedIds: Set<EntityId>, scene: TankScene, appliedDecor: Map<EntityId, DecorSpec> = emptyMap()): SceneDiff {
+        /**
+         * What changed since [appliedIds] (creatures) and [appliedDecor] were
+         * handed over. A different creature or decoration under an id already
+         * handed over (two lagoons both count from 1) is replaced, not moved:
+         * pass what was handed over in [appliedCreatures] to have creatures
+         * checked as well.
+         */
+        fun between(
+            appliedIds: Set<EntityId>,
+            scene: TankScene,
+            appliedDecor: Map<EntityId, DecorSpec> = emptyMap(),
+            appliedCreatures: Map<EntityId, CreatureSpec> = emptyMap(),
+        ): SceneDiff {
             val now = scene.creatures.associateBy { it.id }
             val decorNow = scene.decor.associateBy { it.id }
+            val swapped = scene.creatures.filter { c -> appliedCreatures[c.id]?.let { !it.sameCreature(c) } == true }.map { it.id }.toSet()
+            val decorSwapped = scene.decor.filter { d -> appliedDecor[d.id]?.let { !it.sameThing(d) } == true }.map { it.id }.toSet()
             return SceneDiff(
-                added = scene.creatures.filter { it.id !in appliedIds },
-                removed = appliedIds.filter { it !in now },
-                decorAdded = scene.decor.filter { it.id !in appliedDecor },
-                decorMoved = scene.decor.filter { d -> appliedDecor[d.id]?.let { it.at != d.at || it.angle != d.angle } == true },
-                decorRemoved = appliedDecor.keys.filter { it !in decorNow },
+                added = scene.creatures.filter { it.id !in appliedIds || it.id in swapped },
+                removed = appliedIds.filter { it !in now || it in swapped },
+                decorAdded = scene.decor.filter { it.id !in appliedDecor || it.id in decorSwapped },
+                decorMoved = scene.decor.filter { d ->
+                    d.id !in decorSwapped && appliedDecor[d.id]?.let { it.at != d.at || it.angle != d.angle } == true
+                },
+                decorRemoved = appliedDecor.keys.filter { it !in decorNow || it in decorSwapped },
             )
         }
+
+        private fun CreatureSpec.sameCreature(o: CreatureSpec) = speciesId == o.speciesId && seed == o.seed && lengthMm == o.lengthMm
+        private fun DecorSpec.sameThing(o: DecorSpec) = kindId == o.kindId && seed == o.seed && size == o.size
     }
 }
 

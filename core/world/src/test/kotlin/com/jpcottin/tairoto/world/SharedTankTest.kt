@@ -50,9 +50,9 @@ class SharedTankTest {
         val layout = peer.shared!!.layout.value
         assertEquals(2, layout.placements.size)
         assertEquals(layout, host.shared!!.layout.value)
-        // Side by side, a gap between them, the tank around both.
+        // Side by side, both frames between them, the tank around both.
         val (a, b) = layout.placements.map { it.rect }
-        assertEquals(Layout.GAP_MM, b.x - a.right, 0.01f)
+        assertEquals(2 * ScreenMm.PHONE_BEZEL_MM, b.x - a.right, 0.01f)
         assertTrue(layout.tank.widthMm > b.right && layout.tank.heightMm > a.bottom)
         assertEquals(layout.tank, peer.session!!.scene.value.size)
         assertEquals(layout.tank, host.session!!.scene.value.size)
@@ -180,7 +180,8 @@ class SharedTankTest {
         assertTrue(host.events.any { it is ShareEvent.DeviceLost })
         advanceTimeBy(300)
         lagoon.assertNeverTwice()
-        assertTrue(host.session!!.scene.value.creatures.all { lagoon.monitor.simulator(it.id) == "dev0" })
+        val odd = host.session!!.scene.value.creatures.filter { lagoon.monitor.simulator(it.id) != "dev0" }.map { it.id to lagoon.monitor.simulator(it.id) }
+        assertTrue("odd $odd owners ${odd.map { host.shared!!.ownerOf(it.first) }}", odd.isEmpty())
     }
 
     @Test fun `creatures added or netted on any screen are added or netted on all`() = runTest {

@@ -139,6 +139,14 @@ class NativeTank : TankEngine {
         )
     }
 
+    override fun describeDecor(): String {
+        val v = nativeDecor(h())
+        return (0 until v.size / 4).joinToString(",", "[", "]") { i ->
+            val b = i * 4
+            "[${v[b].toLong()},${v[b + 1].toInt()},${v[b + 2].toFloat()},${v[b + 3].toFloat()}]"
+        }
+    }
+
     override fun snapshot(): List<CreatureState> {
         val raw = nativeSnapshot(h())
         return List(raw.size / SNAPSHOT_STRIDE) { i ->
@@ -186,5 +194,6 @@ class NativeTank : TankEngine {
         @JvmStatic external fun nativeStats(h: Long, out: FloatArray)
         @JvmStatic external fun nativeGpuName(h: Long): String
         @JvmStatic external fun nativeSnapshot(h: Long): LongArray
+        @JvmStatic external fun nativeDecor(h: Long): DoubleArray
     }
 }

@@ -72,7 +72,8 @@ class FakeEngine : TankEngine {
     /** Where creatures are now, if a test moved them; otherwise where they were released. */
     val places = HashMap<EntityId, CreatureState>()
     override fun placeDecor(decor: DecorSpec, kind: DecorKind) { this.decor[decor.id] = decor }
-    override fun moveDecor(decor: DecorSpec) { this.decor[decor.id] = decor }
+    // Like the native engine: a move changes where it stands and which way it faces, nothing else.
+    override fun moveDecor(decor: DecorSpec) { this.decor[decor.id]?.let { this.decor[decor.id] = it.copy(at = decor.at, angle = decor.angle) } }
     override fun removeDecor(id: EntityId) { decor.remove(id) }
     override fun snapshot(): List<CreatureState> = creatures.values.map {
         places[it.id] ?: CreatureState(it.id, it.spawnAt.x, it.spawnAt.y, it.spawnDepthMm, 0f, 0)

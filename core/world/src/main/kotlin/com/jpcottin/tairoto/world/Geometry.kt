@@ -67,19 +67,27 @@ data class TankSize(val widthMm: Float, val heightMm: Float, val depthMm: Float)
     }
 }
 
-/** A screen's physical size, from its pixels and its dots per inch. */
+/**
+ * A screen's physical size, from its pixels and its dots per inch, and the
+ * width of the frame around it ([bezelMm], from the edge of the picture to the
+ * edge of the device): two devices lying edge to edge leave both frames
+ * between their pictures. An emulator window has none.
+ */
 @Serializable
-data class ScreenMm(val widthMm: Float, val heightMm: Float) {
+data class ScreenMm(val widthMm: Float, val heightMm: Float, val bezelMm: Float = PHONE_BEZEL_MM) {
     companion object {
         private const val MM_PER_INCH = 25.4f
 
-        fun fromPixels(widthPx: Int, heightPx: Int, xdpi: Float, ydpi: Float): ScreenMm {
+        /** A modern phone's frame: the glass edge plus the band around the picture. */
+        const val PHONE_BEZEL_MM = 3f
+
+        fun fromPixels(widthPx: Int, heightPx: Int, xdpi: Float, ydpi: Float, bezelMm: Float = PHONE_BEZEL_MM): ScreenMm {
             require(widthPx > 0 && heightPx > 0) { "screen has no pixels" }
             // Some devices and emulators report 0 or nonsense dpi; fall back to
             // a typical phone density instead of a tank kilometres wide.
             val dx = if (xdpi in 72f..1200f) xdpi else 420f
             val dy = if (ydpi in 72f..1200f) ydpi else dx
-            return ScreenMm(widthPx / dx * MM_PER_INCH, heightPx / dy * MM_PER_INCH)
+            return ScreenMm(widthPx / dx * MM_PER_INCH, heightPx / dy * MM_PER_INCH, bezelMm.coerceIn(0f, 20f))
         }
 
         /** Pixels per millimetre at a given dpi (with the same fallback). */

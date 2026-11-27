@@ -12,6 +12,8 @@ import com.jpcottin.tairoto.share.JoinTarget
 import com.jpcottin.tairoto.share.NearbyLagoon
 import com.jpcottin.tairoto.share.RelayAddress
 import com.jpcottin.tairoto.share.ShareRoute
+import com.jpcottin.tairoto.world.DecorSpec
+import com.jpcottin.tairoto.world.EntityId
 import com.jpcottin.tairoto.world.EntityIdAllocator
 import com.jpcottin.tairoto.world.FakeNetwork
 import com.jpcottin.tairoto.world.Population
@@ -65,10 +67,12 @@ class TankViewModelShareTest {
         name: String,
         lagoonSeed: Int,
         options: LaunchOptions = LaunchOptions(seed = 7, hints = false),
+        decor: List<DecorSpec> = emptyList(),
     ): Device {
         val engine = FakeEngine()
         val size = TankSize(150f, 330f, 55f)
-        val store = InMemoryLagoonStore(Population.sceneOf(mapOf("green_chromis" to 3 + lagoonSeed), size, EntityIdAllocator(0), Random(lagoonSeed)))
+        val scene = Population.sceneOf(mapOf("green_chromis" to 3 + lagoonSeed), size, EntityIdAllocator(0), Random(lagoonSeed))
+        val store = InMemoryLagoonStore(scene.copy(decor = decor))
         val log = mutableListOf<String>()
         val vmStore = ViewModelStore().also { stores += it }
         val factory = viewModelFactory {
@@ -145,6 +149,35 @@ class TankViewModelShareTest {
         assertEquals(1, guest.engine.slotOfFood)
         // The tank is the table's, the same on both.
         assertEquals(host.vm.ui.value.tankSize, guest.vm.ui.value.tankSize)
+    }
+
+    @Test fun `a guest shows the host's floor and fish, even where its own lagoon used the same ids`() = shareTest {
+        val connector = FakeShareConnector(network())
+        // Two lagoons made apart both count from 1: the same ids, different things.
+        val coral = DecorSpec(EntityId(100), "coral_head", 3, Vec2(60f, 120f), 1f, 0.8f)
+        val stone = DecorSpec(EntityId(100), "stone", 9, Vec2(20f, 40f), 0f, 0.3f)
+        val host = device(connector, "Tablet", 1, decor = listOf(coral))
+        host.vm.shareLagoon(ShareRoute.Nearby)
+        advanceTimeBy(500)
+        val guest = device(connector, "Phone", 2, decor = listOf(stone, stone.copy(id = EntityId(101))))
+        assertEquals(stone, guest.engine.decor[EntityId(100)])
+        val shared = host.engine.creatures.keys intersect guest.engine.creatures.keys
+        assertTrue("the lagoons should share ids", shared.isNotEmpty())
+        guest.vm.joinLagoon(JoinTarget.Relay(RelayAddress.EMULATOR_HOST))
+        advanceTimeBy(1_000)
+        assertEquals(SharePhase.SHARED, guest.vm.ui.value.share.phase)
+        assertEquals(mapOf(coral.id to coral), guest.engine.decor)
+        // Every fish is the host's own (its species, its pattern, its size), not the guest's under the same id.
+        for ((id, spec) in host.engine.creatures) {
+            val g = guest.engine.creatures[id]!!
+            assertEquals(spec.speciesId to spec.seed, g.speciesId to g.seed)
+            assertEquals(spec.lengthMm, g.lengthMm, 0f)
+        }
+        // And home again, the guest's own floor is back as it was.
+        guest.vm.stopSharing()
+        advanceTimeBy(1_000)
+        assertEquals(setOf(EntityId(100), EntityId(101)), guest.engine.decor.keys)
+        assertEquals(stone, guest.engine.decor[EntityId(100)])
     }
 
     @Test fun `a guest's own lagoon is kept as it was and comes back when it leaves`() = shareTest {

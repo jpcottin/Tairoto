@@ -34,6 +34,9 @@ interface TankEngine : Closeable {
     fun placeDecor(decor: DecorSpec, kind: DecorKind)
     fun moveDecor(decor: DecorSpec)
     fun removeDecor(id: EntityId)
+
+    /** The decorations the engine itself holds, as JSON, for logs: [[id, kind, x, y], ...]. */
+    fun describeDecor(): String = "[]"
     /** Where every creature is now: for saving the lagoon and for netting one. */
     fun snapshot(): List<CreatureState>
     fun tap(at: Vec2)

@@ -1,5 +1,6 @@
 package com.jpcottin.tairoto.engine
 
+import com.jpcottin.tairoto.world.CreatureSpec
 import com.jpcottin.tairoto.world.DecorCatalog
 import com.jpcottin.tairoto.world.DecorSpec
 import com.jpcottin.tairoto.world.EntityId
@@ -17,12 +18,16 @@ class SceneSync(
     /** In a shared lagoon, whether this device simulates a creature (or shows a ghost of another's). */
     var simulatesHere: (EntityId) -> Boolean = { true },
 ) {
-    private val applied = HashSet<EntityId>()
+    private val applied = HashMap<EntityId, CreatureSpec>()
     private val appliedDecor = HashMap<EntityId, DecorSpec>()
     private var size: TankSize? = null
 
     val appliedCount: Int get() = applied.size
     val appliedDecorCount: Int get() = appliedDecor.size
+
+    /** What was handed over, for logs: id, kind and place of each decoration. */
+    fun describeDecor(): String = appliedDecor.values.sortedBy { it.id.raw }
+        .joinToString(",", "[", "]") { "[${it.id.raw},\"${it.kindId}\",${it.at.x},${it.at.y}]" }
 
     /** Forgets what was handed over, and empties the tank: the next [apply] starts from nothing. */
     fun reset() {
@@ -38,7 +43,7 @@ class SceneSync(
             tank.setTank(scene.size)
             size = scene.size
         }
-        val diff = SceneDiff.between(applied, scene, appliedDecor)
+        val diff = SceneDiff.between(applied.keys, scene, appliedDecor, applied)
         diff.decorRemoved.forEach {
             tank.removeDecor(it)
             appliedDecor -= it
@@ -59,7 +64,7 @@ class SceneSync(
         diff.added.forEach { spec ->
             val species = SpeciesCatalog[spec.speciesId] ?: return@forEach
             tank.spawn(spec, species, ghost = !simulatesHere(spec.id))
-            applied += spec.id
+            applied[spec.id] = spec
         }
     }
 }

@@ -14,13 +14,40 @@ class LayoutTest {
         listOf(a to ScreenMm(68f, 150f), b to ScreenMm(118f, 150f), c to ScreenMm(68f, 140f)), base,
     )
 
-    @Test fun `screens lie side by side with a gap, tops aligned`() {
+    @Test fun `screens lie side by side with both frames between them, tops aligned`() {
         val (ra, rb, rc) = layout.placements.map { it.rect }
-        assertEquals(Layout.GAP_MM, rb.x - ra.right, 1e-3f)
-        assertEquals(Layout.GAP_MM, rc.x - rb.right, 1e-3f)
+        assertEquals(2 * ScreenMm.PHONE_BEZEL_MM, rb.x - ra.right, 1e-3f)
+        assertEquals(2 * ScreenMm.PHONE_BEZEL_MM, rc.x - rb.right, 1e-3f)
         assertEquals(ra.y, rb.y, 1e-3f)
         assertEquals(ra.y, rc.y, 1e-3f)
         assertEquals(118f, rb.w, 1e-3f)
+    }
+
+    @Test fun `emulator windows join with no gap`() {
+        val l = Layout.sideBySide(listOf(a to ScreenMm(65f, 146f, bezelMm = 0f), b to ScreenMm(70f, 158f, bezelMm = 0f)), base)
+        val (ra, rb) = l.placements.map { it.rect }
+        assertEquals(ra.right, rb.x, 1e-3f)
+    }
+
+    @Test fun `the gap is each device's own frame`() {
+        val l = Layout.sideBySide(
+            listOf(a to ScreenMm(68f, 150f, bezelMm = 2f), b to ScreenMm(250f, 160f, bezelMm = 9f), c to ScreenMm(68f, 150f, bezelMm = 0f)),
+            base,
+        )
+        val (ra, rb, rc) = l.placements.map { it.rect }
+        assertEquals(11f, rb.x - ra.right, 1e-3f)
+        assertEquals(9f, rc.x - rb.right, 1e-3f)
+        // Unless the caller sets one.
+        val fixed = Layout.sideBySide(listOf(a to ScreenMm(68f, 150f), b to ScreenMm(68f, 150f)), base, gapMm = 1.5f)
+        assertEquals(1.5f, fixed.placements[1].rect.x - fixed.placements[0].rect.right, 1e-3f)
+    }
+
+    @Test fun `the frame travels with the screen`() {
+        val s = ScreenMm.fromPixels(1080, 2424, 420f, 420f, bezelMm = 0f)
+        assertEquals(0f, s.bezelMm, 0f)
+        assertEquals(ScreenMm.PHONE_BEZEL_MM, ScreenMm.fromPixels(1080, 2424, 420f, 420f).bezelMm, 0f)
+        val wire = Wire.decode(Wire.encode(Msg.Hello(DeviceId(1, "emu"), s))) as Msg.Hello
+        assertEquals(s, wire.screen)
     }
 
     @Test fun `the tank reaches past the outer screens as far as they see the sand`() {
