@@ -48,14 +48,18 @@ disk.dataPartition.size=6G
 CONFIG
 fi
 
+# adb first: a fresh machine makes its key when the server first starts, and the emulator
+# trusts the key it finds when it boots; the other way round, adb is never let in.
+adb start-server > /dev/null 2>&1 || true
 "$sdk/emulator/emulator" -avd "$AVD" -port "$PORT" -gpu lavapipe -no-window -no-snapshot \
     -no-audio -no-boot-anim -camera-back none -camera-front none > "${LOG:-/tmp/$AVD.log}" 2>&1 &
-adb start-server > /dev/null 2>&1 || true
 log="${LOG:-/tmp/$AVD.log}"
 booted() { [ "$(adb -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; }
 for _ in $(seq 300); do booted && break; sleep 2; done
 if ! booted; then
-    echo "$SERIAL did not boot in 10 minutes; the emulator said:" >&2
+    echo "$SERIAL did not boot in 10 minutes. adb sees:" >&2
+    adb devices -l >&2
+    echo "The emulator said:" >&2
     tail -40 "$log" >&2
     exit 1
 fi
