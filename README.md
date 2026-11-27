@@ -153,6 +153,28 @@ source is noted next to each species in `Species.kt`.
 The page photo above is made up for the tests (`PagePhotos.kt`); the other two
 pictures are the app on an emulator scanning it.
 
+## On a TV, with a remote or a keyboard
+
+<p align="center">
+  <img src="docs/media/tv.jpg" width="640" alt="The lagoon on an Android TV: a cursor ring on the water, fish gathering at food dropped there">
+</p>
+
+Tairoto is in the Android TV launcher. A TV is watched from across the room,
+so its lagoon is drawn as if the screen were 240 mm wide: the fish look as big
+from the sofa as on a phone in the hand. The water takes the remote's keys,
+and a keyboard or a game controller works the same on any device:
+
+| Key | Does |
+|---|---|
+| Arrows | move a cursor on the water; at the edge they pan the lagoon |
+| OK, Enter, A | tap the glass |
+| OK held | drop a pellet |
+| F, X, Play | sprinkle flakes |
+| + / −, channel up / down | zoom |
+| Up from the top edge | the buttons; Down from them comes back to the water |
+
+The buttons show a bright ring when they have the focus.
+
 ## Build and test
 
 ```sh

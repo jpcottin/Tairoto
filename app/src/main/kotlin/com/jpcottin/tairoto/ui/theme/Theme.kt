@@ -1,5 +1,6 @@
 package com.jpcottin.tairoto.ui.theme
 
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +33,16 @@ object Ocean {
 }
 
 val GlassBorder = BorderStroke(1.dp, Ocean.GlassEdge)
+
+/** A glass button picked out by a remote or a keyboard: a bright, thick edge. */
+val GlassFocusBorder = BorderStroke(3.dp, Ocean.Foam)
+
+/** The glass border, or the focus one while [interaction] has the focus. */
+@androidx.compose.runtime.Composable
+fun glassBorder(interaction: androidx.compose.foundation.interaction.InteractionSource): BorderStroke {
+    val focused = interaction.collectIsFocusedAsState()
+    return if (focused.value) GlassFocusBorder else GlassBorder
+}
 
 private val scheme = darkColorScheme(
     primary = Ocean.SeaGlass,

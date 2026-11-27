@@ -583,10 +583,12 @@ private fun TableMapContent(
 /** A small glass button over the lagoon: share it, or how many screens it is on. */
 @Composable
 fun SharePill(ui: ShareUi, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val interaction = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Surface(
         onClick = onClick,
         color = if (ui.phase == SharePhase.SHARED) Ocean.Teal.copy(alpha = 0.85f) else Ocean.Glass,
-        border = com.jpcottin.tairoto.ui.theme.GlassBorder,
+        border = com.jpcottin.tairoto.ui.theme.glassBorder(interaction),
+        interactionSource = interaction,
         shape = RoundedCornerShape(50),
         modifier = modifier.heightIn(min = 40.dp).widthIn(min = 48.dp).testTag(SharePillTag).semantics {
             contentDescription = when {
