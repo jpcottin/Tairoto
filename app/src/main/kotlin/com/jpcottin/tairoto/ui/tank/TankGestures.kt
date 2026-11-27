@@ -31,12 +31,19 @@ interface TankGestureHandler {
     fun onRotate(radians: Float) = Unit
     /** Every finger has left the glass. */
     fun onGestureEnd() = Unit
+    /** One finger, put down at [start], began to move toward [toward] (it came on over an edge?). */
+    fun onStrokeStart(start: Vec2, toward: Vec2) = Unit
+    /** One finger, moving from [from] a moment before, was lifted at [end] (it went off over an edge?). */
+    fun onStrokeEnd(from: Vec2, end: Vec2) = Unit
 }
 
 private fun Offset.vec() = Vec2(x, y)
 
 /** How long a finger must rest to drop a pellet. */
 const val LONG_PRESS_MS = 450L
+
+/** Where a finger was this long before it was lifted gives the way it was going. */
+private const val STROKE_TAIL_MS = 40L
 
 /**
  * Touch: a tap ripples the water, a long press drops a pellet, one finger
@@ -57,6 +64,10 @@ fun Modifier.tankGestures(handler: TankGestureHandler): Modifier = this
             var dragging = false
             var longPressed = false
             var last = start
+            // Where the finger was lately, to tell the way it was going when lifted.
+            val trail = ArrayDeque<Pair<Long, Offset>>()
+            trail.addLast(startTime to start)
+            var end = start
             while (true) {
                 val event = if (!moved && !multi && !longPressed && !mouse) {
                     val left = LONG_PRESS_MS - (currentEvent.changes.firstOrNull()?.uptimeMillis?.minus(startTime) ?: 0L)
@@ -71,7 +82,10 @@ fun Modifier.tankGestures(handler: TankGestureHandler): Modifier = this
                     continue
                 }
                 val pressed = event.changes.filter { it.pressed }
-                if (pressed.isEmpty()) break
+                if (pressed.isEmpty()) {
+                    end = event.changes.firstOrNull()?.position ?: last
+                    break
+                }
                 if (pressed.size >= 2) {
                     if (sprinkling) {
                         handler.onSprinkleEnd()
@@ -91,7 +105,11 @@ fun Modifier.tankGestures(handler: TankGestureHandler): Modifier = this
                     if (!moved && (p - start).getDistance() > viewConfiguration.touchSlop) {
                         moved = true
                         dragging = !longPressed && handler.onDragStart(start.vec())
+                        if (!mouse) handler.onStrokeStart(start.vec(), p.vec())
                     }
+                    val t = pressed.first().uptimeMillis
+                    trail.addLast(t to p)
+                    while (trail.size > 2 && t - trail[1].first >= STROKE_TAIL_MS) trail.removeFirst()
                     if (moved) {
                         if (dragging) handler.onDrag(p.vec())
                         else if (mouse) handler.onPan((p - last).vec())
@@ -105,6 +123,7 @@ fun Modifier.tankGestures(handler: TankGestureHandler): Modifier = this
                 }
             }
             if (sprinkling) handler.onSprinkleEnd()
+            if (moved && !multi && !mouse) handler.onStrokeEnd(trail.first().second.vec(), end.vec())
             handler.onGestureEnd()
             val quick = (currentEvent.changes.firstOrNull()?.uptimeMillis ?: startTime) - startTime < LONG_PRESS_MS
             if (!multi && !moved && !longPressed && quick) handler.onTap(start.vec())

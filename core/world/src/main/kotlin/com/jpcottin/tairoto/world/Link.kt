@@ -14,8 +14,9 @@ import kotlinx.serialization.json.Json
 /** Everything devices say to each other. */
 @Serializable
 sealed interface Msg {
+    /** A device asks the host in, or says its screen changed; joining, with what it [brings] of its own lagoon. */
     @Serializable @SerialName("hello")
-    data class Hello(val device: DeviceId, val screen: ScreenMm) : Msg
+    data class Hello(val device: DeviceId, val screen: ScreenMm, val brings: Visitors? = null) : Msg
 
     @Serializable @SerialName("spawn")
     data class Spawn(val creature: CreatureSpec, val owner: DeviceId) : Msg
@@ -65,6 +66,29 @@ sealed interface Msg {
     @Serializable @SerialName("layout")
     data class LayoutChanged(val layout: Layout) : Msg
 
+    /** Someone moved [device]'s screen on the map: its picture's centre on the table, and its turn. To the host. */
+    @Serializable @SerialName("arrange")
+    data class Arrange(val device: DeviceId, val center: Vec2, val turns: Int) : Msg
+
+    /**
+     * A finger left [device]'s screen through [edge] (or came onto it,
+     * [entering]), [alongMm] along that edge from its start, at shared time
+     * [t]. The host pairs a leaving with an entering to lay two screens side
+     * by side.
+     */
+    @Serializable @SerialName("swipe")
+    data class EdgeSwipe(
+        val device: DeviceId,
+        val edge: Edge,
+        val alongMm: Float,
+        val entering: Boolean,
+        @SerialName("ts") val t: Double,
+    ) : Msg
+
+    /** Someone started or ended arranging the screens. To the host, which tells everyone with the layout. */
+    @Serializable @SerialName("arranging")
+    data class Arranging(val on: Boolean) : Msg
+
     /** A device asks the host the time; the answer also renews its lease on what it simulates. */
     @Serializable @SerialName("ping")
     data class Ping(val sent: Double) : Msg
@@ -110,6 +134,17 @@ sealed interface Msg {
 }
 
 /** Who owns a creature, for a device joining a session. */
+/**
+ * What a device brings of its own lagoon when it joins another: its creatures
+ * and decorations, every place given from the middle of its screen as the
+ * device sees it (x right, y down). The host puts them under that screen,
+ * however it lies, with new ids.
+ */
+@Serializable
+data class Visitors(val creatures: List<CreatureSpec> = emptyList(), val decor: List<DecorSpec> = emptyList()) {
+    val isEmpty: Boolean get() = creatures.isEmpty() && decor.isEmpty()
+}
+
 @Serializable
 data class OwnerEntry(val id: EntityId, val owner: DeviceId, val epoch: Int)
 

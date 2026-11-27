@@ -36,6 +36,14 @@ import com.jpcottin.tairoto.world.ScreenMm
 import com.jpcottin.tairoto.world.SharedTank
 import com.jpcottin.tairoto.world.TankSession
 import com.jpcottin.tairoto.world.TankSize
+import com.jpcottin.tairoto.world.DeviceId
+import com.jpcottin.tairoto.world.Vec2
+import com.jpcottin.tairoto.ui.share.ArrangeOverlay
+import com.jpcottin.tairoto.ui.share.ArrangeTags
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.performTouchInput
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -67,6 +75,10 @@ class ShareSheetTest {
         override fun stop() { stopped++ }
         override fun relayChanged(text: String) { relay = text }
         override fun dismissMessage() = Unit
+        val arranged = mutableListOf<Triple<DeviceId, Vec2, Int>>()
+        val arranging = mutableListOf<Boolean>()
+        override fun arrange(device: DeviceId, center: Vec2, turns: Int) { arranged += Triple(device, center, turns) }
+        override fun setArranging(on: Boolean) { arranging += on }
     }
 
     private val tablet = NearbyLagoon("Tablet", "192.168.1.20", 41234)
@@ -115,6 +127,69 @@ class ShareSheetTest {
         compose.onNodeWithTag(ShareTags.RELAY_FIELD).performTextReplacement("192.168.1.5:9000")
         compose.onNodeWithTag(ShareTags.JOIN_RELAY).performClick()
         assertEquals(listOf<JoinTarget>(JoinTarget.Relay(RelayAddress("192.168.1.5", 9000))), r.joined)
+    }
+
+    private val tabletId = DeviceId(0, "Tablet")
+    private val phoneId = DeviceId(1, "Pixel 9")
+    private val onTable = listOf(
+        ShareDeviceUi("Tablet", RectMm(20f, 30f, 250f, 160f), self = false, host = true, id = tabletId),
+        ShareDeviceUi("Pixel 9", RectMm(276f, 30f, 68f, 150f), self = true, host = false, id = phoneId),
+    )
+    private fun shared(arranging: Boolean = false) =
+        ShareUi(SharePhase.SHARED, ShareRole.GUEST, onTable, TankSize(380f, 220f, 55f), arranging = arranging)
+
+    @Test fun aScreenDraggedOnTheMapIsLaidWhereItWasDropped() {
+        val r = Recorder()
+        compose.setContent { TairotoTheme { ShareSheet(shared(), r, onClose = null) } }
+        val node = compose.onNodeWithTag(ShareTags.screen(1))
+        val before = node.fetchSemanticsNode().boundsInRoot
+        // Down and to the left, by a quarter of the map's width.
+        val mapW = compose.onNodeWithTag(ShareTags.MAP).fetchSemanticsNode().size.width.toFloat()
+        node.performTouchInput {
+            down(center)
+            moveBy(Offset(-mapW / 8f, 0f))
+            moveBy(Offset(-mapW / 8f, 40f))
+            up()
+        }
+        compose.waitForIdle()
+        val (device, center, turns) = r.arranged.single()
+        assertEquals(phoneId, device)
+        assertEquals(0, turns)
+        // The map shows the table at about mapW / 380 px a mm: a quarter of the map is ~95 mm left.
+        assertTrue("moved left: $center", center.x < 310f - 60f && center.x > 310f - 130f)
+        assertTrue("moved down: $center", center.y > 105f)
+        // Until the host answers, the screen stays where it was dropped.
+        assertTrue(node.fetchSemanticsNode().boundsInRoot.left < before.left - 10f)
+    }
+
+    @Test fun turnTurnsThisScreenOrTheOnePickedOnTheMapAQuarter() {
+        val r = Recorder()
+        compose.setContent { TairotoTheme { ShareSheet(shared(), r, onClose = null) } }
+        compose.onNodeWithTag(ShareTags.TURN).performScrollTo().assertTextContains("this one", substring = true).performClick()
+        assertEquals(Triple(phoneId, onTable[1].rect.center, 1), r.arranged.last())
+        compose.onNodeWithTag(ShareTags.screen(0)).performClick()
+        compose.onNodeWithTag(ShareTags.TURN).performScrollTo().assertTextContains("Tablet", substring = true).performClick()
+        assertEquals(Triple(tabletId, onTable[0].rect.center, 1), r.arranged.last())
+    }
+
+    @Test fun arrangingByHandStartsAndEnds() {
+        val r = Recorder()
+        var ui by androidx.compose.runtime.mutableStateOf(shared())
+        compose.setContent { TairotoTheme { ShareSheet(ui, r, onClose = null) } }
+        compose.onNodeWithText("Arrange by hand").performScrollTo().performClick()
+        assertEquals(listOf(true), r.arranging)
+        ui = shared(arranging = true)
+        compose.onNodeWithText("Done arranging").performScrollTo().performClick()
+        assertEquals(listOf(true, false), r.arranging)
+    }
+
+    @Test fun whileArrangingEachScreenShowsWhoItIsAndDoneEndsIt() {
+        var done = 0
+        compose.setContent { TairotoTheme { ArrangeOverlay(shared(arranging = true), onDone = { done++ }) } }
+        compose.onNodeWithTag(ArrangeTags.NAME).assertTextEquals("Pixel 9")
+        compose.onNodeWithText("2 screens", substring = true).assertIsDisplayed()
+        compose.onNodeWithTag(ArrangeTags.DONE).performClick()
+        assertEquals(1, done)
     }
 
     @Test fun sharedTheTableIsShownAndTheGuestCanLeave() {

@@ -206,6 +206,28 @@ class TankSession(
         return true
     }
 
+    /**
+     * What a device brings of its own lagoon, as it will lie here: new ids
+     * (theirs may be taken), each place moved by [place] (from the middle of
+     * that device's screen to the table), decorations turned by [turnRad],
+     * and marked as [home]'s, as many as there is room for. Not sent: the
+     * host says it with the lagoon it welcomes the device with.
+     */
+    fun visitorsFrom(v: Visitors, home: DeviceId, place: (Vec2) -> Vec2, turnRad: Float): Visitors {
+        val cur = sceneState.value
+        val size = cur.size
+        fun inside(p: Vec2, margin: Float) = Vec2(p.x.coerceIn(margin, size.widthMm - margin), p.y.coerceIn(margin, size.heightMm - margin))
+        val roomC = (TankScene.MAX_CREATURES - cur.creatures.size - pendingSpawns.size).coerceAtLeast(0)
+        val roomD = (TankScene.MAX_DECOR - cur.decor.size).coerceAtLeast(0)
+        val creatures = v.creatures.filter { SpeciesCatalog[it.speciesId] != null }.take(roomC).map {
+            it.copy(id = ids.allocate(), spawnAt = inside(place(it.spawnAt), 2f), home = home.slot)
+        }
+        val decor = v.decor.filter { DecorCatalog[it.kindId] != null }.take(roomD).map {
+            it.copy(id = ids.allocate(), at = inside(place(it.at), 0f), angle = it.angle + turnRad, home = home.slot)
+        }
+        return Visitors(creatures, decor)
+    }
+
     /** Starts over with the default population and floor. Nothing before it can be undone. */
     suspend fun reset() {
         val fresh = Population.defaultScene(sceneState.value.size, ids, random)

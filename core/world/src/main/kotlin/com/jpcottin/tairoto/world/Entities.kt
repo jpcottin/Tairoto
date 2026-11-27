@@ -67,6 +67,8 @@ data class CreatureSpec(
     /** Where it was released: x and y in mm, depth in mm below the surface. */
     val spawnAt: Vec2,
     val spawnDepthMm: Float,
+    /** The slot of the device whose own lagoon it came from, visiting a shared one: it goes home with it. */
+    val home: Int? = null,
 )
 
 /** The tank as a list of what is in it. */

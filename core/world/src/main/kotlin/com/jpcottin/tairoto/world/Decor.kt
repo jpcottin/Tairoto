@@ -51,6 +51,8 @@ data class DecorSpec(
     val angle: Float,
     /** 0 the smallest of its kind .. 1 the largest. */
     val size: Float,
+    /** The slot of the device whose own lagoon it came from, visiting a shared one: it goes home with it. */
+    val home: Int? = null,
 ) {
     init {
         require(size in 0f..1f) { "size out of range: $size" }

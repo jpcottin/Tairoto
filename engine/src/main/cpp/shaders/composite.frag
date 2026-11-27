@@ -64,7 +64,7 @@ void main() {
     bool refract = F.misc.z > 0.0;
     if (refract) {
         // Bend the view by the surface slope; through deeper water the shift is larger.
-        vec2 shift = n.xy * F.misc.z * F.cam.z / F.outSize.xy;
+        vec2 shift = tableToGlass(n.xy) * F.misc.z * F.cam.z / F.outSize.xy;
         if (ultra()) {
             color = vec3(texture(scene, uv + shift * 0.94).r,
                          texture(scene, uv + shift).g,

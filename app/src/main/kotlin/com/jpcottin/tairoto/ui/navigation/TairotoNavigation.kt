@@ -1,5 +1,7 @@
 package com.jpcottin.tairoto.ui.navigation
 
+import com.jpcottin.tairoto.world.DeviceId
+import com.jpcottin.tairoto.world.Vec2
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
@@ -138,6 +140,12 @@ fun TairotoNavigation(vm: TankViewModel) {
                         override fun relayChanged(text: String) = vm.setRelayAddress(text)
                         override fun dismissMessage() = vm.dismissShareMessage()
                         override fun allowLocalNetwork() = localNetwork.then { vm.lookForLagoons(true) }
+                        override fun arrange(device: DeviceId, center: Vec2, turns: Int) = vm.arrangeScreen(device, center, turns)
+                        override fun setArranging(on: Boolean) {
+                            vm.setArranging(on)
+                            // Swiping across the screens needs all of this one's glass.
+                            if (on && !twoPane) close(ShareKey)
+                        }
                     }
                 }
                 ShareSheet(state.share, actions, onClose = if (twoPane) ({ close(ShareKey) }) else null)

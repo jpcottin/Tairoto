@@ -37,6 +37,8 @@ data class ShareConfig(
     val leaseS: Double = 2.0,
     val lostS: Double = 2.5,
     val maxFoodPerMessage: Int = 300,
+    /** A finger leaving one screen and coming onto another this close in time is one swipe across both. */
+    val swipePairS: Double = 0.5,
 ) {
     init {
         require(lostS > leaseS + 2 * tickS) { "the host must wait longer than a lease" }
@@ -53,6 +55,8 @@ sealed interface ShareEvent {
     data class FoodTaken(override val t: Double, val id: Long, val mg: Float) : ShareEvent
     data class DeviceLost(override val t: Double, val device: DeviceId, val taken: Int) : ShareEvent
     data class Fenced(override val t: Double, val fenced: Boolean) : ShareEvent
+    /** A swipe across two screens laid [to] beside [from]. */
+    data class Stitched(override val t: Double, val from: DeviceId, val to: DeviceId) : ShareEvent
 }
 
 /** How the shared lagoon is doing, for the screen. */
@@ -246,7 +250,13 @@ class SharedTank(
             }
         }
         when (val m = env.msg) {
-            is Msg.Hello -> if (isHost) welcome(from, m.screen)
+            is Msg.Hello -> if (isHost) welcome(from, m.screen, m.brings)
+            is Msg.Arrange -> if (isHost) {
+                val lay = layoutState.value
+                apply(lay.moved(m.device, m.center, m.turns, baseSize()))
+            }
+            is Msg.EdgeSwipe -> if (isHost) onSwipe(m)
+            is Msg.Arranging -> if (isHost && layoutState.value.arranging != m.on) apply(layoutState.value.copy(arranging = m.on))
             is Msg.LayoutChanged -> {
                 layoutState.value = m.layout
                 session.growTo(m.layout.tank)
@@ -330,13 +340,60 @@ class SharedTank(
         flush()
     }
 
-    private fun welcome(device: DeviceId, screen: ScreenMm) {
+    // ------------------------------------------------------------ the table
+
+    /** Asks for [device]'s screen to lie at [center], turned [turns] (anyone may; the host decides). */
+    suspend fun arrange(device: DeviceId, center: Vec2, turns: Int) = toHost(Msg.Arrange(device, center, turns))
+
+    /** A finger left this screen through [edge] (or came onto it, [entering]), [alongMm] along it. */
+    suspend fun edgeSwipe(edge: Edge, alongMm: Float, entering: Boolean) =
+        toHost(Msg.EdgeSwipe(self, edge, alongMm, entering, sharedNow()))
+
+    /** Starts or ends arranging the screens, for every device. */
+    suspend fun setArranging(on: Boolean) = toHost(Msg.Arranging(on))
+
+    private suspend fun toHost(msg: Msg) {
+        if (isHost) handle(Envelope(self, self, msg)) else send(msg, hostOf())
+        flush()
+    }
+
+    private fun baseSize(): TankSize = session.scene.value.size.grownTo(layoutState.value.tank)
+
+    /** The host lays the table out anew and tells everyone. */
+    private fun apply(next: Layout) {
+        if (next == layoutState.value) return
+        layoutState.value = next
+        session.growTo(next.tank)
+        broadcast(Msg.LayoutChanged(next))
+        publishStatus()
+    }
+
+    private val swipes = ArrayList<Msg.EdgeSwipe>()
+
+    /** Pairs a finger leaving one screen with one coming onto another, and lays the second beside the first. */
+    private fun onSwipe(m: Msg.EdgeSwipe) {
+        swipes.removeAll { kotlin.math.abs(m.t - it.t) > 4 * config.swipePairS || (it.device == m.device && it.entering == m.entering) }
+        val partner = swipes
+            .filter { it.entering != m.entering && it.device != m.device && kotlin.math.abs(it.t - m.t) <= config.swipePairS }
+            .minByOrNull { kotlin.math.abs(it.t - m.t) }
+        if (partner == null) {
+            swipes += m
+            return
+        }
+        swipes.remove(partner)
+        val (out, into) = if (m.entering) partner to m else m to partner
+        // Leaving comes first: a finger cannot come onto the next screen before it has left this one.
+        if (into.t < out.t - 0.05) return
+        val next = layoutState.value.stitched(out.device, out.edge, out.alongMm, into.device, into.edge, into.alongMm, baseSize()) ?: return
+        onEvent(ShareEvent.Stitched(sharedNow(), out.device, into.device))
+        apply(next)
+    }
+
+    private fun welcome(device: DeviceId, screen: ScreenMm, brings: Visitors? = null) {
         lost.remove(device)
         lastHeard[device] = now()
         val current = layoutState.value
-        val screens = current.placements.filter { it.device != device }.map { it.device to it.screen } + (device to screen)
-        val base = session.scene.value.size.grownTo(current.tank)
-        val next = Layout.sideBySide(screens, base)
+        val next = current.withScreen(device, screen, baseSize())
         layoutState.value = next
         session.growTo(next.tank)
         broadcast(Msg.LayoutChanged(next))
@@ -345,12 +402,33 @@ class SharedTank(
             publishStatus()
             return
         }
+        // What it brings comes in under its screen, and is its own to simulate from the start.
+        val visitors = brings?.takeIf { !it.isEmpty }?.let { v ->
+            val p = next.placement(device)!!
+            val half = Vec2(screen.widthMm / 2f, screen.heightMm / 2f)
+            session.visitorsFrom(v, device, { at -> p.toTable(at + half) }, Turns.radians(p.turns))
+        } ?: Visitors()
+        for (c in visitors.creatures) {
+            mirror[c.id] = Ownership(device, 0)
+            registry.register(c.id, device)
+        }
         // The lagoon as it is this moment, every creature where it swims now.
         val places = HashMap<EntityId, CreaturePlace>()
         for ((id, st) in lastState) places[id] = CreaturePlace(st.first.at, st.first.z)
         for (st in lastOwned) places[st.id] = CreaturePlace(st.at, st.z)
-        send(Msg.Join(session.scene.value.withPlaces(places), ownersSnapshot(), next, now()), device)
+        val scene = session.scene.value.withPlaces(places).let { it.copy(creatures = it.creatures + visitors.creatures, decor = it.decor + visitors.decor) }
+        send(Msg.Join(scene, ownersSnapshot() + visitors.creatures.map { OwnerEntry(it.id, device, 0) }, next, now()), device)
+        // Everyone else (and this device) hears of them as of anything new.
+        for (c in visitors.creatures) broadcast(Msg.Spawn(c, device))
+        for (d in visitors.decor) broadcast(Msg.PlaceDecor(d))
         publishStatus()
+    }
+
+    /** What [device] brought goes home with it. */
+    private fun sendHome(device: DeviceId) {
+        val scene = session.scene.value
+        for (c in scene.creatures) if (c.home == device.slot) broadcast(Msg.Remove(c.id))
+        for (d in scene.decor) if (d.home == device.slot) broadcast(Msg.RemoveDecor(d.id))
     }
 
     private fun onHandoff(m: Msg.Handoff) {
@@ -410,6 +488,7 @@ class SharedTank(
         val next = layoutState.value.without(device)
         layoutState.value = next
         broadcast(Msg.LayoutChanged(next))
+        sendHome(device)
         send(Msg.Gone(device), device)
         onEvent(ShareEvent.DeviceLost(at, device, results.count { (it as? OwnershipResult.Accepted)?.ownership?.owner == self }))
         publishStatus()
@@ -649,9 +728,9 @@ class SharedTank(
          * Asks the host of the session [link] is in to let this device in:
          * sends its screen, waits for the lagoon. Null if no answer in time.
          */
-        suspend fun requestJoin(link: Link, screen: ScreenMm, timeoutMs: Long): Msg.Join? = withTimeoutOrNull(timeoutMs) {
+        suspend fun requestJoin(link: Link, screen: ScreenMm, timeoutMs: Long, brings: Visitors? = null): Msg.Join? = withTimeoutOrNull(timeoutMs) {
             val host = link.peers.first { peers -> peers.any { it.slot == HOST_SLOT } }.first { it.slot == HOST_SLOT }
-            link.send(Msg.Hello(link.self, screen), host)
+            link.send(Msg.Hello(link.self, screen, brings), host)
             link.incoming.first { it.msg is Msg.Join }.msg as Msg.Join
         }
 

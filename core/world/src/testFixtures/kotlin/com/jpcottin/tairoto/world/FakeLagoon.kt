@@ -245,6 +245,8 @@ class FakeLagoon(
     private val config: ShareConfig = ShareConfig(),
     /** How device [i] gets its link: the first is the host. */
     private val connect: suspend (i: Int, name: String) -> Link = { _, name -> net!!.join(name) },
+    /** What device [i] brings of its own lagoon when it joins. */
+    private val brings: (i: Int) -> Visitors? = { null },
 ) {
     val monitor = ExactlyOnce()
     val devices = ArrayList<Device>()
@@ -271,7 +273,7 @@ class FakeLagoon(
             val link = connect(i, "dev$i")
             val d = Device(link, FakeSim("dev$i", i, tank, monitor, 100 + i), clockOffsetS = 1000.0 * i + 0.37 * i)
             devices += d
-            val join = SharedTank.requestJoin(link, screens[i], 5_000) ?: error("dev$i got no answer")
+            val join = SharedTank.requestJoin(link, screens[i], 5_000, brings(i)) ?: error("dev$i got no answer")
             val s = TankSession(join.scene, link, Random(10 + i))
             d.session = s
             d.shared = SharedTank(s, link, d.sim, { now(d) }, join.layout, join.owners, config) { d.events += it }

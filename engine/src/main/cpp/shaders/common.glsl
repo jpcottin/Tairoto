@@ -8,6 +8,7 @@ layout(std140, set = 0, binding = 0) uniform Frame {
     vec4 tank;      // width, height, depth (mm), motes per layer
     vec4 sun;       // direction toward the sun (xyz), intensity
     vec4 misc;      // tilt.xy, refraction strength (mm), exposure
+    vec4 view;      // cos, sin of the screen's turn on the table (clockwise), 0, 0
     vec4 ripples[8];// centre.xy (mm), start time (s), amplitude (0 = unused)
 } F;
 
@@ -20,14 +21,18 @@ bool ultra() { return quality() > 1.5 && quality() < 2.5; }
 
 float depthScale(float z) { return F.cam.w / (F.cam.w + max(z, 0.0)); }
 
+/** A vector on the table as the glass sees it, and back: the screen may lie turned. */
+vec2 tableToGlass(vec2 v) { return vec2(F.view.x * v.x + F.view.y * v.y, -F.view.y * v.x + F.view.x * v.y); }
+vec2 glassToTable(vec2 v) { return vec2(F.view.x * v.x - F.view.y * v.y, F.view.y * v.x + F.view.x * v.y); }
+
 vec2 worldToScreen(vec2 p, float z) {
     vec2 o = F.origin.xy;
-    return F.outSize.xy * 0.5 + ((p - o) * depthScale(z) + (o - F.cam.xy)) * F.cam.z;
+    return F.outSize.xy * 0.5 + tableToGlass((p - o) * depthScale(z) + (o - F.cam.xy)) * F.cam.z;
 }
 
 vec2 screenToWorld(vec2 px, float z) {
     vec2 o = F.origin.xy;
-    return o + ((px - F.outSize.xy * 0.5) / F.cam.z - (o - F.cam.xy)) / depthScale(z);
+    return o + (glassToTable((px - F.outSize.xy * 0.5) / F.cam.z) - (o - F.cam.xy)) / depthScale(z);
 }
 
 vec4 projectNdc(vec2 p, float z) {

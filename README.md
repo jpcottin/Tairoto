@@ -7,7 +7,8 @@ shared by several devices on a table, fish swimming from one screen to the next.
 
 > Work in progress, kept local for now. Milestones 1 (the solo lagoon),
 > 2 (food and feeding), 3 (the bottom dwellers), 4 (arranging the lagoon),
-> 5 (one lagoon across several devices) and 5b (over Bluetooth too) of 10.
+> 5 (one lagoon across several devices), 5b (over Bluetooth too) and 6
+> (laying the screens out on the table) of 10.
 
 Tahitian names are checked against a reference before they are used, and the
 source is noted next to each species in `Species.kt`.
@@ -174,3 +175,18 @@ a phone, none for an emulator window, whose windows then join seamlessly).
 For now the screens lie side by side in the order they joined; the layout
 editor (milestone 6) will let you move them. A device that goes to the
 background leaves the lagoon, handing its creatures over.
+
+### Laying the screens out
+
+The share sheet draws the table to scale. Drag a screen to where it lies;
+it snaps against its neighbours, frames touching. "Turn" lays it across in
+quarter turns (each screen shows a mark on its top edge). Or press "Arrange
+by hand": every screen shows its name, and a finger swiped off one screen
+onto the next lays the second beside the first, turned to match, the
+finger's path running straight across. Anyone at the table may arrange; the
+host decides and every screen follows.
+
+A guest brings its own lagoon: its fish and corals come in under its screen
+and go home with it when it leaves. The host never saves them.
+
+    scripts/arrange-e2e.sh    # a real swipe across two emulators (adb input), checked from their logs

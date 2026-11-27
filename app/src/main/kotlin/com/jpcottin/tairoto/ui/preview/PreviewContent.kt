@@ -1,5 +1,6 @@
 package com.jpcottin.tairoto.ui.preview
 
+import com.jpcottin.tairoto.ui.share.ArrangeOverlay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -114,8 +115,15 @@ object PreviewData {
         TankSize(190f, 420f, 55f),
     )
 
-    private fun onTable(self: Int) = table.placements.map {
-        ShareDeviceUi(it.device.name, it.rect, self = it.device.slot == self, host = it.device.slot == 0)
+    private fun onTable(self: Int, layout: Layout = table) = layout.placements.map {
+        ShareDeviceUi(it.device.name, it.rect, self = it.device.slot == self, host = it.device.slot == 0, id = it.device, turns = it.turns)
+    }
+
+    /** The same three screens arranged: the phone lying across under the tablet, the foldable beside it. */
+    val arranged: Layout = table.let { l ->
+        val tablet = l.rectOf(DeviceId(0, "Tablet"))!!
+        l.moved(DeviceId(1, "Pixel 9"), Vec2(tablet.x + 75f, tablet.bottom + 6f + 34f), 1, l.tank)
+            .moved(DeviceId(2, "Fold"), Vec2(tablet.right + 6f + 59f, tablet.center.y), 0, l.tank)
     }
 
     /** Nothing shared yet; two lagoons found on the network. */
@@ -135,6 +143,12 @@ object PreviewData {
     val sharedHost = sharedGuest.copy(role = ShareRole.HOST, devices = onTable(self = 0), here = 27)
 
     val outOfTouch = sharedGuest.copy(connected = false)
+
+    /** The guest's map once the screens were laid out as they lie, the phone across. */
+    val sharedArranged = sharedGuest.copy(devices = onTable(self = 1, arranged), tank = arranged.tank)
+
+    /** Someone is arranging the screens by hand: each shows who it is. */
+    val arranging = sharedGuest.copy(arranging = true)
 
     val settings = SettingsUi(
         quality = QualityMode.Auto, activeTier = QualityTier.HIGH, showStats = true, creatures = total,
@@ -222,6 +236,15 @@ private fun PaneContent(pane: PreviewPane, inPane: Boolean, share: ShareUi) {
             decorCounts = PreviewData.decorCounts, decorRoomLeft = 17, startOnDecor = true,
         )
         PreviewPane.Settings -> SettingsScreen(PreviewData.settings, onBack = {}, onQuality = {}, onShowStats = {}, onResetTank = {}, inPane = inPane)
+    }
+}
+
+/** A screen of a shared lagoon while the screens are arranged by hand: its name, its glowing edges. */
+@Composable
+fun LagoonArrangingPreviewContent(share: ShareUi = PreviewData.arranging) {
+    Box(Modifier.fillMaxSize()) {
+        LagoonBackdrop()
+        ArrangeOverlay(share, onDone = {}, animate = false)
     }
 }
 

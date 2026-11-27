@@ -85,7 +85,21 @@ import com.jpcottin.tairoto.ui.tank.SharePhase
 import com.jpcottin.tairoto.ui.tank.ShareRole
 import com.jpcottin.tairoto.ui.tank.ShareUi
 import com.jpcottin.tairoto.ui.theme.Ocean
+import com.jpcottin.tairoto.world.DeviceId
+import com.jpcottin.tairoto.world.Edge
 import com.jpcottin.tairoto.world.TankSize
+import com.jpcottin.tairoto.world.Turns
+import com.jpcottin.tairoto.world.Vec2
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material.icons.outlined.Rotate90DegreesCw
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.math.min
 
@@ -105,6 +119,9 @@ object ShareTags {
     const val MESSAGE = "share_message"
     const val LOOKING = "share_looking"
     const val ALLOW = "share_allow"
+    const val TURN = "share_turn"
+    const val ARRANGE = "share_arrange"
+    fun screen(slot: Int) = "share_map_screen_$slot"
     fun nearby(name: String, via: NearbyLagoon.Via = NearbyLagoon.Via.WIFI) =
         if (via == NearbyLagoon.Via.WIFI) "share_nearby_$name" else "share_nearby_bt_$name"
 }
@@ -118,6 +135,10 @@ interface ShareActions {
     fun dismissMessage()
     /** Asks for the local network (Android 17), to look for lagoons nearby. */
     fun allowLocalNetwork() {}
+    /** Lays [device]'s screen at [center] on the table (mm), turned [turns]. */
+    fun arrange(device: DeviceId, center: Vec2, turns: Int) {}
+    /** Starts or ends arranging the screens by swiping across them. */
+    fun setArranging(on: Boolean) {}
 }
 
 /**
@@ -144,7 +165,7 @@ fun ShareSheet(ui: ShareUi, actions: ShareActions, onClose: (() -> Unit)?) {
             when (ui.phase) {
                 SharePhase.OFF -> Start(ui, actions)
                 SharePhase.CONNECTING -> Connecting(actions::stop)
-                SharePhase.SHARED -> Shared(ui, actions::stop)
+                SharePhase.SHARED -> Shared(ui, actions)
             }
         }
     }
@@ -311,8 +332,42 @@ private fun Connecting(onCancel: () -> Unit) {
 }
 
 @Composable
-private fun Shared(ui: ShareUi, onStop: () -> Unit) {
-    if (ui.tank != null && ui.devices.isNotEmpty()) TableMap(ui.devices, ui.tank)
+private fun Shared(ui: ShareUi, actions: ShareActions) {
+    val onStop = actions::stop
+    if (ui.tank != null && ui.devices.isNotEmpty()) {
+        var selected by remember { mutableStateOf<DeviceId?>(null) }
+        val target = ui.devices.firstOrNull { it.id == selected } ?: ui.devices.firstOrNull { it.self }
+        TableMap(
+            ui.devices, ui.tank,
+            onMove = { d, center, turns -> selected = d.id; actions.arrange(d.id, center, turns) },
+            selected = target?.id,
+            onSelect = { selected = it.id },
+        )
+        if (ui.devices.size > 1) {
+            Text(
+                "Drag a screen to where it lies on the table. Or arrange them by hand: swipe a finger from one screen onto the next.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Ocean.Mist,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (target != null) {
+                FilledTonalButton(
+                    onClick = { actions.arrange(target.id, target.rect.center, target.turns + 1) },
+                    modifier = Modifier.testTag(ShareTags.TURN),
+                ) {
+                    Icon(Icons.Outlined.Rotate90DegreesCw, null, Modifier.size(18.dp))
+                    Spacer(Modifier.size(8.dp))
+                    Text("Turn " + if (target.self) "this one" else target.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (ui.devices.size > 1) {
+                OutlinedButton(onClick = { actions.setArranging(!ui.arranging) }, modifier = Modifier.testTag(ShareTags.ARRANGE)) {
+                    Text(if (ui.arranging) "Done arranging" else "Arrange by hand")
+                }
+            }
+        }
+    }
     if (!ui.connected) {
         Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
             Text(
@@ -340,12 +395,20 @@ private fun Shared(ui: ShareUi, onStop: () -> Unit) {
 
 /**
  * The table seen from above, to scale: the water of the shared tank and
- * every screen lying on it, this one picked out. The layout editor of the
- * next milestone moves them; for now they lie side by side in the order they
- * joined.
+ * every screen lying on it, this one picked out, each with a mark on its top
+ * edge (so one lying across shows it). With [onMove], a screen can be
+ * dragged to where it lies: it lands there when the host has laid the table
+ * out again (snapped against its neighbours), and a tap picks it.
  */
 @Composable
-fun TableMap(devices: List<ShareDeviceUi>, tank: TankSize, modifier: Modifier = Modifier) {
+fun TableMap(
+    devices: List<ShareDeviceUi>,
+    tank: TankSize,
+    modifier: Modifier = Modifier,
+    onMove: ((ShareDeviceUi, Vec2, Int) -> Unit)? = null,
+    selected: DeviceId? = null,
+    onSelect: (ShareDeviceUi) -> Unit = {},
+) {
     val pulse by rememberInfiniteTransition(label = "self").animateFloat(
         0.35f, 1f, infiniteRepeatable(tween(1400), RepeatMode.Reverse), label = "pulse",
     )
@@ -359,11 +422,12 @@ fun TableMap(devices: List<ShareDeviceUi>, tank: TankSize, modifier: Modifier = 
                 .testTag(ShareTags.MAP)
                 .semantics {
                     contentDescription = "The table: " + devices.joinToString { d ->
-                        d.name + (if (d.self) " (this one)" else "") + (if (d.host) ", the host" else "")
+                        d.name + (if (d.self) " (this one)" else "") + (if (d.host) ", the host" else "") +
+                            (if (Turns.norm(d.turns) % 2 == 1) ", lying across" else if (Turns.norm(d.turns) == 2) ", upside down" else "")
                     }
                 },
         ) {
-            TableMapContent(devices, tank, pulse, mapW, mapH)
+            TableMapContent(devices, tank, pulse, mapW, mapH, onMove, selected, onSelect)
         }
     }
 }
@@ -380,7 +444,16 @@ private fun Modifier.sideways() = layout { measurable, constraints ->
 }
 
 @Composable
-private fun TableMapContent(devices: List<ShareDeviceUi>, tank: TankSize, pulse: Float, mapW: Dp, mapH: Dp) {
+private fun TableMapContent(
+    devices: List<ShareDeviceUi>,
+    tank: TankSize,
+    pulse: Float,
+    mapW: Dp,
+    mapH: Dp,
+    onMove: ((ShareDeviceUi, Vec2, Int) -> Unit)?,
+    selected: DeviceId?,
+    onSelect: (ShareDeviceUi) -> Unit,
+) {
     val density = LocalDensity.current
     val wPx = with(density) { mapW.toPx() }
     val hPx = with(density) { mapH.toPx() }
@@ -399,23 +472,71 @@ private fun TableMapContent(devices: List<ShareDeviceUi>, tank: TankSize, pulse:
             size = Size(tank.widthMm * k, tank.heightMm * k),
             cornerRadius = CornerRadius(14.dp.toPx()),
         )
-        for (d in devices) {
-            val tl = Offset(ox + d.rect.x * k, oy + d.rect.y * k)
-            val sz = Size(d.rect.w * k, d.rect.h * k)
-            val r = CornerRadius(min(sz.width, sz.height) * 0.08f)
-            // A screen: dark glass with a bezel, this one glowing.
-            drawRoundRect(Color(0xCC041A20), tl, sz, r)
-            drawRoundRect(if (d.self) Ocean.SeaGlass.copy(alpha = pulse) else Ocean.Foam.copy(alpha = 0.55f), tl, sz, r, style = Stroke(if (d.self) 2.5.dp.toPx() else 1.5.dp.toPx()))
-        }
     }
-    for (d in devices) {
-        val x = with(density) { (ox + d.rect.x * k).toDp() }
-        val y = with(density) { (oy + d.rect.y * k).toDp() }
+    for (d in devices) key(d.id) {
+        // Where a finger has dragged it, until the host lays it there (or a moment passes).
+        var drag by remember(d.rect, d.turns) { mutableStateOf(Offset.Zero) }
+        var dropped by remember { mutableStateOf(0) }
+        LaunchedEffect(dropped) {
+            if (dropped > 0) {
+                delay(1_500)
+                drag = Offset.Zero
+            }
+        }
+        val x = with(density) { (ox + d.rect.x * k + drag.x).toDp() }
+        val y = with(density) { (oy + d.rect.y * k + drag.y).toDp() }
         val w = with(density) { (d.rect.w * k).toDp() }
         val h = with(density) { (d.rect.h * k).toDp() }
+        val picked = onMove != null && d.id == selected
+        val top = Edge.TOP.turned(d.turns)
         // A screen drawn too narrow for its name (a phone beside a tablet) has it written up its side.
         val upright = w >= NARROW_LABEL || h < w
-        Box(Modifier.offset(x, y).size(w, h).padding(4.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .offset(x, y)
+                .size(w, h)
+                .testTag(ShareTags.screen(d.id.slot))
+                .then(
+                    if (onMove == null) Modifier else Modifier
+                        .pointerInput(d.id, d.rect, d.turns, k) {
+                            detectDragGestures(
+                                onDragStart = { onSelect(d) },
+                                onDragEnd = {
+                                    onMove(d, d.rect.center + Vec2(drag.x / k, drag.y / k), d.turns)
+                                    dropped++
+                                },
+                                onDragCancel = { drag = Offset.Zero },
+                            ) { change, amount ->
+                                change.consume()
+                                drag += amount
+                            }
+                        }
+                        .pointerInput(d.id) { detectTapGestures { onSelect(d) } },
+                )
+                .drawBehind {
+                    val r = CornerRadius(min(size.width, size.height) * 0.08f)
+                    // A screen: dark glass with a bezel, this one glowing, the picked one bright.
+                    drawRoundRect(Color(0xCC041A20), cornerRadius = r)
+                    val edge = when {
+                        d.self -> Ocean.SeaGlass.copy(alpha = pulse)
+                        picked -> Ocean.Foam
+                        else -> Ocean.Foam.copy(alpha = 0.55f)
+                    }
+                    drawRoundRect(edge, cornerRadius = r, style = Stroke(if (d.self || picked) 2.5.dp.toPx() else 1.5.dp.toPx()))
+                    // Its top, as the device sees it: a short bar along that edge.
+                    val t = 3.dp.toPx()
+                    val inset = 4.dp.toPx()
+                    val mark = when (top) {
+                        Edge.TOP -> Rect(Offset(size.width * 0.35f, inset), Size(size.width * 0.3f, t))
+                        Edge.BOTTOM -> Rect(Offset(size.width * 0.35f, size.height - inset - t), Size(size.width * 0.3f, t))
+                        Edge.LEFT -> Rect(Offset(inset, size.height * 0.35f), Size(t, size.height * 0.3f))
+                        Edge.RIGHT -> Rect(Offset(size.width - inset - t, size.height * 0.35f), Size(t, size.height * 0.3f))
+                    }
+                    drawRoundRect(edge.copy(alpha = 0.8f), mark.topLeft, mark.size, CornerRadius(t / 2f))
+                }
+                .padding(6.dp),
+            contentAlignment = Alignment.Center,
+        ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = if (upright) Modifier else Modifier.sideways()) {
                 Text(
                     d.name,

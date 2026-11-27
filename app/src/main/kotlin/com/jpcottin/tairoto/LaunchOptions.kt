@@ -31,6 +31,8 @@ data class LaunchOptions(
     val share: ShareLaunch? = null,
     /** Log every ownership message of a shared lagoon (to chase a bug across devices). */
     val trace: Boolean = false,
+    /** Hosting, start arranging the screens at once (tests swipe across emulators). */
+    val arrange: Boolean = false,
 ) {
     val deterministic: Boolean get() = ci
 
@@ -55,6 +57,7 @@ data class LaunchOptions(
         const val RELAY = "tairoto.relay"
         const val SESSION = "tairoto.session"
         const val TRACE = "tairoto.trace"
+        const val ARRANGE = "tairoto.arrange"
 
         /** Reads `kind:count,kind:count` of decorations; unknown or malformed entries are skipped. */
         fun parseDecor(text: String?): Map<String, Int>? {
@@ -96,6 +99,7 @@ data class LaunchOptions(
                 decor = parseDecor(intent.getStringExtra(DECOR)),
                 share = ShareLaunch.parse(intent.getStringExtra(SHARE), intent.getStringExtra(RELAY), intent.getStringExtra(SESSION)),
                 trace = intent.getBooleanExtra(TRACE, false),
+                arrange = intent.getBooleanExtra(ARRANGE, false),
             )
         }
     }

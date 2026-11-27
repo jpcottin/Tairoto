@@ -27,11 +27,16 @@ data class Viewport(val widthPx: Float, val heightPx: Float, val basePxPerMm: Fl
  * single device O is the camera centre, so panning slides the sand slower than
  * the fish above it. With several devices O becomes one point on the table,
  * shared by all of them, so a fish crossing a screen edge lines up.
+ *
+ * A screen lying turned on the table ([turns], see [Turns]) sees the tank
+ * turned the other way: the vector from the centre is turned into the
+ * screen's own axes before it becomes pixels.
  */
 data class Camera(
     val center: Vec2,
     val zoom: Float = 1f,
     val parallaxOrigin: Vec2? = null,
+    val turns: Int = 0,
 ) {
     val origin: Vec2 get() = parallaxOrigin ?: center
 
@@ -40,28 +45,28 @@ data class Camera(
     fun worldToScreen(p: Vec2, depthMm: Float, viewport: Viewport, projection: DepthProjection = DepthProjection.DEFAULT): Vec2 {
         val s = projection.scaleAt(depthMm)
         val o = origin
-        return viewport.center + ((p - o) * s + (o - center)) * pxPerMm(viewport)
+        return viewport.center + Turns.toScreen((p - o) * s + (o - center), turns) * pxPerMm(viewport)
     }
 
     fun screenToWorld(screen: Vec2, depthMm: Float, viewport: Viewport, projection: DepthProjection = DepthProjection.DEFAULT): Vec2 {
         val s = projection.scaleAt(depthMm)
         val o = origin
-        return o + ((screen - viewport.center) / pxPerMm(viewport) - (o - center)) / s
+        return o + (Turns.toTable((screen - viewport.center) / pxPerMm(viewport), turns) - (o - center)) / s
     }
 
     /** Moves the camera so that content at [referenceDepthMm] follows a finger that moved by [deltaPx]. */
     fun panned(deltaPx: Vec2, viewport: Viewport, tank: TankSize, referenceDepthMm: Float = tank.depthMm * REFERENCE_DEPTH, projection: DepthProjection = DepthProjection.DEFAULT): Camera {
         val s = projection.scaleAt(referenceDepthMm)
-        return copy(center = center - deltaPx / (pxPerMm(viewport) * s)).clamped(viewport, tank, projection)
+        return copy(center = center - Turns.toTable(deltaPx, turns) / (pxPerMm(viewport) * s)).clamped(viewport, tank, projection)
     }
 
     /** Zooms by [factor] keeping the point under [focusPx] (at [referenceDepthMm]) where it is. */
     fun zoomedAbout(focusPx: Vec2, factor: Float, viewport: Viewport, tank: TankSize, referenceDepthMm: Float = tank.depthMm * REFERENCE_DEPTH, projection: DepthProjection = DepthProjection.DEFAULT): Camera {
         if (factor <= 0f || factor.isNaN()) return this
         val s = projection.scaleAt(referenceDepthMm)
-        val offset = focusPx - viewport.center
+        val offset = Turns.toTable(focusPx - viewport.center, turns)
         val anchor = center + offset / (pxPerMm(viewport) * s)
-        val newZoom = (zoom * factor).coerceIn(minZoom(viewport, tank, projection), MAX_ZOOM)
+        val newZoom = (zoom * factor).coerceIn(minZoom(turned(viewport), tank, projection), MAX_ZOOM)
         val newCenter = anchor - offset / (viewport.basePxPerMm * newZoom * s)
         return copy(center = newCenter, zoom = newZoom).clamped(viewport, tank, projection)
     }
@@ -72,7 +77,7 @@ data class Camera(
      * view is wider than the tank the camera is centred on that axis.
      */
     fun clamped(viewport: Viewport, tank: TankSize, projection: DepthProjection = DepthProjection.DEFAULT): Camera {
-        val z = zoom.coerceIn(minZoom(viewport, tank, projection), MAX_ZOOM)
+        val z = zoom.coerceIn(minZoom(turned(viewport), tank, projection), MAX_ZOOM)
         val half = floorHalfExtent(viewport, z, tank, projection)
         fun axis(c: Float, h: Float, side: Float) = if (2f * h >= side) side / 2f else c.coerceIn(h, side - h)
         return copy(
@@ -81,11 +86,16 @@ data class Camera(
         )
     }
 
-    /** Half the size, in mm, of the sand the view shows. */
+    /** Half the size, in mm, of the sand the view shows, along the tank's axes. */
     fun floorHalfExtent(viewport: Viewport, zoomValue: Float, tank: TankSize, projection: DepthProjection = DepthProjection.DEFAULT): Vec2 {
         val k = viewport.basePxPerMm * zoomValue * projection.scaleAt(tank.depthMm)
-        return Vec2(viewport.widthPx / 2f / k, viewport.heightPx / 2f / k)
+        val v = turned(viewport)
+        return Vec2(v.widthPx / 2f / k, v.heightPx / 2f / k)
     }
+
+    /** The viewport as it covers the tank: lying across, its width runs along the tank's height. */
+    private fun turned(viewport: Viewport): Viewport =
+        if (Turns.norm(turns) % 2 == 0) viewport else Viewport(viewport.heightPx, viewport.widthPx, viewport.basePxPerMm)
 
     companion object {
         const val MAX_ZOOM = 3f

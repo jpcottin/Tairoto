@@ -6,6 +6,7 @@ import com.android.tools.screenshot.PreviewTest
 import com.jpcottin.tairoto.ui.preview.DecorCardsPreviewContent
 import com.jpcottin.tairoto.ui.preview.DecorGalleryPreviewContent
 import com.jpcottin.tairoto.ui.preview.FormFactorPreviews
+import com.jpcottin.tairoto.ui.preview.LagoonArrangingPreviewContent
 import com.jpcottin.tairoto.ui.preview.LagoonEditingPreviewContent
 import com.jpcottin.tairoto.ui.tank.EditTool
 import com.jpcottin.tairoto.ui.preview.LagoonScreenPreviewContent
@@ -101,3 +102,13 @@ fun LagoonSharedOnThreeScreens() = TairotoTheme {
 @NarrowPreviews
 @Composable
 fun SharedLagoonOutOfTouch() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Share, share = PreviewData.outOfTouch) }
+
+@PreviewTest
+@FormFactorPreviews
+@Composable
+fun LagoonArranging() = TairotoTheme { LagoonArrangingPreviewContent() }
+
+@PreviewTest
+@NarrowPreviews
+@Composable
+fun SharedTableArranged() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Share, share = PreviewData.sharedArranged) }

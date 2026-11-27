@@ -18,6 +18,9 @@ import com.jpcottin.tairoto.share.ShareConnection
 import com.jpcottin.tairoto.share.ShareConnector
 import com.jpcottin.tairoto.share.ShareRoute
 import com.jpcottin.tairoto.world.DeviceId
+import com.jpcottin.tairoto.world.EdgeSwipes
+import com.jpcottin.tairoto.world.Turns
+import com.jpcottin.tairoto.world.Visitors
 import com.jpcottin.tairoto.world.Layout
 import com.jpcottin.tairoto.world.RectMm
 import com.jpcottin.tairoto.world.ShareEvent
@@ -119,7 +122,15 @@ enum class SharePhase { OFF, CONNECTING, SHARED }
 enum class ShareRole { HOST, GUEST }
 
 /** One screen of a shared lagoon, where it lies on the table. */
-data class ShareDeviceUi(val name: String, val rect: RectMm, val self: Boolean, val host: Boolean)
+data class ShareDeviceUi(
+    val name: String,
+    val rect: RectMm,
+    val self: Boolean,
+    val host: Boolean,
+    val id: DeviceId = DeviceId.Solo,
+    /** Quarter turns clockwise of the device on the table (see [com.jpcottin.tairoto.world.Turns]). */
+    val turns: Int = 0,
+)
 
 data class ShareUi(
     val phase: SharePhase = SharePhase.OFF,
@@ -142,6 +153,8 @@ data class ShareUi(
     val here: Int = 0,
     /** May the app reach the local network (a runtime permission from Android 17)? */
     val localNetwork: Boolean = true,
+    /** Someone is arranging the screens: each shows who it is, and a swipe across two lays them side by side. */
+    val arranging: Boolean = false,
 ) {
     val hostName: String? get() = devices.firstOrNull { it.host }?.name
 }
@@ -372,7 +385,7 @@ class TankViewModel(
     fun saveNow() {
         if (!options.persist || role == ShareRole.GUEST) return
         val s = session ?: return
-        val scene = s.scene.value.withPlaces(places())
+        val scene = s.scene.value.withPlaces(places()).withoutVisitors()
         viewModelScope.launch(NonCancellable) { lagoonStore.save(scene) }
     }
 
@@ -380,8 +393,11 @@ class TankViewModel(
         if (role == ShareRole.GUEST) return // another device's lagoon: this one's own was saved on joining
         val s = session ?: return
         val places = withContext(background) { places() }
-        lagoonStore.save(s.scene.value.withPlaces(places))
+        lagoonStore.save(s.scene.value.withPlaces(places).withoutVisitors())
     }
+
+    /** This device's own lagoon: what guests brought goes home with them, it is not saved here. */
+    private fun TankScene.withoutVisitors() = copy(creatures = creatures.filter { it.home == null }, decor = decor.filter { it.home == null })
 
     private fun places() = runCatching { engine.snapshot() }.getOrDefault(emptyList())
         .associate { it.id to CreaturePlace(Vec2(it.x, it.y), it.z) }
@@ -437,6 +453,7 @@ class TankViewModel(
      * where it lands, then one flake every [SPRINKLE_SPACING_MM] of the way.
      */
     fun sprinkle(screenPx: Vec2, first: Boolean) {
+        if (arrangingTable()) return // a finger swiped across screens lines them up, it does not feed
         if (state.value.edit.active) {
             // Arranging, a finger dragging over open water pans instead of feeding.
             val last = lastPanPx
@@ -470,7 +487,7 @@ class TankViewModel(
 
     /** A long press drops a pellet: it sinks fast, and the turtle loves it. */
     fun dropPellet(screenPx: Vec2) {
-        if (state.value.edit.active) return
+        if (state.value.edit.active || arrangingTable()) return
         val vp = viewport ?: return
         val cam = camera ?: return
         engine.dropFood(cam.screenToWorld(screenPx, 0f, vp), FoodKind.PELLET, 1)
@@ -700,7 +717,7 @@ class TankViewModel(
                 failShare(e, "Could not join the lagoon")
                 return@launch
             }
-            val join = SharedTank.requestJoin(conn.link, screen, JOIN_TIMEOUT_MS)
+            val join = SharedTank.requestJoin(conn.link, screen, JOIN_TIMEOUT_MS, brings())
             if (join == null) {
                 conn.close()
                 failShare(null, "The lagoon did not answer")
@@ -731,7 +748,7 @@ class TankViewModel(
         viewModelScope.launch(job) {
             sh.layout.collect { layout ->
                 applySharedCamera(layout)
-                setShare { it.copy(devices = devicesOnTable(layout, sh.self), tank = layout.tank) }
+                setShare { it.copy(devices = devicesOnTable(layout, sh.self), tank = layout.tank, arranging = layout.arranging) }
             }
         }
         viewModelScope.launch(job) {
@@ -763,6 +780,7 @@ class TankViewModel(
                 endShare(if (r == ShareRole.GUEST) "${state.value.share.hostName ?: "The host"} stopped sharing" else "Sharing stopped: $reason")
             }
         }
+        if (options.arrange && r == ShareRole.HOST) viewModelScope.launch(job) { sh.setArranging(true) }
         netLog(json("share", "role" to r.name.lowercase(), "self" to sh.self.slot, "name" to sh.self.name, "t" to sh.sharedNow()))
         // Who is in the lagoon as it starts here, so a log can account for every one of them.
         netLog(json("scene", "self" to sh.self.slot, "ids" to ns.scene.value.creatures.joinToString(",", "[", "]") { it.id.raw.toString() }))
@@ -778,8 +796,82 @@ class TankViewModel(
                 rect = p.rect,
                 self = p.device == self,
                 host = p.device.slot == SharedTank.HOST_SLOT,
+                id = p.device,
+                turns = p.turns,
             )
         }
+    }
+
+    // ------------------------------------------------------------ the table
+
+    private fun arrangingTable() = shared != null && state.value.share.arranging
+
+    /** Lays [device]'s screen on the table at [center] (mm), turned [turns]: from the map, on any device. */
+    fun arrangeScreen(device: DeviceId, center: Vec2, turns: Int) {
+        val sh = shared ?: return
+        viewModelScope.launch { sh.arrange(device, center, turns) }
+    }
+
+    /** Starts or ends arranging the screens, on every device. */
+    fun setArranging(on: Boolean) {
+        val sh = shared ?: return
+        viewModelScope.launch { sh.setArranging(on) }
+    }
+
+    /** A finger began to move from [start]: while arranging, did it come onto this screen over an edge? */
+    fun strokeStart(start: Vec2, toward: Vec2) {
+        if (!arrangingTable()) return
+        val k = glassPxPerMm() ?: return
+        val vp = viewport ?: return
+        val hit = EdgeSwipes.entering(start, toward, vp.widthPx, vp.heightPx, EdgeSwipes.MARGIN_MM * k) ?: return
+        swipe(hit, entering = true, k)
+    }
+
+    /** A finger was lifted at [end]: while arranging, did it leave this screen over an edge? */
+    fun strokeEnd(from: Vec2, end: Vec2) {
+        if (!arrangingTable()) return
+        val k = glassPxPerMm() ?: return
+        val vp = viewport ?: return
+        val hit = EdgeSwipes.leaving(from, end, vp.widthPx, vp.heightPx, EdgeSwipes.MARGIN_MM * k) ?: return
+        swipe(hit, entering = false, k)
+    }
+
+    private fun swipe(hit: EdgeSwipes.AtEdge, entering: Boolean, pxPerMm: Float) {
+        val sh = shared ?: return
+        netLog(json("swipe", "self" to sh.self.slot, "t" to sh.sharedNow(), "edge" to hit.edge.name, "along" to hit.alongPx / pxPerMm, "entering" to entering))
+        viewModelScope.launch { sh.edgeSwipe(hit.edge, hit.alongPx / pxPerMm, entering) }
+    }
+
+    /** Pixels per mm of glass, as the shared camera draws it (life size). */
+    private fun glassPxPerMm(): Float? {
+        val vp = viewport ?: return null
+        return camera?.pxPerMm(vp)
+    }
+
+    /**
+     * What this device's own lagoon brings to another's: every creature where
+     * it swims and every decoration, from the middle of the screen. Its own
+     * tank is bigger than its screen, so the places are drawn together (the
+     * same way for all, keeping how they lie) to come in under its screen.
+     * Only what is its own: visitors of a lagoon it hosted went home.
+     */
+    private suspend fun brings(): Visitors? {
+        val s = session ?: return null
+        val cam = camera ?: return null
+        val screen = screenMm ?: return null
+        val scene = s.scene.value.withPlaces(withContext(background) { places() }).withoutVisitors()
+        val half = Vec2(screen.widthMm * 0.45f, screen.heightMm * 0.45f)
+        fun underScreen(points: List<Vec2>): List<Vec2> {
+            val rel = points.map { Turns.toScreen(it - cam.center, cam.turns) }
+            val k = rel.fold(1f) { k, p -> minOf(k, half.x / maxOf(kotlin.math.abs(p.x), 1e-3f), half.y / maxOf(kotlin.math.abs(p.y), 1e-3f)) }
+            return rel.map { it * k }
+        }
+        val creatures = underScreen(scene.creatures.map { it.spawnAt })
+        val decor = underScreen(scene.decor.map { it.at })
+        return Visitors(
+            creatures = scene.creatures.mapIndexed { i, c -> c.copy(spawnAt = creatures[i]) },
+            decor = scene.decor.mapIndexed { i, d -> d.copy(at = decor[i]) },
+        ).takeIf { !it.isEmpty }
     }
 
     /** Stops sharing: a guest goes back to its own lagoon, a host keeps its lagoon with every creature in it. */
@@ -825,8 +917,8 @@ class TankViewModel(
         val screen = screenMm
         val vp = viewport
         if (r == ShareRole.HOST) {
-            // Everything in the lagoon is this device's again, where it swims.
-            val scene = sh.session.scene.value
+            // Everything in the lagoon is this device's again, where it swims; what guests brought went home.
+            val scene = sh.session.scene.value.withoutVisitors()
             withContext(background) { engine.exchange(SimInput(take = scene.creatures.map { Take(it.id, null) })) }
             val places = withContext(background) { places() }
             val random = options.seed?.let { Random(it + 2) } ?: Random.Default
@@ -890,8 +982,13 @@ class TankViewModel(
     private fun applySharedCamera(layout: Layout) {
         val vp = viewport ?: return
         val sh = shared ?: return
-        val rect = layout.rectOf(sh.self) ?: return
-        val cam = Camera(center = rect.center, zoom = vp.widthPx / (vp.basePxPerMm * rect.w), parallaxOrigin = layout.origin)
+        val place = layout.placement(sh.self) ?: return
+        val rect = place.rect
+        // Turned on the table, the glass's width runs along the table's height: life size either way.
+        val cam = Camera(
+            center = rect.center, zoom = vp.widthPx / (vp.basePxPerMm * place.screen.widthMm),
+            parallaxOrigin = layout.origin, turns = place.turns,
+        )
         camera = cam
         pushCamera()
         // What this screen shows of the table, and what lies on its floor: logs from every device must agree.
@@ -899,7 +996,7 @@ class TankViewModel(
         netLog(
             json(
                 "view", "self" to sh.self.slot, "t" to sh.sharedNow(),
-                "rect" to "[${rect.x},${rect.y},${rect.w},${rect.h}]",
+                "rect" to "[${rect.x},${rect.y},${rect.w},${rect.h}]", "turns" to place.turns,
                 "center" to "[${cam.center.x},${cam.center.y}]", "origin" to "[${cam.origin.x},${cam.origin.y}]",
                 "pxPerMm" to cam.pxPerMm(vp), "vp" to "[${vp.widthPx},${vp.heightPx}]",
                 "tank" to (scene?.size?.let { "[${it.widthMm},${it.heightMm},${it.depthMm}]" } ?: "[]"),
@@ -953,6 +1050,7 @@ class TankViewModel(
                 is ShareEvent.FoodTaken -> json("food_taken", "t" to e.t, "self" to self, "id" to e.id, "mg" to e.mg)
                 is ShareEvent.DeviceLost -> json("lost", "t" to e.t, "self" to self, "device" to e.device.slot, "taken" to e.taken)
                 is ShareEvent.Fenced -> json("fenced", "t" to e.t, "self" to self, "fenced" to e.fenced)
+                is ShareEvent.Stitched -> json("stitched", "t" to e.t, "self" to self, "from" to e.from.slot, "to" to e.to.slot)
             },
         )
     }

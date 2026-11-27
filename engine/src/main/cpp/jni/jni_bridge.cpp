@@ -89,13 +89,15 @@ JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetTank
 JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetCamera(JNIEnv*, jclass, jlong h, jfloat cx,
                                                                                    jfloat cy, jfloat pxPerMm,
                                                                                    jfloat camHeight, jfloat ox,
-                                                                                   jfloat oy, jfloat outW, jfloat outH) {
+                                                                                   jfloat oy, jfloat outW, jfloat outH,
+                                                                                   jint turns) {
     CameraParams c;
     c.center = {cx, cy};
     c.pxPerMm = pxPerMm;
     c.camHeight = camHeight;
     c.origin = {ox, oy};
     c.outSize = {outW, outH};
+    c.turns = turns;
     engine(h)->setCamera(c);
 }
 

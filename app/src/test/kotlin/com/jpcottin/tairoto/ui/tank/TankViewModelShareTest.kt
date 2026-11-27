@@ -127,9 +127,10 @@ class TankViewModelShareTest {
         assertEquals(cam, host.vm.camera)
     }
 
-    @Test fun `a guest joins the host's lagoon, its creatures arrive as ghosts, and the table has both screens`() = shareTest {
+    @Test fun `a guest joins the host's lagoon, its creatures arrive as ghosts, its own come along, and the table has both screens`() = shareTest {
         val connector = FakeShareConnector(network())
         val host = device(connector, "Tablet", 1)
+        val hosts = host.engine.creatures.keys.toSet()
         host.vm.shareLagoon(ShareRoute.Nearby)
         advanceTimeBy(500)
         val guest = device(connector, "Phone", 2)
@@ -143,9 +144,11 @@ class TankViewModelShareTest {
         assertEquals(listOf("Tablet", "Phone"), g.devices.map { it.name })
         assertEquals(listOf("Tablet", "Phone"), host.vm.ui.value.share.devices.map { it.name })
         assertEquals(host.vm.ui.value.total, guest.vm.ui.value.total)
-        assertTrue(own != guest.vm.ui.value.total)
+        assertEquals(hosts.size + own, guest.vm.ui.value.total)
         assertEquals(host.engine.creatures.keys, guest.engine.creatures.keys)
-        assertEquals(guest.engine.creatures.keys, guest.engine.ghosts)
+        // The host's swim here as ghosts; the guest's own, come along, swim here for real.
+        assertEquals(hosts, guest.engine.ghosts)
+        assertEquals(own, guest.vm.ui.value.share.here)
         assertEquals(1, guest.engine.slotOfFood)
         // The tank is the table's, the same on both.
         assertEquals(host.vm.ui.value.tankSize, guest.vm.ui.value.tankSize)
@@ -166,7 +169,12 @@ class TankViewModelShareTest {
         guest.vm.joinLagoon(JoinTarget.Relay(RelayAddress.EMULATOR_HOST))
         advanceTimeBy(1_000)
         assertEquals(SharePhase.SHARED, guest.vm.ui.value.share.phase)
-        assertEquals(mapOf(coral.id to coral), guest.engine.decor)
+        // The host's coral, and the guest's two stones come along under new ids.
+        assertEquals(coral, guest.engine.decor[coral.id])
+        val stones = guest.engine.decor.values.filter { it.kindId == "stone" }
+        assertEquals(2, stones.size)
+        assertTrue(stones.all { it.home == 1 && it.id != EntityId(100) && it.id != EntityId(101) })
+        assertEquals(guest.engine.decor, host.engine.decor)
         // Every fish is the host's own (its species, its pattern, its size), not the guest's under the same id.
         for ((id, spec) in host.engine.creatures) {
             val g = guest.engine.creatures[id]!!
@@ -322,5 +330,99 @@ class TankViewModelShareTest {
         assertNull(RelayAddress.parse("host:abc"))
         assertNull(RelayAddress.parse(""))
         assertNull(RelayAddress.parse("a b:12"))
+    }
+
+    // ------------------------------------------------------------ the table
+
+    private suspend fun TestScope.pair(connector: FakeShareConnector): Pair<Device, Device> {
+        val host = device(connector, "Tablet", 1)
+        host.vm.shareLagoon(ShareRoute.Nearby)
+        advanceTimeBy(500)
+        val guest = device(connector, "Phone", 2)
+        guest.vm.joinLagoon(JoinTarget.Relay(RelayAddress.EMULATOR_HOST))
+        advanceTimeBy(1_000)
+        return host to guest
+    }
+
+    @Test fun `the guest turns its screen on the map, and its camera draws the lagoon turned back`() = shareTest {
+        val (host, guest) = pair(FakeShareConnector(network()))
+        val me = guest.vm.ui.value.share.devices.single { it.self }
+        guest.vm.arrangeScreen(me.id, me.rect.center + Vec2(0f, 200f), 1)
+        advanceTimeBy(500)
+        val after = host.vm.ui.value.share.devices.single { it.name == "Phone" }
+        assertEquals(1, after.turns)
+        assertEquals(1, guest.engine.camera!!.turns)
+        assertEquals(0, host.engine.camera!!.turns)
+        // Life size across: the glass's width (1080 px at 420 dpi) covers the screen's width in mm.
+        val vp = guest.engine.viewport!!
+        assertEquals(1080f / 420f * 25.4f, vp.widthPx / guest.engine.camera!!.pxPerMm(vp), 0.01f)
+        // The camera looks at the middle of the screen as it lies now.
+        assertEquals(after.rect.center, guest.engine.camera!!.center)
+    }
+
+    @Test fun `arranging shows on every screen, and a finger there feeds nobody`() = shareTest {
+        val (host, guest) = pair(FakeShareConnector(network()))
+        guest.vm.setArranging(true)
+        advanceTimeBy(300)
+        assertTrue(host.vm.ui.value.share.arranging && guest.vm.ui.value.share.arranging)
+        val drops = host.engine.drops.size
+        host.vm.sprinkle(Vec2(500f, 500f), first = true)
+        host.vm.sprinkle(Vec2(600f, 700f), first = false)
+        host.vm.dropPellet(Vec2(500f, 500f))
+        assertEquals(drops, host.engine.drops.size)
+        host.vm.setArranging(false)
+        advanceTimeBy(300)
+        assertTrue(!host.vm.ui.value.share.arranging && !guest.vm.ui.value.share.arranging)
+    }
+
+    @Test fun `a finger swiped off the guest's right edge onto the host's left lays the host right of the guest`() = shareTest {
+        val (host, guest) = pair(FakeShareConnector(network()))
+        host.vm.setArranging(true)
+        advanceTimeBy(300)
+        // Off the guest's right edge, a third of the way down; onto the host's left edge, half way down.
+        guest.vm.strokeEnd(Vec2(900f, 800f), Vec2(1079f, 800f))
+        advanceTimeBy(80)
+        host.vm.strokeStart(Vec2(1f, 1200f), Vec2(80f, 1200f))
+        advanceTimeBy(500)
+        val devices = guest.vm.ui.value.share.devices
+        val g = devices.single { it.name == "Phone" }.rect
+        val h = devices.single { it.name == "Tablet" }.rect
+        assertEquals(2 * com.jpcottin.tairoto.world.ScreenMm.PHONE_BEZEL_MM, h.x - g.right, 0.05f)
+        // Where the finger left is level with where it came on.
+        val mm = 25.4f / 420f
+        assertEquals(g.y + 800f * mm, h.y + 1200f * mm, 0.05f)
+        assertTrue(host.log.any { "\"stitched\"" in it })
+    }
+
+    @Test fun `away from arranging, a finger at an edge is only a finger`() = shareTest {
+        val (host, guest) = pair(FakeShareConnector(network()))
+        val before = host.vm.ui.value.share.devices
+        guest.vm.strokeEnd(Vec2(900f, 800f), Vec2(1079f, 800f))
+        host.vm.strokeStart(Vec2(1f, 1200f), Vec2(80f, 1200f))
+        advanceTimeBy(500)
+        assertEquals(before, host.vm.ui.value.share.devices)
+    }
+
+    @Test fun `what the guest brought goes home with it, and the host never saves it`() = shareTest {
+        val (host, guest) = pair(FakeShareConnector(network()))
+        val hostOwn = host.store.scene!!.creatures.size
+        assertTrue(host.vm.ui.value.total > hostOwn)
+        advanceTimeBy(3_000)
+        assertTrue("saved without visitors", host.store.scene!!.creatures.none { it.home != null })
+        guest.vm.stopSharing()
+        advanceTimeBy(4_000)
+        assertEquals(hostOwn, host.vm.ui.value.total)
+        assertTrue(host.engine.creatures.values.none { it.home != null })
+        // The guest is home with its own lagoon, as it was.
+        assertEquals(guest.store.scene!!.creatures.size, guest.vm.ui.value.total)
+    }
+
+    @Test fun `when the host stops, what guests brought is not kept in its lagoon`() = shareTest {
+        val (host, _) = pair(FakeShareConnector(network()))
+        val hostOwn = host.store.scene!!.creatures.size
+        host.vm.stopSharing()
+        advanceTimeBy(2_000)
+        assertEquals(hostOwn, host.vm.ui.value.total)
+        assertTrue(host.engine.creatures.values.none { it.home != null })
     }
 }

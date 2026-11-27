@@ -1,5 +1,9 @@
 package com.jpcottin.tairoto.ui.tank
 
+import com.jpcottin.tairoto.ui.share.ArrangeOverlay
+import androidx.compose.foundation.systemGestureExclusion
+import androidx.compose.ui.geometry.Rect
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -94,6 +98,8 @@ fun TankScreen(
             override fun onDrag(at: Vec2) = vm.drag(at)
             override fun onRotate(radians: Float) = vm.rotateSelected(radians)
             override fun onGestureEnd() = vm.finishGesture()
+            override fun onStrokeStart(start: Vec2, toward: Vec2) = vm.strokeStart(start, toward)
+            override fun onStrokeEnd(from: Vec2, end: Vec2) = vm.strokeEnd(from, end)
         }
     }
     val actions = remember {
@@ -108,6 +114,8 @@ fun TankScreen(
         }
     }
     val metrics = LocalContext.current.resources.displayMetrics
+    val edgeBandPx = with(androidx.compose.ui.platform.LocalDensity.current) { 48.dp.toPx() }
+    val edgeTallPx = with(androidx.compose.ui.platform.LocalDensity.current) { 200.dp.toPx() }
 
     Box(Modifier.fillMaxSize().background(Ocean.Deep)) {
         AndroidExternalSurface(Modifier.fillMaxSize().testTag(TankTags.SURFACE)) {
@@ -129,11 +137,14 @@ fun TankScreen(
                         "The lagoon. Tap the water; drag a finger to sprinkle food; hold for a pellet; pinch with two fingers to explore."
                     }
                 }
+                .then(if (state.share.arranging) Modifier.swipeEdgesForTheApp(edgeBandPx, edgeTallPx) else Modifier)
                 .tankGestures(handler),
         )
         SelectionRing(state.edit.selection)
         NetSweepEffect(state.edit.sweep)
-        if (state.edit.active) {
+        if (state.share.arranging && state.share.phase == SharePhase.SHARED) {
+            ArrangeOverlay(state.share, onDone = { vm.setArranging(false) })
+        } else if (state.edit.active) {
             EditOverlay(
                 state.edit, actions,
                 Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(14.dp),
@@ -148,6 +159,22 @@ fun TankScreen(
             )
         }
     }
+}
+
+/**
+ * While the screens are arranged, a finger coming on over the left or right
+ * edge is the app's, not the system's back gesture (which gives an app up to
+ * 200 dp of each side, so: the middle of each side).
+ */
+private fun Modifier.swipeEdgesForTheApp(bandPx: Float, tallPx: Float): Modifier {
+    fun side(left: Boolean) = { coords: androidx.compose.ui.layout.LayoutCoordinates ->
+        val w = coords.size.width.toFloat()
+        val h = coords.size.height.toFloat()
+        val tall = minOf(h, tallPx)
+        val top = (h - tall) / 2f
+        if (left) Rect(0f, top, bandPx, top + tall) else Rect(w - bandPx, top, w, top + tall)
+    }
+    return systemGestureExclusion(side(true)).systemGestureExclusion(side(false))
 }
 
 @Composable

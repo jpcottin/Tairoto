@@ -68,7 +68,7 @@ class NativeTank : TankEngine {
         val o = camera.origin
         nativeSetCamera(
             h(), camera.center.x, camera.center.y, camera.pxPerMm(viewport), projection.cameraHeightMm,
-            o.x, o.y, viewport.widthPx, viewport.heightPx,
+            o.x, o.y, viewport.widthPx, viewport.heightPx, camera.turns,
         )
     }
 
@@ -175,7 +175,7 @@ class NativeTank : TankEngine {
         @JvmStatic external fun nativeDestroy(h: Long)
         @JvmStatic external fun nativeSetSurface(h: Long, surface: Surface?)
         @JvmStatic external fun nativeSetTank(h: Long, w: Float, ht: Float, d: Float)
-        @JvmStatic external fun nativeSetCamera(h: Long, cx: Float, cy: Float, pxPerMm: Float, camHeight: Float, ox: Float, oy: Float, outW: Float, outH: Float)
+        @JvmStatic external fun nativeSetCamera(h: Long, cx: Float, cy: Float, pxPerMm: Float, camHeight: Float, ox: Float, oy: Float, outW: Float, outH: Float, turns: Int)
         @JvmStatic external fun nativeSetQuality(h: Long, q: Int)
         @JvmStatic external fun nativeSetDeterministic(h: Long, on: Boolean, seed: Long)
         @JvmStatic external fun nativeSetPaused(h: Long, paused: Boolean)

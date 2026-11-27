@@ -50,6 +50,7 @@ struct FrameUniforms {
     float tank[4];
     float sun[4];
     float misc[4];
+    float view[4];
     float ripples[Renderer::kMaxRipples][4];
 };
 
@@ -935,6 +936,8 @@ bool Renderer::draw(const FrameInput& in) {
     u.misc[1] = in.tilt.y;
     u.misc[2] = qs.refraction ? 2.8f : 0.0f;
     u.misc[3] = 1.08f;
+    u.view[0] = c.turnCos();
+    u.view[1] = c.turnSin();
     for (int i = 0; i < kMaxRipples; i++) {
         const Ripple& rp = in.ripples[i];
         u.ripples[i][0] = rp.at.x;

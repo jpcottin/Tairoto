@@ -53,6 +53,29 @@ TEST(Camera, MatchesTheKotlinFormula) {
     EXPECT_NEAR(500.0f, a.x, 1e-4f);
 }
 
+TEST(Camera, AScreenLyingTurnedSeesTheTankTurnedBack) {
+    CameraParams c;
+    c.center = {120, 200};
+    c.origin = {90, 210};
+    c.pxPerMm = 20;
+    c.outSize = {1000, 2000};
+    for (int turns = 0; turns < 4; turns++) {
+        c.turns = turns;
+        for (float z : {0.0f, 40.0f}) {
+            Vec2 p(101, 187);
+            Vec2 back = screenToWorld(c, worldToScreen(c, p, z), z);
+            EXPECT_NEAR(p.x, back.x, 1e-3f);
+            EXPECT_NEAR(p.y, back.y, 1e-3f);
+        }
+    }
+    // Turned a quarter clockwise (its top to the table's right): the table's right is the glass's up.
+    c.turns = 1;
+    c.origin = c.center;
+    Vec2 a = worldToScreen(c, c.center, 0), b = worldToScreen(c, c.center + Vec2(1, 0), 0);
+    EXPECT_NEAR(0.0f, b.x - a.x, 1e-4f);
+    EXPECT_NEAR(-20.0f, b.y - a.y, 1e-4f);
+}
+
 TEST(Camera, DeeperShadowsFallFurtherOnlyForShallowerThings) {
     Vec2 shallow = Sun::shadowOffset(5, 110), deep = Sun::shadowOffset(100, 110), below = Sun::shadowOffset(120, 110);
     EXPECT_GT(length(shallow), length(deep));

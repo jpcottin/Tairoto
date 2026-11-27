@@ -111,3 +111,39 @@ data class DepthProjection(val cameraHeightMm: Float) {
         val DEFAULT = DepthProjection(cameraHeightMm = 180f)
     }
 }
+
+/**
+ * A device lying on the table turned clockwise by a number of quarter turns
+ * (0 upright, 1 its top to the right, 2 upside down, 3 its top to the left).
+ * Its glass has its own x (right) and y (down) as the device sees them.
+ */
+object Turns {
+    fun norm(turns: Int): Int = ((turns % 4) + 4) % 4
+
+    /** A vector on the glass of a device turned [turns], as it lies on the table. */
+    fun toTable(v: Vec2, turns: Int): Vec2 = when (norm(turns)) {
+        0 -> v
+        1 -> Vec2(-v.y, v.x)
+        2 -> Vec2(-v.x, -v.y)
+        else -> Vec2(v.y, -v.x)
+    }
+
+    /** A vector on the table, as the glass of a device turned [turns] sees it. */
+    fun toScreen(v: Vec2, turns: Int): Vec2 = toTable(v, -turns)
+
+    /** The quarter turns in radians, clockwise on the table (y grows down). */
+    fun radians(turns: Int): Float = norm(turns) * (Math.PI.toFloat() / 2f)
+}
+
+/** An edge of a screen, as the device sees it, in clockwise order. */
+enum class Edge(val outward: Vec2) {
+    TOP(Vec2(0f, -1f)),
+    RIGHT(Vec2(1f, 0f)),
+    BOTTOM(Vec2(0f, 1f)),
+    LEFT(Vec2(-1f, 0f));
+
+    /** The edge it becomes on the table when its device is turned [turns]. */
+    fun turned(turns: Int): Edge = entries[Turns.norm(ordinal + turns)]
+
+    val opposite: Edge get() = entries[(ordinal + 2) % 4]
+}
