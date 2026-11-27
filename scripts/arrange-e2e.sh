@@ -56,10 +56,11 @@ hy=$(( hh * 60 / 100 ))
 adbs "$host" exec-out screencap -p > "$out/before-$host.png" || true
 echo "Swiping off $guest's right edge (y=$gy) onto $host's left edge (y=$hy)"
 echo "{\"ev\":\"swiped\",\"guest_y\":$gy,\"host_y\":$hy}" > "$out/swipe.json"
-adbs "$guest" shell input swipe $(( gw / 2 )) "$gy" $(( gw - 1 )) "$gy" 250 &
+# Both commands set off together, the delay counted on the device: on a busy machine adb itself
+# may take a second to start a command, far more than a finger takes to cross a frame.
+adbs "$guest" shell "input swipe $(( gw / 2 )) $gy $(( gw - 1 )) $gy 250" &
 swipe_pid=$!
-sleep 0.45
-adbs "$host" shell input swipe 0 "$hy" $(( hw / 3 )) "$hy" 250
+adbs "$host" shell "sleep 0.25; input swipe 0 $hy $(( hw / 3 )) $hy 250"
 wait "$swipe_pid"
 sleep 4
 for s in "${serials[@]}"; do
