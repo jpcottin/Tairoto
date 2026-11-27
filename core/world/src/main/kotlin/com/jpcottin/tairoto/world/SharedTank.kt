@@ -345,9 +345,13 @@ class SharedTank(
     /** Asks for [device]'s screen to lie at [center], turned [turns] (anyone may; the host decides). */
     suspend fun arrange(device: DeviceId, center: Vec2, turns: Int) = toHost(Msg.Arrange(device, center, turns))
 
-    /** A finger left this screen through [edge] (or came onto it, [entering]), [alongMm] along it. */
-    suspend fun edgeSwipe(edge: Edge, alongMm: Float, entering: Boolean) =
-        toHost(Msg.EdgeSwipe(self, edge, alongMm, entering, sharedNow()))
+    /**
+     * A finger left this screen through [edge] (or came onto it, [entering]),
+     * [alongMm] along it, [agoS] seconds ago (when the touch happened, not
+     * when a busy device got round to it).
+     */
+    suspend fun edgeSwipe(edge: Edge, alongMm: Float, entering: Boolean, agoS: Double = 0.0) =
+        toHost(Msg.EdgeSwipe(self, edge, alongMm, entering, sharedNow() - agoS.coerceAtLeast(0.0)))
 
     /** Starts or ends arranging the screens, for every device. */
     suspend fun setArranging(on: Boolean) = toHost(Msg.Arranging(on))
@@ -381,9 +385,8 @@ class SharedTank(
             return
         }
         swipes.remove(partner)
+        // Either may seem first: each device's share of the clock is only as good as its round trip.
         val (out, into) = if (m.entering) partner to m else m to partner
-        // Leaving comes first: a finger cannot come onto the next screen before it has left this one.
-        if (into.t < out.t - 0.05) return
         val next = layoutState.value.stitched(out.device, out.edge, out.alongMm, into.device, into.edge, into.alongMm, baseSize()) ?: return
         onEvent(ShareEvent.Stitched(sharedNow(), out.device, into.device))
         apply(next)

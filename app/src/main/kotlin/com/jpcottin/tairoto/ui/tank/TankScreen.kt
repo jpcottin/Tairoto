@@ -101,9 +101,9 @@ fun TankScreen(
             override fun onDrag(at: Vec2) = vm.drag(at)
             override fun onRotate(radians: Float) = vm.rotateSelected(radians)
             override fun onGestureEnd() = vm.finishGesture()
-            override fun onStrokeStart(start: Vec2, toward: Vec2) = vm.strokeStart(start, toward)
+            override fun onStrokeStart(start: Vec2, toward: Vec2, atMs: Long) = vm.strokeStart(start, toward, atMs)
+            override fun onStrokeEnd(from: Vec2, end: Vec2, atMs: Long) = vm.strokeEnd(from, end, atMs)
             override fun onDown() = vm.touched()
-            override fun onStrokeEnd(from: Vec2, end: Vec2) = vm.strokeEnd(from, end)
         }
     }
     val actions = remember {
