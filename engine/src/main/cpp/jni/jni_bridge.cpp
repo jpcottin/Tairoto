@@ -288,6 +288,11 @@ JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetMaxF
     engine(h)->setMaxFps(fps);
 }
 
+JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetDaylight(JNIEnv*, jclass, jlong h, jfloat light,
+                                                                                     jfloat warmth) {
+    engine(h)->setDaylight(light, warmth);
+}
+
 JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetSound(JNIEnv*, jclass, jlong h,
                                                                                   jfloat volume) {
     engine(h)->setSound(volume);

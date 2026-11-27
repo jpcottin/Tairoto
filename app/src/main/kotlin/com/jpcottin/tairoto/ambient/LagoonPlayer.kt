@@ -1,5 +1,7 @@
 package com.jpcottin.tairoto.ambient
 
+import kotlinx.coroutines.flow.first
+import com.jpcottin.tairoto.world.Daylight
 import android.view.Surface
 import com.jpcottin.tairoto.data.LagoonStore
 import com.jpcottin.tairoto.engine.SceneSync
@@ -36,6 +38,8 @@ class LagoonPlayer(
     private val scope: CoroutineScope,
     private val drift: Boolean,
     private val clockS: () -> Double,
+    /** The light the app's settings ask for now (the local time of day, or always day or night). */
+    private val daylight: suspend () -> Daylight = { Daylight.NOON },
 ) {
     private val sync = SceneSync(engine)
     private var scene: TankScene? = null
@@ -78,6 +82,7 @@ class LagoonPlayer(
         visible = seen
         engine.setPaused(!seen)
         // Back on screen: the app may have changed the lagoon meanwhile (creatures released, coral moved).
+        if (seen) scope.launch { runCatching { daylight() }.getOrNull()?.let { engine.setDaylight(it) } }
         if (seen && scene != null) {
             scope.launch {
                 val now = runCatching { store.load() }.getOrNull() ?: return@launch
@@ -92,7 +97,10 @@ class LagoonPlayer(
         drifting = null
         if (seen && drift) {
             drifting = scope.launch {
+                var steps = 0
                 while (isActive) {
+                    // A screensaver runs for hours: the light follows the clock.
+                    if (++steps % DAYLIGHT_STEPS == 0) runCatching { daylight() }.getOrNull()?.let { engine.setDaylight(it) }
                     look()
                     delay(DRIFT_STEP_MS)
                 }
@@ -131,9 +139,18 @@ class LagoonPlayer(
     private fun fresh(size: TankSize): TankScene = Population.defaultScene(size, EntityIdAllocator(0), Random.Default)
 
     companion object {
+        /** Drift steps between two looks at the clock for the light. */
+        const val DAYLIGHT_STEPS = 600
         /** The drift moves a mm or two a second: thirty steps a second keep each under a pixel. */
         const val DRIFT_STEP_MS = 33L
         /** Fish behind the icons need no more: half the frames, half the battery. */
         const val AMBIENT_FPS = 30
     }
+}
+
+/** The light the app's settings ask for now, for the wallpaper and the screensaver. */
+internal suspend fun settingsDaylight(context: android.content.Context): com.jpcottin.tairoto.world.Daylight {
+    val time = com.jpcottin.tairoto.data.DataStoreSettings(context).settings.first().timeOfDay
+    val now = java.time.LocalTime.now()
+    return time.daylight(now.hour + now.minute / 60f)
 }

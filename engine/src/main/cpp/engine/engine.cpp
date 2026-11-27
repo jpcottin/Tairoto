@@ -115,6 +115,13 @@ void Engine::setPaused(bool p) {
 }
 void Engine::setTilt(Vec2 t) { post([this, t] { tilt_ = t; }); }
 
+void Engine::setDaylight(float light, float warmth) {
+    post([this, light, warmth] {
+        light_ = clamp(light, 0.0f, 1.0f);
+        warmth_ = clamp(warmth, 0.0f, 1.0f);
+    });
+}
+
 void Engine::setDeterministic(bool on, uint64_t seed) {
     post([this, on, seed] {
         deterministic_ = on;
@@ -313,6 +320,8 @@ void Engine::frame() {
     in.mesh = &mesh_;
     in.ripples = ripples_;
     in.tilt = tilt_;
+    in.light = light_;
+    in.warmth = warmth_;
     int64_t beforeDraw = nowNs();
     bool shown = renderer_->draw(in);
     int64_t end = nowNs();

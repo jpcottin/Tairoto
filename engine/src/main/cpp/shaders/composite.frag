@@ -88,12 +88,35 @@ void main() {
     float fresnel = 0.02 + 0.6 * pow(1.0 - n.z, 3.0);
     color += srgb(vec3(0.72, 0.86, 1.0)) * fresnel * 0.35;
 
+    // At night the plankton glows where the glass was tapped: blue-green light along the rings.
+    float night = 1.0 - F.view.z;
+    if (night > 0.01) {
+        float glow = 0.0;
+        for (int i = 0; i < 8; i++) {
+            vec4 r = F.ripples[i];
+            if (r.w <= 0.0) continue;
+            float age = t - r.z;
+            if (age < 0.0 || age > 3.0) continue;
+            float x = length(p - r.xy) - 35.0 * age;
+            // Specks of light, each lit a moment: a soft ring, and points brighter in it.
+            vec2 cell = floor(p * 0.9);
+            float lit = step(0.8, hash12(cell + floor(t * 7.0 + hash12(cell) * 7.0)));
+            float speck = lit * smoothstep(0.45, 0.05, length(fract(p * 0.9) - 0.5 - (hash22(cell) - 0.5) * 0.5));
+            glow += exp(-x * x / 18.0) * exp(-age * 1.4) * r.w * (0.25 + 3.0 * speck);
+        }
+        color += srgb(vec3(0.25, 0.95, 0.85)) * glow * 0.9 * night;
+    }
+
     // Tone map, then a gentle grade: cool shadows, warm light.
     color *= F.misc.w;
     color = aces(color);
     float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
     color = mix(color, color * vec3(0.92, 1.02, 1.06), 1.0 - smoothstep(0.0, 0.5, luma));
     color = mix(vec3(luma), color, 1.12);
+    // Night is blue and quiet; a low sun is gold.
+    float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    color = mix(color, mix(vec3(lum), color, 0.5) * vec3(0.42, 0.62, 0.95), night * 0.9);
+    color *= mix(vec3(1.0), vec3(1.1, 0.94, 0.78), F.view.w * 0.8);
     // A gentle S-curve for depth.
     color = mix(color, color * color * (3.0 - 2.0 * color), 0.35);
 

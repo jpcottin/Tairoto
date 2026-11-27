@@ -10,6 +10,7 @@ import com.jpcottin.tairoto.world.EntityId
 import com.jpcottin.tairoto.world.QualityTier
 import com.jpcottin.tairoto.world.SimInput
 import com.jpcottin.tairoto.world.SimOutput
+import com.jpcottin.tairoto.world.Daylight
 import com.jpcottin.tairoto.world.Skin
 import com.jpcottin.tairoto.world.Species
 import com.jpcottin.tairoto.world.TankSize
@@ -140,6 +141,8 @@ class NativeTank : TankEngine {
 
     override fun setSound(volume: Float) = nativeSetSound(h(), volume.coerceIn(0f, 1f))
 
+    override fun setDaylight(daylight: Daylight) = nativeSetDaylight(h(), daylight.light, daylight.warmth)
+
     override fun setMaxFps(fps: Int) = nativeSetMaxFps(h(), fps.coerceAtLeast(0))
 
     /** Runs the simulation for [seconds] without drawing. For tests. */
@@ -214,6 +217,7 @@ class NativeTank : TankEngine {
         @JvmStatic external fun nativeSetPaused(h: Long, paused: Boolean)
         @JvmStatic external fun nativeSpawn(h: Long, id: Long, visual: Int, loco: Int, params: FloatArray, length: Float, seed: Int, x: Float, y: Float, z: Float, ghost: Boolean, skin: Int)
         @JvmStatic external fun nativeSetSkin(h: Long, layer: Int, rgba: ByteArray)
+        @JvmStatic external fun nativeSetDaylight(h: Long, light: Float, warmth: Float)
         @JvmStatic external fun nativeSetFoodSlot(h: Long, slot: Int)
         @JvmStatic external fun nativeExchange(h: Long, header: IntArray, longs: LongArray, floats: FloatArray): Array<Any>
         @JvmStatic external fun nativeRemove(h: Long, id: Long)

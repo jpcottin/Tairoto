@@ -123,6 +123,19 @@ source is noted next to each species in `Species.kt`.
 - **Compose app**: full-bleed tank, glass HUD, creature picker with drawn
   species portraits, settings (Navigation 3, DataStore).
 
+## Day and night
+
+<p align="center">
+  <img src="docs/media/night.jpg" width="270" alt="The lagoon at night: moonlit blue, and specks of glowing plankton along a ring where the glass was tapped">
+</p>
+
+The lagoon has the light of the hour where you are (Settings, *Time of day*):
+full sun by day, the gold of a low sun at dawn and dusk, moonlight at night.
+As in Tahiti, the sun rises and sets around six, and quickly. At night the
+plankton glows where you touch the water. *Always day* and *Always night*
+fix the light whatever the hour. The wallpaper, the screensaver and the watch
+follow the clock too, and test runs are always at noon.
+
 ## Draw your own fish
 
 <p align="center">

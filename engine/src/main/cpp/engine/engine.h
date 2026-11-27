@@ -112,6 +112,8 @@ public:
     void setTilt(Vec2 tilt);
     /** How loud the lagoon is, 0..1; 0 is silence, and no audio stream at all. */
     void setSound(float volume);
+    /** The light over the lagoon: [light] 0 night .. 1 day, [warmth] the gold of a low sun. */
+    void setDaylight(float light, float warmth);
     /** At most this many frames a second (0: as many as the display shows). Saves battery, and CPU. */
     void setMaxFps(int fps);
 
@@ -152,6 +154,7 @@ private:
     Ripple ripples_[8];
     int nextRipple_ = 0;
     Vec2 tilt_;
+    float light_ = 1, warmth_ = 0;
     audio::AudioOut audio_;
     float soundVolume_ = 0;
     int64_t minFrameNs_ = 0;

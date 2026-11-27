@@ -30,6 +30,7 @@ class LagoonWallpaperService : WallpaperService() {
             player = LagoonPlayer(
                 NativeTank(), FileLagoonStore(applicationContext.filesDir), scope, drift = false,
                 clockS = { SystemClock.uptimeMillis() / 1000.0 },
+                daylight = { settingsDaylight(applicationContext) },
             )
         }
 

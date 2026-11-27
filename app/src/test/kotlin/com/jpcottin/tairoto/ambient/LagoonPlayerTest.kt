@@ -23,8 +23,22 @@ import kotlin.random.Random
 class LagoonPlayerTest {
     private val saved = Population.defaultScene(TankSize(330f, 330f, 55f), EntityIdAllocator(0), Random(4))
 
-    private fun TestScope.player(drift: Boolean, engine: FakeEngine, store: InMemoryLagoonStore = InMemoryLagoonStore(saved)) =
-        LagoonPlayer(engine, store, backgroundScope, drift) { testScheduler.currentTime / 1000.0 }
+    private fun TestScope.player(
+        drift: Boolean,
+        engine: FakeEngine,
+        store: InMemoryLagoonStore = InMemoryLagoonStore(saved),
+        daylight: com.jpcottin.tairoto.world.Daylight = com.jpcottin.tairoto.world.Daylight.NOON,
+    ) = LagoonPlayer(engine, store, backgroundScope, drift, clockS = { testScheduler.currentTime / 1000.0 }, daylight = { daylight })
+
+    @Test fun `seen, it takes the light the app's settings ask for`() = runTest {
+        val engine = FakeEngine()
+        val night = com.jpcottin.tairoto.world.Daylight(0f, 0f)
+        val p = player(drift = false, engine, daylight = night)
+        p.surface(null, 1080, 2400, 420f, 420f)
+        p.visible(true)
+        runCurrent()
+        org.junit.Assert.assertEquals(night, engine.light)
+    }
 
     @Test fun `it shows the lagoon the app saved, drawn gently and silent, and never saves over it`() = runTest {
         val engine = FakeEngine()

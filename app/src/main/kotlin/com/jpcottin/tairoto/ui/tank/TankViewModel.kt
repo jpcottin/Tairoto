@@ -21,6 +21,7 @@ import com.jpcottin.tairoto.world.PageScanner
 import com.jpcottin.tairoto.world.Picture
 import com.jpcottin.tairoto.world.ScanResult
 import com.jpcottin.tairoto.world.Skin
+import com.jpcottin.tairoto.world.TimeOfDay
 import com.jpcottin.tairoto.world.DeviceId
 import com.jpcottin.tairoto.world.EdgeSwipes
 import com.jpcottin.tairoto.world.Turns
@@ -107,6 +108,8 @@ data class TankUiState(
     /** The lagoon's sound, as set. */
     val sound: Boolean = true,
     val soundVolume: Float = com.jpcottin.tairoto.data.AppSettings.DEFAULT_SOUND_VOLUME,
+    /** The lagoon's light, as the settings say. */
+    val timeOfDay: TimeOfDay = TimeOfDay.LOCAL,
     val hintVisible: Boolean = true,
     /** Shared and left alone a while: the buttons fade, so the picture runs on across the screens. */
     val hudHidden: Boolean = false,
@@ -240,6 +243,10 @@ class TankViewModel(
     private val netLog: (String) -> Unit = {},
     /** A monotonic clock in seconds, for the shared lagoon's timing. */
     private val clockS: () -> Double = { System.nanoTime() / 1e9 },
+    /** The hour of the day where the device is, 0 until 24, for the lagoon's light. */
+    private val localHours: () -> Float = {
+        java.time.LocalTime.now().let { it.hour + it.minute / 60f + it.second / 3600f }
+    },
 ) : ViewModel() {
 
     private val state = MutableStateFlow(TankUiState(hintVisible = options.hints))
@@ -298,6 +305,7 @@ class TankViewModel(
                 state.update { it.copy(showStats = settings.showStats, qualityMode = s.quality, sound = s.sound, soundVolume = s.soundVolume) }
                 applyQuality()
                 applySound()
+                applyDaylight()
             }
         }
         if (options.hints) {
@@ -1355,6 +1363,24 @@ class TankViewModel(
 
     private fun applySound() = engine.setSound(soundVolume())
 
+    // ------------------------------------------------------------ day and night
+
+    private var lastDaylightMs = 0L
+
+    /** Which light: the launch's word first (tests run at noon), then the settings. */
+    internal fun timeOfDay(): TimeOfDay = options.timeOfDay ?: settings.timeOfDay
+
+    private fun applyDaylight(nowMs: Long = lastDaylightMs) {
+        lastDaylightMs = nowMs
+        val time = timeOfDay()
+        state.update { it.copy(timeOfDay = settings.timeOfDay) }
+        engine.setDaylight(time.daylight(localHours()))
+    }
+
+    fun setTimeOfDay(time: TimeOfDay) {
+        viewModelScope.launch { settingsStore.setTimeOfDay(time) }
+    }
+
     /** What the engine plays at: the launch's word first (tests), then the settings. */
     internal fun soundVolume(): Float = options.sound ?: if (settings.sound) settings.soundVolume else 0f
 
@@ -1392,6 +1418,8 @@ class TankViewModel(
 
     /** One governor step. Public for tests. */
     fun onPerfSample(stats: EngineStats, nowMs: Long) {
+        // Following the clock, the light moves on (a twilight lasts about an hour: every half minute is smooth).
+        if (timeOfDay() == TimeOfDay.LOCAL && nowMs - lastDaylightMs >= DAYLIGHT_EVERY_MS) applyDaylight(nowMs)
         if (options.quality != null || settings.quality !is QualityMode.Auto) return
         if (stats.vulkan != VulkanState.RENDERING || stats.fps <= 0f) return
         val headroom = signals.thermalHeadroom()
@@ -1412,6 +1440,8 @@ class TankViewModel(
     }
 
     companion object {
+        /** How often the light is brought up to the clock. */
+        const val DAYLIGHT_EVERY_MS = 30_000L
         const val HINT_MS = 7_000L
         const val ARRANGE_HINT_MS = 10_000L
         const val HUD_IDLE_S = 6.0

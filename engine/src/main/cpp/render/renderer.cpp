@@ -1068,13 +1068,16 @@ bool Renderer::draw(const FrameInput& in) {
     u.sun[0] = Sun::kDirX;
     u.sun[1] = Sun::kDirY;
     u.sun[2] = Sun::kDirZ;
-    u.sun[3] = 1.0f;
+    // Moonlight is a sixth of the sun, and the eye opens to it (the exposure).
+    u.sun[3] = 0.12f + 0.88f * in.light;
     u.misc[0] = in.tilt.x;
     u.misc[1] = in.tilt.y;
     u.misc[2] = qs.refraction ? 2.8f : 0.0f;
-    u.misc[3] = 1.08f;
+    u.misc[3] = 1.08f * (1.0f + 0.35f * (1.0f - in.light));
     u.view[0] = c.turnCos();
     u.view[1] = c.turnSin();
+    u.view[2] = in.light;
+    u.view[3] = in.warmth;
     for (int i = 0; i < kMaxRipples; i++) {
         const Ripple& rp = in.ripples[i];
         u.ripples[i][0] = rp.at.x;

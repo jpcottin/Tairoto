@@ -44,6 +44,9 @@ class FakeEngine : TankEngine {
     override fun setSound(volume: Float) { soundVolume = volume }
     override fun setQuality(tier: QualityTier) { lastQuality = tier }
     override fun setDeterministic(on: Boolean, seed: Long) { deterministic = on to seed }
+    /** The last light the engine was given. */
+    var light: com.jpcottin.tairoto.world.Daylight? = null
+    override fun setDaylight(daylight: com.jpcottin.tairoto.world.Daylight) { light = daylight }
     var paused: Boolean? = null
     override fun setPaused(paused: Boolean) { this.paused = paused }
     /** The drawing each drawn fish was handed, by creature. */
