@@ -32,11 +32,11 @@ jobs:
       - name: Put adb on the PATH
         run: echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
       - name: Kotlin unit tests
-        run: ./gradlew --stacktrace :core:world:test :core:net:test :engine:testDebugUnitTest :app:testDebugUnitTest
+        run: ./gradlew --stacktrace :core:world:test :core:net:test :engine:testDebugUnitTest :app:testDebugUnitTest :wear:testDebugUnitTest
       - name: Screenshot tests
         run: ./gradlew :app:validateDebugScreenshotTest
       - name: Build the app and the relay
-        run: ./gradlew :app:assembleDebug :relay:installDist
+        run: ./gradlew :app:assembleDebug :wear:assembleDebug :relay:installDist
       - name: Native tests (simulation and meshes, on the host)
         run: scripts/host-tests.sh
       - name: Keep the reports

@@ -175,6 +175,18 @@ and a keyboard or a game controller works the same on any device:
 
 The buttons show a bright ring when they have the focus.
 
+## On a watch
+
+<p align="center">
+  <img src="docs/media/wear.jpg" width="227" alt="A round Wear OS screen: chromis and manini over a coral head, a hermit crab, flakes in the water">
+</p>
+
+The `wear` module is a standalone Wear OS app with the same engine and the
+same creatures: a small lagoon of its own (a school of ʻatoti, a few manini, a
+hermit crab round a coral head), drawn at the low quality tier. Tap the glass,
+drag a finger to sprinkle flakes, hold for a pellet, and turn the crown to
+zoom. It rests when the screen goes off, and keeps where everyone was.
+
 ## Build and test
 
 ```sh
