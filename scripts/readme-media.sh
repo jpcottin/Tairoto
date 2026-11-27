@@ -89,7 +89,9 @@ sleep 1.5
 adbs "$a" shell input swipe 20 $(( h / 2 )) 260 $(( h / 2 + 200 )) 1200
 adbs "$b" shell input swipe $(( w - 260 )) $(( h / 3 )) $(( w - 20 )) $(( h / 3 + 120 )) 1000
 wait "$rb" "$ra"
-ffmpeg -loglevel error -y -i "$tmp/left.mp4" -i "$tmp/right.mp4" -filter_complex "[0:v][1:v]hstack=inputs=2" "$tmp/two.mp4"
+# Each phone in a dark frame (emulators have none), so the picture shows two devices, edge to edge.
+ffmpeg -loglevel error -y -i "$tmp/left.mp4" -i "$tmp/right.mp4" -filter_complex \
+    "[0:v]pad=iw+28:ih+28:14:14:color=0x111418[l];[1:v]pad=iw+28:ih+28:14:14:color=0x111418[r];[l][r]hstack=inputs=2,pad=iw+16:ih+16:8:8:color=white" "$tmp/two.mp4"
 gif "$tmp/two.mp4" "$out/two-screens.gif" 480 2 9
 
 echo "The table"
