@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.jpcottin.tairoto.world.QualityMode
@@ -16,13 +17,23 @@ import kotlinx.coroutines.flow.map
 data class AppSettings(
     val quality: QualityMode = QualityMode.Auto,
     val showStats: Boolean = false,
-)
+    /** The lagoon's sound: the water, the reef, and what happens on the glass. */
+    val sound: Boolean = true,
+    /** 0..1, under the device's own media volume. */
+    val soundVolume: Float = DEFAULT_SOUND_VOLUME,
+) {
+    companion object {
+        const val DEFAULT_SOUND_VOLUME = 0.7f
+    }
+}
 
 /** Where settings live; DataStore on a device, memory in tests. */
 interface SettingsStore {
     val settings: Flow<AppSettings>
     suspend fun setQuality(mode: QualityMode)
     suspend fun setShowStats(show: Boolean)
+    suspend fun setSound(on: Boolean)
+    suspend fun setSoundVolume(volume: Float)
 }
 
 /** "auto", "low", "high", "ultra": how a quality mode is written down. */
@@ -45,9 +56,24 @@ class DataStoreSettings(context: Context) : SettingsStore {
     private val store = context.applicationContext.dataStore
     private val qualityKey = stringPreferencesKey("quality")
     private val statsKey = booleanPreferencesKey("show_stats")
+    private val soundKey = booleanPreferencesKey("sound")
+    private val volumeKey = floatPreferencesKey("sound_volume")
 
     override val settings: Flow<AppSettings> = store.data.map {
-        AppSettings(quality = QualityModeCodec.decode(it[qualityKey]), showStats = it[statsKey] ?: false)
+        AppSettings(
+            quality = QualityModeCodec.decode(it[qualityKey]),
+            showStats = it[statsKey] ?: false,
+            sound = it[soundKey] ?: true,
+            soundVolume = (it[volumeKey] ?: AppSettings.DEFAULT_SOUND_VOLUME).coerceIn(0f, 1f),
+        )
+    }
+
+    override suspend fun setSound(on: Boolean) {
+        store.edit { it[soundKey] = on }
+    }
+
+    override suspend fun setSoundVolume(volume: Float) {
+        store.edit { it[volumeKey] = volume.coerceIn(0f, 1f) }
     }
 
     override suspend fun setQuality(mode: QualityMode) {
@@ -67,5 +93,11 @@ class InMemorySettings(initial: AppSettings = AppSettings()) : SettingsStore {
     }
     override suspend fun setShowStats(show: Boolean) {
         state.value = state.value.copy(showStats = show)
+    }
+    override suspend fun setSound(on: Boolean) {
+        state.value = state.value.copy(sound = on)
+    }
+    override suspend fun setSoundVolume(volume: Float) {
+        state.value = state.value.copy(soundVolume = volume.coerceIn(0f, 1f))
     }
 }

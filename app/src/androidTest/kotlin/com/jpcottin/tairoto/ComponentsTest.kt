@@ -1,5 +1,10 @@
 package com.jpcottin.tairoto
 
+import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -90,6 +95,41 @@ class ComponentsTest {
         compose.setContent { TairotoTheme { SettingsContent(SettingsUi(showStats = false), {}, { values += it }, {}) } }
         compose.onNodeWithTag(SettingsTags.STATS).performClick()
         assertEquals(listOf(true), values)
+    }
+
+    @Test fun theSoundSwitchesOffAndItsVolumeWaitsForItToComeBack() {
+        val on = mutableListOf<Boolean>()
+        var ui by androidx.compose.runtime.mutableStateOf(SettingsUi(sound = true, soundVolume = 0.5f))
+        val actions = object : com.jpcottin.tairoto.ui.settings.SoundActions {
+            override fun setOn(value: Boolean) { on += value }
+        }
+        compose.setContent { TairotoTheme { SettingsContent(ui, {}, {}, {}, sound = actions) } }
+        compose.onNodeWithTag(SettingsTags.VOLUME).performScrollTo().assertIsEnabled()
+        compose.onNodeWithTag(SettingsTags.SOUND).performScrollTo().performClick()
+        assertEquals(listOf(false), on)
+        ui = ui.copy(sound = false)
+        compose.onNodeWithTag(SettingsTags.VOLUME).performScrollTo().assertIsNotEnabled()
+    }
+
+    @Test fun movingTheVolumeIsHeardAtOnceAndKeptWhenLetGo() {
+        val heard = mutableListOf<Float>()
+        val kept = mutableListOf<Float>()
+        var ui by androidx.compose.runtime.mutableStateOf(SettingsUi(sound = true, soundVolume = 0.5f))
+        val actions = object : com.jpcottin.tairoto.ui.settings.SoundActions {
+            override fun preview(volume: Float) { heard += volume; ui = ui.copy(soundVolume = volume) }
+            override fun setVolume(volume: Float) { kept += volume }
+        }
+        compose.setContent { TairotoTheme { SettingsContent(ui, {}, {}, {}, sound = actions) } }
+        compose.onNodeWithTag(SettingsTags.VOLUME).performScrollTo().performTouchInput { swipeRight(centerX, right - 2f) }
+        compose.waitForIdle()
+        assertTrue("heard while moving: $heard", heard.isNotEmpty() && heard.last() > 0.9f)
+        assertEquals(1, kept.size)
+        assertEquals(heard.last(), kept.single(), 1e-3f)
+    }
+
+    @Test fun whenTheDeviceHasNoWayToPlayItTheSettingsSaySo() {
+        compose.setContent { TairotoTheme { SettingsContent(SettingsUi(soundUnavailable = true), {}, {}, {}) } }
+        compose.onNodeWithText("This device has no way to play it right now.").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun restoringTheReefAsksFirst() {

@@ -100,6 +100,9 @@ data class TankUiState(
     val stats: EngineStats = EngineStats(),
     val tier: QualityTier = QualityTier.HIGH,
     val qualityMode: QualityMode = QualityMode.Auto,
+    /** The lagoon's sound, as set. */
+    val sound: Boolean = true,
+    val soundVolume: Float = com.jpcottin.tairoto.data.AppSettings.DEFAULT_SOUND_VOLUME,
     val hintVisible: Boolean = true,
     val vulkanUnsupported: Boolean = false,
     val gpu: String = "",
@@ -251,8 +254,9 @@ class TankViewModel(
         viewModelScope.launch {
             settingsStore.settings.collect { s ->
                 settings = s.copy(showStats = options.stats ?: s.showStats)
-                state.update { it.copy(showStats = settings.showStats, qualityMode = s.quality) }
+                state.update { it.copy(showStats = settings.showStats, qualityMode = s.quality, sound = s.sound, soundVolume = s.soundVolume) }
                 applyQuality()
+                applySound()
             }
         }
         if (options.hints) {
@@ -1114,6 +1118,25 @@ class TankViewModel(
     fun setShowStats(show: Boolean) {
         viewModelScope.launch { settingsStore.setShowStats(show) }
     }
+
+    fun setSound(on: Boolean) {
+        viewModelScope.launch { settingsStore.setSound(on) }
+    }
+
+    /** While a finger drags the slider the engine follows at once; the setting is kept when it lets go. */
+    fun previewSoundVolume(volume: Float) {
+        state.update { it.copy(soundVolume = volume.coerceIn(0f, 1f)) }
+        if (options.sound == null && settings.sound) engine.setSound(volume.coerceIn(0f, 1f))
+    }
+
+    fun setSoundVolume(volume: Float) {
+        viewModelScope.launch { settingsStore.setSoundVolume(volume) }
+    }
+
+    private fun applySound() = engine.setSound(soundVolume())
+
+    /** What the engine plays at: the launch's word first (tests), then the settings. */
+    internal fun soundVolume(): Float = options.sound ?: if (settings.sound) settings.soundVolume else 0f
 
     private fun applyQuality() {
         val tier = when {

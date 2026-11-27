@@ -35,7 +35,12 @@ data class EngineStats(
     val eatenMg: Float = 0f,
     /** Mean hunger of the creatures: 0 full, 1 starving. */
     val hunger: Float = 0f,
+    val audio: AudioState = AudioState.OFF,
+    val audioRateHz: Int = 0,
 )
+
+/** The lagoon's sound: off (silent, or nothing on screen), playing, or the device has no way to play it. */
+enum class AudioState { OFF, PLAYING, UNAVAILABLE }
 
 /** What can be dropped in from above. */
 enum class FoodKind(val nativeId: Int) { FLAKE(0), PELLET(1) }
@@ -111,6 +116,8 @@ class NativeTank : TankEngine {
 
     fun setTilt(x: Float, y: Float) = nativeSetTilt(h(), x, y)
 
+    override fun setSound(volume: Float) = nativeSetSound(h(), volume.coerceIn(0f, 1f))
+
     /** Runs the simulation for [seconds] without drawing. For tests. */
     fun stepForTest(seconds: Float) = nativeStepForTest(h(), seconds)
 
@@ -136,6 +143,8 @@ class NativeTank : TankEngine {
             foodMg = v[13],
             eatenMg = v[14],
             hunger = v[15],
+            audio = AudioState.entries[v[16].toInt().coerceIn(0, 2)],
+            audioRateHz = v[17].toInt(),
         )
     }
 
@@ -164,7 +173,7 @@ class NativeTank : TankEngine {
     }
 
     private companion object {
-        const val STATS_SIZE = 16
+        const val STATS_SIZE = 18
         const val SNAPSHOT_STRIDE = 6
 
         init {
@@ -190,6 +199,7 @@ class NativeTank : TankEngine {
         @JvmStatic external fun nativeTap(h: Long, x: Float, y: Float)
         @JvmStatic external fun nativeDropFood(h: Long, x: Float, y: Float, kind: Int, count: Int)
         @JvmStatic external fun nativeSetTilt(h: Long, x: Float, y: Float)
+        @JvmStatic external fun nativeSetSound(h: Long, volume: Float)
         @JvmStatic external fun nativeStepForTest(h: Long, seconds: Float)
         @JvmStatic external fun nativeStats(h: Long, out: FloatArray)
         @JvmStatic external fun nativeGpuName(h: Long): String

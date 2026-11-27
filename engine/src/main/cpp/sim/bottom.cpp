@@ -143,6 +143,18 @@ void World::initBottomDweller(Creature& c) {
     }
 }
 
+void World::sound(Sound kind, Vec3 at, float strength) {
+    // A frame that hears more than this is a din: the synthesizer could not play it all anyway.
+    if (sounds_.size() >= 256) return;
+    sounds_.push_back({kind, at, clamp(strength, 0.0f, 1.0f)});
+}
+
+std::vector<SoundEvent> World::takeSounds() {
+    std::vector<SoundEvent> out;
+    out.swap(sounds_);
+    return out;
+}
+
 bool World::puff(CloudKind kind, Vec3 at, Vec2 vel, float radius, float density, float life) {
     if ((int)clouds_.size() >= CloudConstants::kMax) return false;
     Cloud k;
@@ -169,6 +181,7 @@ int World::inkClouds() const {
 
 void World::sandBurst(Vec2 at, float radius, int count, float strength) {
     const float D = tank_.depth;
+    sound(Sound::Sand, Vec3(at.x, at.y, D), clamp(strength * (float)count / 12.0f, 0.3f, 1.0f));
     for (int i = 0; i < count; i++) {
         float a = kTau * ((float)i + rng_.range(-0.3f, 0.3f)) / (float)count;
         Vec2 dir = fromAngle(a);
@@ -310,12 +323,14 @@ void World::stepRay(Creature& c, float h) {
                     Vec2 out = normalize(at - p, side * s);
                     puff(CloudKind::Sand, Vec3(at.x, at.y, D - 1.5f), out * rng_.range(3.0f, 9.0f), rng_.range(2.5f, 5.0f),
                          rng_.range(0.45f, 0.7f), rng_.range(1.6f, 2.6f));
+                    sound(Sound::Sand, Vec3(at.x, at.y, D), 0.3f);
                 } else {
                     // Buried, it still breathes through the spiracles behind its eyes.
                     c.puffTimer = rng_.range(4.0f, 9.0f);
                     float s = rng_.chance(0.5f) ? 1.0f : -1.0f;
                     Vec2 at = p + fwd * (0.25f * L) + side * (s * 0.08f * L);
                     puff(CloudKind::Sand, Vec3(at.x, at.y, D - 1.5f), Vec2(), 1.4f, 0.35f, 1.4f);
+                    sound(Sound::Sand, Vec3(at.x, at.y, D), 0.12f);
                 }
             }
             if (c.stateTimer <= 0) {
@@ -417,8 +432,10 @@ void World::stepRay(Creature& c, float h) {
         const Vec2 m = c.pos.xy() + fromAngle(c.heading) * (0.4f * L);
         tryBite(c, m, c.pos.z + 1.5f, 0.14f * L);
         // Digging in the sand for it throws up a little cloud.
-        if (c.eatenMg > eatenBefore && c.pos.z > D - 5.0f)
+        if (c.eatenMg > eatenBefore && c.pos.z > D - 5.0f) {
             puff(CloudKind::Sand, Vec3(m.x, m.y, D - 1.5f), fromAngle(c.heading) * 4.0f, 2.5f, 0.55f, 1.8f);
+            sound(Sound::Sand, Vec3(m.x, m.y, D), 0.3f);
+        }
     }
     // Each downstroke pushes water back; low over the sand it lifts a little of it.
     if (pulse > 0.1f) {
@@ -427,6 +444,7 @@ void World::stepRay(Creature& c, float h) {
             float s = rng_.chance(0.5f) ? 1.0f : -1.0f;
             Vec2 at = p + side * (s * span * 0.4f);
             puff(CloudKind::Sand, Vec3(at.x, at.y, D - 1.5f), side * (s * 6.0f), 2.5f, 0.4f, 2.0f);
+            sound(Sound::Sand, Vec3(at.x, at.y, D), 0.2f);
         }
     }
 
@@ -576,6 +594,7 @@ void World::stepOctopus(Creature& c, float h) {
             c.alarm = 1;
             c.cover = 0;
             if (c.inkCooldown <= 0) {
+                sound(Sound::Ink, c.pos, 1.0f);
                 // A dense core and wisps flung further out.
                 for (int i = 0; i < 9; i++) {
                     Vec2 j(rng_.range(-3.0f, 3.0f), rng_.range(-3.0f, 3.0f));

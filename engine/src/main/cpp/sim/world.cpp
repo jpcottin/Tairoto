@@ -106,6 +106,7 @@ void World::step(float dt) {
 }
 
 void World::startle(Vec2 at, float strength) {
+    sound(Sound::Tap, Vec3(at.x, at.y, 0.0f), strength);
     // The tap sends a ring of water outwards.
     for (int i = 0; i < 8; i++) {
         Vec2 d = fromAngle(kTau * (float)i / 8.0f);
@@ -499,7 +500,10 @@ void World::stepTurtle(Creature& c, float h) {
         case Behavior::Surface: {
             targetSpeed = cruise * 0.6f;
             bool atSurface = c.pos.z < L * 0.06f;
-            if (atSurface && c.stateTimer > 5.0f) c.stateTimer = rng_.range(3.0f, 5.0f);  // a few breaths
+            if (atSurface && c.stateTimer > 5.0f) {
+                c.stateTimer = rng_.range(3.0f, 5.0f);  // a few breaths
+                sound(Sound::Breath, c.pos, 1.0f);
+            }
             if (atSurface) targetSpeed = cruise * 0.25f;
             if (dist < L * 0.7f) {
                 Vec2 ahead = p + fwd * (2.0f * L);

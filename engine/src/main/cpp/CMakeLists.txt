@@ -38,12 +38,14 @@ add_library(tairoto SHARED
     sim/current.cpp
     render/mesh.cpp
     render/renderer.cpp
+    audio/synth.cpp
+    audio/audio_out.cpp
     engine/engine.cpp
     jni/jni_bridge.cpp)
 add_dependencies(tairoto shaders)
 target_include_directories(tairoto PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${GEN_DIR}")
 # The `VkFoo ci{VK_STRUCTURE_TYPE_...}` idiom leaves the rest of each struct zeroed on purpose.
 target_compile_options(tairoto PRIVATE -Wall -Wextra -Werror -Wno-missing-field-initializers -O2)
-target_link_libraries(tairoto vulkan android log)
+target_link_libraries(tairoto vulkan android log aaudio)
 # 16 KB pages (Android 15+ devices): align the segments.
 target_link_options(tairoto PRIVATE "-Wl,-z,max-page-size=16384")

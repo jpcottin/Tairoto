@@ -304,6 +304,12 @@ fun StatsPanel(stats: EngineStats, tier: QualityTier, gpu: String, thermalHeadro
                 String.format(Locale.US, "food %d  ·  %.1f mg  ·  eaten %.1f mg  ·  hunger %.2f", stats.food, stats.foodMg, stats.eatenMg, stats.hunger),
                 style = StatsText,
             )
+            if (stats.audio != com.jpcottin.tairoto.engine.AudioState.OFF) {
+                Text(
+                    if (stats.audio == com.jpcottin.tairoto.engine.AudioState.PLAYING) "sound ${stats.audioRateHz} Hz" else "sound: no output",
+                    style = StatsText,
+                )
+            }
             Text(
                 "thermal headroom " + (thermalHeadroom?.let { String.format(Locale.US, "%.2f", it) } ?: "n/a") +
                     if (thermalIgnored) "  (emulator: ignored)" else "",

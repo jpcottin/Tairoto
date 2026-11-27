@@ -33,6 +33,8 @@ data class LaunchOptions(
     val trace: Boolean = false,
     /** Hosting, start arranging the screens at once (tests swipe across emulators). */
     val arrange: Boolean = false,
+    /** The sound's volume whatever the settings say (0 silent); a CI run is silent unless asked. */
+    val sound: Float? = null,
 ) {
     val deterministic: Boolean get() = ci
 
@@ -58,6 +60,7 @@ data class LaunchOptions(
         const val SESSION = "tairoto.session"
         const val TRACE = "tairoto.trace"
         const val ARRANGE = "tairoto.arrange"
+        const val SOUND = "tairoto.sound"
 
         /** Reads `kind:count,kind:count` of decorations; unknown or malformed entries are skipped. */
         fun parseDecor(text: String?): Map<String, Int>? {
@@ -100,6 +103,7 @@ data class LaunchOptions(
                 share = ShareLaunch.parse(intent.getStringExtra(SHARE), intent.getStringExtra(RELAY), intent.getStringExtra(SESSION)),
                 trace = intent.getBooleanExtra(TRACE, false),
                 arrange = intent.getBooleanExtra(ARRANGE, false),
+                sound = if (intent.hasExtra(SOUND)) intent.getFloatExtra(SOUND, 0f).coerceIn(0f, 1f) else if (ci) 0f else null,
             )
         }
     }

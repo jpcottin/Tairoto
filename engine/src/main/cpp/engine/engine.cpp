@@ -65,13 +65,47 @@ void Engine::setWindow(ANativeWindow* window) {
             if (!renderer_->attach(window)) DT_LOGW("renderer attach failed; will retry");
             lastFrameNs_ = 0;
         }
+        updateAudio();
     });
+}
+
+void Engine::setSound(float volume) {
+    post([this, volume] {
+        soundVolume_ = clamp(volume, 0.0f, 1.0f);
+        audio_.setVolume(soundVolume_);
+        updateAudio();
+    });
+}
+
+void Engine::updateAudio() {
+    bool want = window_ && !paused_ && soundVolume_ > 0;
+    if (want && !audio_.playing()) {
+        world_.takeSounds();  // what happened while silent is not played late
+        audio_.start();
+    } else if (!want && audio_.playing()) {
+        audio_.stop();
+    }
+}
+
+void Engine::playSounds() {
+    audio_.keepAlive();
+    std::vector<SoundEvent> heard = world_.takeSounds();
+    if (!audio_.playing()) return;
+    audio::Cue cue;
+    for (const SoundEvent& e : heard)
+        if (audio::cueFor(e, camera_, world_.tank().depth, &cue)) audio_.post(cue);
 }
 
 void Engine::setTank(const Tank& t) { post([this, t] { world_.setTank(t); }); }
 void Engine::setCamera(const CameraParams& c) { post([this, c] { camera_ = c; }); }
 void Engine::setQuality(Quality q) { post([this, q] { quality_ = q; }); }
-void Engine::setPaused(bool p) { post([this, p] { paused_ = p; lastFrameNs_ = 0; }); }
+void Engine::setPaused(bool p) {
+    post([this, p] {
+        paused_ = p;
+        lastFrameNs_ = 0;
+        updateAudio();
+    });
+}
 void Engine::setTilt(Vec2 t) { post([this, t] { tilt_ = t; }); }
 
 void Engine::setDeterministic(bool on, uint64_t seed) {
@@ -180,6 +214,8 @@ EngineStats Engine::stats() {
         stats_.hunger = world_.creatures().empty() ? 0.0f : hunger / world_.creatures().size();
         stats_.quality = (int)quality_;
         stats_.vulkan = renderer_->unsupported() ? 2 : (renderer_->ready() ? 1 : 0);
+        stats_.audio = (int)audio_.state();
+        stats_.audioRate = audio_.sampleRate();
     });
     std::lock_guard<std::mutex> lock(statsMutex_);
     return stats_;
@@ -246,6 +282,7 @@ void Engine::frame() {
 
     world_.step(dt);
     camera_.outSize = Vec2((float)renderer_->width(), (float)renderer_->height());
+    playSounds();
     meshBuilder_.build(world_, camera_, mesh_);
 
     FrameInput in;

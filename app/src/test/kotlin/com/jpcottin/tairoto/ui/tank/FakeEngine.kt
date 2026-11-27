@@ -38,6 +38,9 @@ class FakeEngine : TankEngine {
     override fun setSurface(surface: Surface?) { surfaces++ }
     override fun setTank(size: TankSize) { lastTank = size }
     override fun setCamera(camera: Camera, viewport: Viewport) { this.camera = camera; this.viewport = viewport }
+    /** The last volume the engine was asked to play at, or null if never. */
+    var soundVolume: Float? = null
+    override fun setSound(volume: Float) { soundVolume = volume }
     override fun setQuality(tier: QualityTier) { lastQuality = tier }
     override fun setDeterministic(on: Boolean, seed: Long) { deterministic = on to seed }
     override fun setPaused(paused: Boolean) = Unit

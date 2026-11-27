@@ -35,6 +35,10 @@ Food* World::findFoodMutable(uint32_t id) {
 }
 
 int World::dropFood(Vec2 at, FoodKind kind, int count) {
+    if (count > 0) {
+        sound(kind == FoodKind::Pellet ? Sound::Pellet : Sound::Flakes, Vec3(at.x, at.y, 0.0f),
+              kind == FoodKind::Pellet ? 1.0f : clamp((float)count / 10.0f, 0.2f, 1.0f));
+    }
     int made = 0;
     for (int i = 0; i < count; i++) {
         if ((int)(food_.size() + pendingFood_.size()) >= FoodConstants::kMaxParticles) break;
@@ -282,6 +286,8 @@ void World::tryBite(Creature& c, Vec2 mouth, float mouthZ, float reach) {
 
 void World::bite(Creature& c, Food& f) {
     c.biteCooldown = 0.22f + c.length * 0.008f;
+    // A snap, louder for a big mouthful.
+    sound(Sound::Bite, f.pos, clamp(c.sp.biteMg / 1.2f, 0.25f, 1.0f));
     int cell = scentCellOf(f.pos.xy());
     if (f.remote) {
         // Another device's food: ask it. It decides how much, and breaks the crumbs off.

@@ -202,6 +202,7 @@ void World::stepDecor(float h) {
             d.shutTimer -= h;
             if (d.open > 0.6f && d.open - 9.0f * h <= 0.6f) {
                 // The valves clap shut and blow out a puff of water.
+                sound(Sound::ClamShut, Vec3(d.pos.x, d.pos.y, D - d.height * 0.5f), 1.0f);
                 puff(CloudKind::Sand, Vec3(d.pos.x, d.pos.y, D - d.height * 0.5f), fromAngle(d.angle) * 4.0f,
                      d.radius * 0.7f, 0.35f, 1.6f);
             }

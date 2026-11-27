@@ -13,6 +13,7 @@
 #include "sim/current.h"
 #include "sim/decor.h"
 #include "sim/food.h"
+#include "sim/sound.h"
 
 namespace dt {
 
@@ -92,6 +93,12 @@ public:
     // ---- clouds of sand and ink
     /** Adds a cloud; false when the cap is reached. */
     bool puff(CloudKind kind, Vec3 at, Vec2 vel, float radius, float density, float life);
+
+    /** Something made a sound (see sim/sound.h); heard if this screen shows it. */
+    void sound(Sound kind, Vec3 at, float strength = 1.0f);
+    /** The sounds since the last call, oldest first. */
+    std::vector<SoundEvent> takeSounds();
+    const std::vector<SoundEvent>& soundsForTest() const { return sounds_; }
     const std::vector<Cloud>& clouds() const { return clouds_; }
     int inkClouds() const;
 
@@ -227,6 +234,7 @@ private:
     std::vector<Food> pendingFood_;  // crumbs made during a step, added at its end
     std::unordered_map<uint32_t, size_t> foodIndex_;
     FoodLedger ledger_;
+    std::vector<SoundEvent> sounds_;
     uint32_t nextFoodId_ = 1;
     uint32_t foodSlot_ = 0;
     std::vector<Scent> scents_;

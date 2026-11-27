@@ -162,6 +162,9 @@ fun TairotoNavigation(vm: TankViewModel) {
                         quality = state.qualityMode,
                         activeTier = state.tier,
                         showStats = state.showStats,
+                        sound = state.sound,
+                        soundVolume = state.soundVolume,
+                        soundUnavailable = state.sound && state.stats.audio == com.jpcottin.tairoto.engine.AudioState.UNAVAILABLE,
                         creatures = state.total,
                         gpu = state.gpu,
                         version = BuildConfig.VERSION_NAME,
@@ -172,6 +175,13 @@ fun TairotoNavigation(vm: TankViewModel) {
                     onShowStats = vm::setShowStats,
                     onResetTank = vm::resetTank,
                     inPane = twoPane,
+                    sound = remember(vm) {
+                        object : com.jpcottin.tairoto.ui.settings.SoundActions {
+                            override fun setOn(on: Boolean) = vm.setSound(on)
+                            override fun preview(volume: Float) = vm.previewSoundVolume(volume)
+                            override fun setVolume(volume: Float) = vm.setSoundVolume(volume)
+                        }
+                    },
                 )
             }
         },
