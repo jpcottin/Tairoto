@@ -5,7 +5,7 @@ a school of *ʻatoti* (green chromis) and a *honu* (green sea turtle) over white
 coral sand, under moving caustic light. It is built to grow into one lagoon
 shared by several devices on a table, fish swimming from one screen to the next.
 
-> Work in progress, kept local for now. Milestones 1 (the solo lagoon),
+> Work in progress. Milestones 1 (the solo lagoon),
 > 2 (food and feeding), 3 (the bottom dwellers), 4 (arranging the lagoon),
 > 5 (one lagoon across several devices), 5b (over Bluetooth too) and 6
 > (laying the screens out on the table) of 10.
