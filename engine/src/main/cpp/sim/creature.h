@@ -44,6 +44,7 @@ struct Creature {
     SpeciesParams sp;
     float length = 20;     // nose to tail tip, mm
     uint32_t seed = 0;
+    int skin = -1;         // a drawn fish: its layer in the renderer's drawings
 
     Vec3 pos;              // head (fish) or shell centre (turtle)
     float heading = 0;     // radians, direction of travel on the table plane

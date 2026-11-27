@@ -62,6 +62,7 @@ object SheetTags {
     fun card(id: String) = "species_card_$id"
     fun release(id: String) = "species_release_$id"
     fun count(id: String) = "species_count_$id"
+    const val DRAW = "species_draw"
     const val TAB_CREATURES = "picker_tab_creatures"
     const val TAB_DECOR = "picker_tab_decor"
     const val DECOR = "decor_sheet"
@@ -85,6 +86,7 @@ fun SpeciesPicker(
     decorRoomLeft: Int = TankScene.MAX_DECOR,
     onPlace: (String) -> Unit = {},
     startOnDecor: Boolean = false,
+    onDraw: (() -> Unit)? = null,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(if (startOnDecor) 1 else 0) }
     val content: @Composable () -> Unit = {
@@ -93,7 +95,7 @@ fun SpeciesPicker(
                 Tab(tab == 0, onClick = { tab = 0 }, text = { Text("Creatures") }, modifier = Modifier.testTag(SheetTags.TAB_CREATURES))
                 Tab(tab == 1, onClick = { tab = 1 }, text = { Text("Decorations") }, modifier = Modifier.testTag(SheetTags.TAB_DECOR))
             }
-            if (tab == 0) SpeciesSheetContent(counts, roomLeft, onRelease)
+            if (tab == 0) SpeciesSheetContent(counts, roomLeft, onRelease, onDraw)
             else DecorSheetContent(decorCounts, decorRoomLeft, onPlace)
         }
     }
@@ -118,7 +120,7 @@ fun SpeciesPicker(
 }
 
 @Composable
-fun SpeciesSheetContent(counts: Map<String, Int>, roomLeft: Int, onRelease: (String) -> Unit) {
+fun SpeciesSheetContent(counts: Map<String, Int>, roomLeft: Int, onRelease: (String) -> Unit, onDraw: (() -> Unit)? = null) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -135,8 +137,32 @@ fun SpeciesSheetContent(counts: Map<String, Int>, roomLeft: Int, onRelease: (Str
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (onDraw != null) DrawYourOwnCard(onDraw)
         SpeciesCatalog.all.forEach { species ->
             SpeciesCard(species, counts[species.id] ?: 0, enabled = roomLeft > 0, onRelease = { onRelease(species.id) })
+        }
+    }
+}
+
+/** The way to a fish of one's own, coloured in on paper. */
+@Composable
+fun DrawYourOwnCard(onDraw: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.large,
+        onClick = onDraw,
+        modifier = Modifier.fillMaxWidth().testTag(SheetTags.DRAW),
+    ) {
+        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            com.jpcottin.tairoto.ui.draw.PagePicture(Modifier.size(width = 96.dp, height = 68.dp).clip(RoundedCornerShape(6.dp)))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Draw your own fish", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                Text(
+                    "Print a fish, colour it in, and take a photo: it swims in your colours.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
         }
     }
 }

@@ -63,7 +63,7 @@ class SceneSync(
         }
         diff.added.forEach { spec ->
             val species = SpeciesCatalog[spec.speciesId] ?: return@forEach
-            tank.spawn(spec, species, ghost = !simulatesHere(spec.id))
+            tank.spawn(spec, species, ghost = !simulatesHere(spec.id), skin = scene.skin(spec.skin))
             applied[spec.id] = spec
         }
     }

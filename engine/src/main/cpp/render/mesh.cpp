@@ -84,6 +84,13 @@ float MeshBuilder::fishProfile(Visual v, float t) {
 
 void MeshBuilder::build(const World& world, const CameraParams& cam, Mesh& mesh) {
     mesh.clear();
+    // Forget how far fish no longer seen had rolled.
+    if (!rolls_.empty() && lastBuild_ >= 0) {
+        for (auto it = rolls_.begin(); it != rolls_.end();) {
+            if (world.time() - it->second.seen > 2.0f || world.time() < it->second.seen - 1.0f) it = rolls_.erase(it);
+            else ++it;
+        }
+    }
     const auto& cs = world.creatures();
     const auto& fs = world.food();
     const float floorZ = world.tank().depth;
@@ -119,6 +126,10 @@ void MeshBuilder::build(const World& world, const CameraParams& cam, Mesh& mesh)
         switch (it.type) {
             case ItemType::Creature: {
                 const Creature& c = cs[it.index];
+                if (c.visual == Visual::Drawn) {
+                    drawn(c, mesh, cam, world.time());
+                    break;
+                }
                 switch (c.loco) {
                     case Locomotion::Paddle: turtle(c, mesh); break;
                     case Locomotion::Glide: ray(c, mesh, floorZ); break;
@@ -143,6 +154,7 @@ void MeshBuilder::build(const World& world, const CameraParams& cam, Mesh& mesh)
                 break;
         }
     }
+    lastBuild_ = world.time();
 }
 
 void MeshBuilder::food(const Food& f, Mesh& m) {
@@ -171,6 +183,72 @@ void MeshBuilder::food(const Food& f, Mesh& m) {
         prev = idx;
     }
     e.tri(centre, prev, first);
+}
+
+void MeshBuilder::drawn(const Creature& c, Mesh& m, const CameraParams& cam, float now) {
+    const float L = c.length;
+    const float seed = hash01(c.seed);
+    // Which side shows: a drawing swims nose first the way it was drawn, so to
+    // the left it shows as drawn and to the right it rolls over to show the
+    // other side, as a real fish would.
+    Roll& roll = rolls_[c.id];
+    const float dt = lastBuild_ < 0 ? 0.0f : clamp(now - lastBuild_, 0.0f, 0.1f);
+    Vec2 onScreen = cam.toScreen(fromAngle(c.heading));
+    if (roll.seen == 0) roll.side = onScreen.x <= 0 ? 1.0f : -1.0f;
+    roll.seen = now + 1e-3f;
+    float want = onScreen.x < -0.2f ? 1.0f : (onScreen.x > 0.2f ? -1.0f : (roll.side >= 0 ? 1.0f : -1.0f));
+    roll.side += clamp(want - roll.side, -dt * 3.5f, dt * 3.5f);
+    const float width = L * c.sp.bodyWidth * 0.5f * std::max(std::fabs(roll.side), 0.08f);
+
+    // The spine, then on past the peduncle for the tail of the drawing, flexing behind it.
+    constexpr int kTail = 4;
+    constexpr int kRows = kJ + kTail;
+    Vec2 spine[kRows];
+    float u[kRows];
+    for (int i = 0; i < kJ; i++) spine[i] = c.joint[i];
+    {
+        Vec2 back = normalize(c.joint[kJ - 1] - c.joint[kJ - 2], -fromAngle(c.heading));
+        float ang = angleOf(back);
+        Vec2 p = c.joint[kJ - 1];
+        float step = L * 0.22f / kTail;
+        for (int r = 0; r < kTail; r++) {
+            ang += c.finAngle * 0.3f;
+            p += fromAngle(ang) * step;
+            spine[kJ + r] = p;
+        }
+    }
+    float along = 0;
+    u[0] = 0;
+    for (int i = 1; i < kRows; i++) {
+        along += length(spine[i] - spine[i - 1]);
+        u[i] = along;
+    }
+    for (int i = 0; i < kRows; i++) u[i] /= std::max(along, 1e-3f);
+    // The swimming wave, larger towards the tail.
+    Vec2 tangent[kRows], center[kRows];
+    float half[kRows], frame[kRows];
+    for (int i = 0; i < kRows; i++) {
+        Vec2 a = spine[i > 0 ? i - 1 : 0];
+        Vec2 b = spine[i < kRows - 1 ? i + 1 : kRows - 1];
+        tangent[i] = normalize(a - b, fromAngle(c.heading));
+    }
+    const float amp0 = L * (0.25f + 0.6f * c.thrust);
+    for (int i = 0; i < kRows; i++) {
+        float t = u[i];
+        float amp = amp0 * (0.006f + 0.06f * t * t);
+        center[i] = spine[i] + perp(tangent[i]) * (amp * std::sin(c.tailPhase - 0.9f * kTau * t));
+        half[i] = width;
+    }
+    for (int i = 0; i < kRows; i++) {
+        Vec2 a = center[i > 0 ? i - 1 : 0];
+        Vec2 b = center[i < kRows - 1 ? i + 1 : kRows - 1];
+        frame[i] = angleOf(normalize(a - b, tangent[i]));
+    }
+    Emitter body{m, c.pos.z, kindOf(kPartBody, Visual::Drawn), seed};
+    body.aux[0] = (float)std::max(c.skin, 0);
+    body.aux[1] = roll.side;
+    body.aux[2] = c.skin >= 0 ? 1.0f : 0.0f;
+    ribbon(body, center, half, u, frame, kRows);
 }
 
 void MeshBuilder::fish(const Creature& c, Mesh& m) {

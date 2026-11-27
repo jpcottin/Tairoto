@@ -21,4 +21,6 @@ dependencies {
 
 tasks.test {
     useJUnit()
+    // Where PagePhotoWriter puts its made-up photos, when asked for them.
+    System.getProperty("tairoto.photos")?.let { systemProperty("tairoto.photos", it) }
 }

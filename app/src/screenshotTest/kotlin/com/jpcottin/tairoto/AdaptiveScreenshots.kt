@@ -119,3 +119,21 @@ fun SharedTableArranged() = TairotoTheme { LagoonWithPanePreviewContent(PreviewP
 fun LagoonOfferToArrange() = TairotoTheme {
     LagoonScreenPreviewContent(PreviewData.lagoon.copy(hintVisible = false, share = PreviewData.offerToArrange))
 }
+
+/** Drawing a fish of one's own: the three steps. */
+@PreviewTest
+@FormFactorPreviews
+@Composable
+fun LagoonWithDrawSheet() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Draw) }
+
+/** A fish cut out of the photo, ready to swim. */
+@PreviewTest
+@FormFactorPreviews
+@Composable
+fun LagoonWithDrawnFishFound() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Draw, draw = PreviewData.drawFound) }
+
+/** A photo without the page's four squares. */
+@PreviewTest
+@NarrowPreviews
+@Composable
+fun LagoonWithDrawNoPage() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Draw, draw = PreviewData.drawNoPage) }

@@ -123,8 +123,12 @@ void Engine::setDeterministic(bool on, uint64_t seed) {
 }
 
 void Engine::spawn(int64_t id, Visual v, Locomotion l, const SpeciesParams& sp, float length, uint32_t seed, Vec3 at,
-                   bool ghost) {
-    post([=] { world_.spawn(id, v, l, sp, length, seed, at, ghost); });
+                   bool ghost, int skin) {
+    post([=] { world_.spawn(id, v, l, sp, length, seed, at, ghost, skin); });
+}
+
+void Engine::setSkin(int layer, std::vector<uint8_t> rgba) {
+    post([this, layer, px = std::move(rgba)]() mutable { renderer_->setSkin(layer, std::move(px)); });
 }
 
 void Engine::setFoodSlot(int slot) { post([this, slot] { world_.setFoodSlot(slot); }); }

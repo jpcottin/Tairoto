@@ -17,6 +17,10 @@ import com.jpcottin.tairoto.share.RelayAddress
 import com.jpcottin.tairoto.share.ShareConnection
 import com.jpcottin.tairoto.share.ShareConnector
 import com.jpcottin.tairoto.share.ShareRoute
+import com.jpcottin.tairoto.world.PageScanner
+import com.jpcottin.tairoto.world.Picture
+import com.jpcottin.tairoto.world.ScanResult
+import com.jpcottin.tairoto.world.Skin
 import com.jpcottin.tairoto.world.DeviceId
 import com.jpcottin.tairoto.world.EdgeSwipes
 import com.jpcottin.tairoto.world.Turns
@@ -119,6 +123,36 @@ data class TankUiState(
     val edit: EditUi = EditUi(),
     /** The lagoon shared with other devices, or not. */
     val share: ShareUi = ShareUi(),
+    /** Drawing a fish of one's own. */
+    val draw: DrawUi = DrawUi(),
+)
+
+/** Where a drawing is on its way into the lagoon. */
+enum class DrawPhase {
+    /** Nothing scanned yet. */
+    IDLE,
+    SCANNING,
+    /** The fish was cut out of the photo: [DrawUi.skin] is ready to release. */
+    FOUND,
+    /** The photo has no page in it (the four corner squares were not all found). */
+    NO_PAGE,
+    /** The photo could not be opened. */
+    UNREADABLE,
+    /** It swims in the lagoon now. */
+    RELEASED,
+    /** There is no camera app to take the photo with. */
+    NO_CAMERA,
+    /** No room for it: the lagoon is full, or holds as many drawn fish as it can. */
+    FULL,
+}
+
+data class DrawUi(
+    val phase: DrawPhase = DrawPhase.IDLE,
+    val skin: Skin? = null,
+    /** Drawn fish in the lagoon now. */
+    val inLagoon: Int = 0,
+    /** Whether another drawing can go in. */
+    val room: Boolean = true,
 )
 
 enum class SharePhase { OFF, CONNECTING, SHARED }
@@ -371,6 +405,11 @@ class TankViewModel(
                         tankSize = sc.size,
                         decorCounts = DecorCatalog.all.associate { k -> k.id to sc.countDecor(k.id) },
                         decorRoomLeft = TankScene.MAX_DECOR - sc.decor.size,
+                        draw = it.draw.copy(
+                            inLagoon = sc.count(SpeciesCatalog.Drawn.id),
+                            room = sc.creatures.size < TankScene.MAX_CREATURES &&
+                                sc.creatures.mapNotNullTo(HashSet()) { c -> c.skin }.size < TankScene.MAX_SKINS,
+                        ),
                     )
                 }
                 if (selected != null && sc.decor(selected!!) == null) selected = null
@@ -940,6 +979,7 @@ class TankViewModel(
         return Visitors(
             creatures = scene.creatures.mapIndexed { i, c -> c.copy(spawnAt = creatures[i]) },
             decor = scene.decor.mapIndexed { i, d -> d.copy(at = decor[i]) },
+            skins = scene.withoutUnusedSkins().skins,
         ).takeIf { !it.isEmpty }
     }
 
@@ -1220,6 +1260,66 @@ class TankViewModel(
         val s = session ?: return
         val species = SpeciesCatalog.require(speciesId)
         viewModelScope.launch { s.add(speciesId, species.addBatch, around = camera?.center) }
+    }
+
+    // ------------------------------------------------------------ drawn fish
+
+    private var scanJob: Job? = null
+
+    /**
+     * Reads a photo of the coloured-in page ([read] opens it; null or a
+     * throw when it cannot be) and cuts the fish out of it, off the main
+     * thread. The result waits in [DrawUi] for [releaseDrawing].
+     */
+    fun scanDrawing(read: suspend () -> Picture?) {
+        scanJob?.cancel()
+        state.update { it.copy(draw = it.draw.copy(phase = DrawPhase.SCANNING, skin = null)) }
+        scanJob = viewModelScope.launch {
+            val picture = withContext(background) {
+                try {
+                    read()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            if (picture == null) {
+                state.update { it.copy(draw = it.draw.copy(phase = DrawPhase.UNREADABLE)) }
+                return@launch
+            }
+            when (val r = withContext(background) { PageScanner.scan(picture) }) {
+                is ScanResult.Found -> state.update { it.copy(draw = it.draw.copy(phase = DrawPhase.FOUND, skin = r.skin)) }
+                ScanResult.NoPage -> state.update { it.copy(draw = it.draw.copy(phase = DrawPhase.NO_PAGE)) }
+            }
+        }
+    }
+
+    /** Lets the scanned fish into the lagoon where the camera looks. */
+    fun releaseDrawing() {
+        val s = session ?: return
+        val skin = state.value.draw.skin ?: return
+        viewModelScope.launch {
+            val ok = s.addDrawn(skin, around = camera?.center)
+            state.update { it.copy(draw = it.draw.copy(phase = if (ok) DrawPhase.RELEASED else DrawPhase.FULL, skin = if (ok) null else skin)) }
+        }
+    }
+
+    /** No camera app answered: choosing a photo is the way. */
+    fun cameraUnavailable() {
+        state.update { it.copy(draw = it.draw.copy(phase = DrawPhase.NO_CAMERA, skin = null)) }
+    }
+
+    /** The sheet closed: a fish found and not yet released waits for it to open again; messages go. */
+    fun closeDrawing() {
+        val phase = state.value.draw.phase
+        if (phase != DrawPhase.FOUND && phase != DrawPhase.SCANNING) dismissDrawing()
+    }
+
+    /** Back to the start: another page, another photo. */
+    fun dismissDrawing() {
+        scanJob?.cancel()
+        state.update { it.copy(draw = it.draw.copy(phase = DrawPhase.IDLE, skin = null)) }
     }
 
     fun resetTank() {

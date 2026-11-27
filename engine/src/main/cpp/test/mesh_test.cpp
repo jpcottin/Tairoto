@@ -428,3 +428,98 @@ TEST(Mesh, MixedSchoolsKeepApartAndStaySmooth) {
     // the bar: schools brushing past and through each other are what real reefs look like.
     EXPECT_GT(share, 0.4f);
 }
+
+namespace {
+SpeciesParams drawnParams() {
+    SpeciesParams sp = SpeciesParams::greenChromis();
+    sp.bodyWidth = 0.5f;
+    sp.schooling = 0.25f;
+    return sp;
+}
+
+/** The side a drawn fish shows (aux[1]) and the farthest its body reaches from its spine, in mm. */
+struct DrawnLook {
+    int vertices = 0;
+    float side = 0;
+    float layer = -1;
+    float halfWidth = 0;
+};
+
+DrawnLook drawnLook(const Mesh& m, const Creature&) {
+    DrawnLook d;
+    const Vertex* centre = nullptr;
+    for (auto& v : m.vertices) {
+        if (visualOf(v) != (int)Visual::Drawn) continue;
+        d.vertices++;
+        d.side = v.aux[1];
+        d.layer = v.aux[0];
+        // Rows are (edge, centre, edge): each edge from its row's centre, at mid body.
+        if (v.v == 0.0f) centre = &v;
+        else if (centre && v.u == centre->u && v.u > 0.3f && v.u < 0.6f)
+            d.halfWidth = std::max(d.halfWidth, std::hypot(v.x - centre->x, v.y - centre->y));
+    }
+    return d;
+}
+}  // namespace
+
+TEST(Mesh, ADrawnFishIsOneRibbonWearingItsDrawingFromSnoutToTailTip) {
+    World w;
+    w.setTank({200, 300, 110});
+    w.spawn(7, Visual::Drawn, Locomotion::Swim, drawnParams(), 40, 3, Vec3(100, 150, 20), false, 5);
+    w.step(1.0f / 60.0f);
+    Mesh m;
+    MeshBuilder().build(w, cameraOver(w), m);
+    const Creature& c = *w.find(7);
+    DrawnLook d = drawnLook(m, c);
+    ASSERT_GT(d.vertices, 0);
+    EXPECT_EQ(5.0f, d.layer);
+    float minU = 1, maxU = 0;
+    for (auto& v : m.vertices) {
+        if (visualOf(v) != (int)Visual::Drawn) continue;
+        EXPECT_EQ(kPartBody, partOf(v));
+        minU = std::min(minU, v.u);
+        maxU = std::max(maxU, v.u);
+    }
+    EXPECT_FLOAT_EQ(0.0f, minU);
+    EXPECT_FLOAT_EQ(1.0f, maxU);
+    // As wide as the page's outline: half its length, so a quarter each side.
+    EXPECT_NEAR(40.0f * 0.25f, d.halfWidth, 2.5f);
+    // The whole drawing: from the snout to the tail tip about its length.
+    float span = 0;
+    for (auto& v : m.vertices)
+        if (visualOf(v) == (int)Visual::Drawn && v.v == 0.0f)
+            span = std::max(span, std::hypot(v.x - c.joint[0].x, v.y - c.joint[0].y));
+    EXPECT_NEAR(40.0f, span, 4.0f);
+}
+
+TEST(Mesh, ADrawnFishRollsOverToShowItsOtherSideWhenItTurnsAround) {
+    World w;
+    w.setTank({200, 300, 110});
+    w.spawn(7, Visual::Drawn, Locomotion::Swim, drawnParams(), 40, 3, Vec3(100, 150, 20), false, 0);
+    Creature& c = const_cast<Creature&>(*w.find(7));
+    MeshBuilder b;
+    Mesh m;
+    CameraParams cam = cameraOver(w);
+    // Swimming left: as drawn.
+    c.heading = kPi;
+    b.build(w, cam, m);
+    EXPECT_FLOAT_EQ(1.0f, drawnLook(m, c).side);
+    // It turns right: it rolls over, through edge on, in a fraction of a second.
+    c.heading = 0;
+    float sides[40];
+    for (int i = 0; i < 40; i++) {
+        w.step(1.0f / 60.0f);
+        c.heading = 0;
+        b.build(w, cam, m);
+        sides[i] = drawnLook(m, c).side;
+    }
+    EXPECT_GT(sides[5], -0.5f);
+    EXPECT_FLOAT_EQ(-1.0f, sides[39]);
+    for (int i = 1; i < 40; i++) EXPECT_LE(sides[i], sides[i - 1]);
+    // On a screen lying turned half round, the same fish swims left there: as drawn again.
+    CameraParams turned = cam;
+    turned.turns = 2;
+    MeshBuilder fresh;
+    fresh.build(w, turned, m);
+    EXPECT_FLOAT_EQ(1.0f, drawnLook(m, c).side);
+}

@@ -81,6 +81,17 @@ class TankAppTest {
         }
     }
 
+    @Test fun thePickerLeadsToDrawingAFish() {
+        AppLauncher.launch().use {
+            compose.waitForText(TankTags.COUNT) { it == "$DEFAULT creatures" }
+            compose.onNodeWithTag(TankTags.ADD).performClick()
+            compose.waitForTag(SheetTags.DRAW)
+            compose.onNodeWithTag(SheetTags.DRAW).performClick()
+            compose.waitForTag(com.jpcottin.tairoto.ui.draw.DrawTags.PRINT)
+            compose.onNodeWithTag(com.jpcottin.tairoto.ui.draw.DrawTags.CHOOSE).performScrollTo().assertIsDisplayed()
+        }
+    }
+
     @Test fun settingsOpenAndGoBack() {
         AppLauncher.launch().use {
             compose.waitForTag(TankTags.SETTINGS)

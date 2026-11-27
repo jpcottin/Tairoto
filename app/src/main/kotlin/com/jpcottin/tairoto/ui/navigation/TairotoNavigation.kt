@@ -2,7 +2,22 @@ package com.jpcottin.tairoto.ui.navigation
 
 import com.jpcottin.tairoto.world.DeviceId
 import com.jpcottin.tairoto.world.Vec2
+import android.content.ActivityNotFoundException
+import android.net.Uri
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
+import com.jpcottin.tairoto.ui.draw.DrawActions
+import com.jpcottin.tairoto.ui.draw.DrawSheet
+import com.jpcottin.tairoto.ui.draw.PhotoReader
+import com.jpcottin.tairoto.ui.draw.TemplatePrint
+import java.io.File
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
@@ -55,6 +70,10 @@ data object DecorKey : NavKey
 /** Sharing the lagoon with other devices. */
 @Serializable
 data object ShareKey : NavKey
+
+/** Drawing a fish of one's own. */
+@Serializable
+data object DrawKey : NavKey
 
 /**
  * How many panes fit side by side: two on a tablet, an unfolded foldable or a
@@ -151,10 +170,15 @@ fun TairotoNavigation(vm: TankViewModel) {
                 ShareSheet(state.share, actions, onClose = if (twoPane) ({ close(ShareKey) }) else null)
             }
             entry<DecorKey>(metadata = SupportingPaneSceneStrategy.supportingPane() + BottomSheetSceneStrategy.bottomSheet()) {
-                Picker(vm, state, twoPane, startOnDecor = true, close = { close(DecorKey) })
+                Picker(vm, state, twoPane, startOnDecor = true, close = { close(DecorKey) }, draw = { open(DrawKey) })
             }
             entry<SpeciesKey>(metadata = SupportingPaneSceneStrategy.supportingPane() + BottomSheetSceneStrategy.bottomSheet()) {
-                Picker(vm, state, twoPane, startOnDecor = false, close = { close(SpeciesKey) })
+                Picker(vm, state, twoPane, startOnDecor = false, close = { close(SpeciesKey) }, draw = { open(DrawKey) })
+            }
+            entry<DrawKey>(metadata = SupportingPaneSceneStrategy.supportingPane() + BottomSheetSceneStrategy.bottomSheet()) {
+                DisposableEffect(Unit) { onDispose { vm.closeDrawing() } }
+                val actions = rememberDrawActions(vm, onReleased = { if (!twoPane) close(DrawKey) })
+                DrawSheet(state.draw, actions, onClose = if (twoPane) ({ close(DrawKey) }) else null)
             }
             entry<SettingsKey>(metadata = SupportingPaneSceneStrategy.supportingPane()) {
                 SettingsScreen(
@@ -197,7 +221,7 @@ fun TairotoNavigation(vm: TankViewModel) {
  * lagoon stays open.
  */
 @Composable
-private fun Picker(vm: TankViewModel, state: TankUiState, twoPane: Boolean, startOnDecor: Boolean, close: () -> Unit) {
+private fun Picker(vm: TankViewModel, state: TankUiState, twoPane: Boolean, startOnDecor: Boolean, close: () -> Unit, draw: () -> Unit) {
     SpeciesPicker(
         counts = state.counts,
         roomLeft = state.roomLeft,
@@ -210,7 +234,47 @@ private fun Picker(vm: TankViewModel, state: TankUiState, twoPane: Boolean, star
             if (!twoPane) close()
         },
         startOnDecor = startOnDecor,
+        onDraw = draw,
     )
+}
+
+/**
+ * The drawing sheet's actions: printing through the system, the camera app
+ * writing into the app's cache, the photo picker, and the view model.
+ */
+@Composable
+private fun rememberDrawActions(vm: TankViewModel, onReleased: () -> Unit): DrawActions {
+    val context = LocalContext.current
+    val photo = rememberSaveable { mutableStateOf<String?>(null) }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val uri = photo.value
+        if (ok && uri != null) vm.scanDrawing { PhotoReader.read(context.contentResolver, Uri.parse(uri)) }
+    }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) vm.scanDrawing { PhotoReader.read(context.contentResolver, uri) }
+    }
+    val released by rememberUpdatedState(onReleased)
+    return remember(vm, context) {
+        object : DrawActions {
+            override fun print() = TemplatePrint.print(context)
+            override fun takePhoto() {
+                val file = File(context.cacheDir, "photos/page.jpg").apply { parentFile?.mkdirs() }
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.photos", file)
+                photo.value = uri.toString()
+                try {
+                    camera.launch(uri)
+                } catch (e: ActivityNotFoundException) {
+                    vm.cameraUnavailable()
+                }
+            }
+            override fun choosePhoto() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            override fun release() {
+                vm.releaseDrawing()
+                released()
+            }
+            override fun again() = vm.dismissDrawing()
+        }
+    }
 }
 
 /** The lagoon fills the screen with the system bars hidden (they come back with a swipe). */

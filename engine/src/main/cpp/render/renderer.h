@@ -38,6 +38,12 @@ struct FrameInput {
 class Renderer {
 public:
     static constexpr int kMaxRipples = 8;
+    /** The drawings drawn fish wear: layers of one texture array, sampled in the creature and shadow shaders. */
+    static constexpr int kSkinW = 128, kSkinH = 64, kMaxSkins = 16;
+    static constexpr size_t kSkinBytes = (size_t)kSkinW * kSkinH * 4;
+
+    /** Keeps a drawing for [layer] (RGBA, sRGB), sent to the GPU with the next frame, and again if the device is lost. */
+    void setSkin(int layer, std::vector<uint8_t> rgba);
 
     bool initInstance();
     bool attach(ANativeWindow* window);
@@ -94,6 +100,10 @@ private:
     void destroyFrameBuffers();
     bool createOffscreen();
     void destroyOffscreen();
+    bool createSkins();
+    void destroySkins();
+    /** Copies the drawings that changed into their layers (before the scene pass). */
+    void recordSkinUploads(VkCommandBuffer cb);
 
     bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buf, VkDeviceMemory& mem, void** map);
     bool createDeviceBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buf, VkDeviceMemory& mem);
@@ -128,6 +138,16 @@ private:
     VkImageView sceneView_ = VK_NULL_HANDLE;
     VkFramebuffer sceneFramebuffer_ = VK_NULL_HANDLE;
     VkSampler sampler_ = VK_NULL_HANDLE;
+
+    std::vector<uint8_t> skinPixels_[kMaxSkins];
+    bool skinDirty_[kMaxSkins] = {};
+    VkImage skinImage_ = VK_NULL_HANDLE;
+    VkDeviceMemory skinMem_ = VK_NULL_HANDLE;
+    VkImageView skinView_ = VK_NULL_HANDLE;
+    // Filled through the command stream (vkCmdUpdateBuffer), like the meshes on a virtualised GPU.
+    VkBuffer skinStage_ = VK_NULL_HANDLE;
+    VkDeviceMemory skinStageMem_ = VK_NULL_HANDLE;
+    bool skinsCleared_ = false;  // the image has been cleared and is ready to sample
 
     VkRenderPass scenePass_ = VK_NULL_HANDLE;
     VkRenderPass compositePass_ = VK_NULL_HANDLE;

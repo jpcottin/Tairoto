@@ -10,6 +10,7 @@ import com.jpcottin.tairoto.world.EntityId
 import com.jpcottin.tairoto.world.QualityTier
 import com.jpcottin.tairoto.world.SimInput
 import com.jpcottin.tairoto.world.SimOutput
+import com.jpcottin.tairoto.world.Skin
 import com.jpcottin.tairoto.world.Species
 import com.jpcottin.tairoto.world.TankSize
 import com.jpcottin.tairoto.world.Vec2
@@ -83,10 +84,25 @@ class NativeTank : TankEngine {
 
     override fun setPaused(paused: Boolean) = nativeSetPaused(h(), paused)
 
-    override fun spawn(creature: CreatureSpec, species: Species, ghost: Boolean) = nativeSpawn(
-        h(), creature.id.raw, species.visualId, species.locomotion.nativeId, species.nativeParams(),
-        creature.lengthMm, creature.seed, creature.spawnAt.x, creature.spawnAt.y, creature.spawnDepthMm, ghost,
-    )
+    private val skinLayers = SkinLayers()
+
+    override fun spawn(creature: CreatureSpec, species: Species, ghost: Boolean, skin: Skin?) {
+        // A drawn fish wears its drawing from a layer of the renderer's; without one it swims plain.
+        var layer = -1
+        if (skin != null) {
+            val placed = skinLayers.place(skin.id)
+            val px = if (placed?.second == true) skin.pixels() else null
+            if (placed != null && (!placed.second || px != null)) {
+                if (px != null) nativeSetSkin(h(), placed.first, px)
+                layer = placed.first
+                skinLayers.wear(creature.id.raw, layer)
+            }
+        }
+        nativeSpawn(
+            h(), creature.id.raw, species.visualId, species.locomotion.nativeId, species.nativeParams(),
+            creature.lengthMm, creature.seed, creature.spawnAt.x, creature.spawnAt.y, creature.spawnDepthMm, ghost, layer,
+        )
+    }
 
     override fun setFoodSlot(slot: Int) = nativeSetFoodSlot(h(), slot)
 
@@ -96,9 +112,15 @@ class NativeTank : TankEngine {
         return NetPacking.unpack(input, r[0] as IntArray, r[1] as LongArray, r[2] as FloatArray, r[3] as DoubleArray)
     }
 
-    override fun remove(id: EntityId) = nativeRemove(h(), id.raw)
+    override fun remove(id: EntityId) {
+        skinLayers.unwear(id.raw)
+        nativeRemove(h(), id.raw)
+    }
 
-    override fun clear() = nativeClear(h())
+    override fun clear() {
+        skinLayers.clearWearers()
+        nativeClear(h())
+    }
 
     override fun placeDecor(decor: DecorSpec, kind: DecorKind) = nativePlaceDecor(
         h(), decor.id.raw, kind.nativeId, decor.seed, decor.at.x, decor.at.y, decor.angle,
@@ -190,7 +212,8 @@ class NativeTank : TankEngine {
         @JvmStatic external fun nativeSetQuality(h: Long, q: Int)
         @JvmStatic external fun nativeSetDeterministic(h: Long, on: Boolean, seed: Long)
         @JvmStatic external fun nativeSetPaused(h: Long, paused: Boolean)
-        @JvmStatic external fun nativeSpawn(h: Long, id: Long, visual: Int, loco: Int, params: FloatArray, length: Float, seed: Int, x: Float, y: Float, z: Float, ghost: Boolean)
+        @JvmStatic external fun nativeSpawn(h: Long, id: Long, visual: Int, loco: Int, params: FloatArray, length: Float, seed: Int, x: Float, y: Float, z: Float, ghost: Boolean, skin: Int)
+        @JvmStatic external fun nativeSetSkin(h: Long, layer: Int, rgba: ByteArray)
         @JvmStatic external fun nativeSetFoodSlot(h: Long, slot: Int)
         @JvmStatic external fun nativeExchange(h: Long, header: IntArray, longs: LongArray, floats: FloatArray): Array<Any>
         @JvmStatic external fun nativeRemove(h: Long, id: Long)

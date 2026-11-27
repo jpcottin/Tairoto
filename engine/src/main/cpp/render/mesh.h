@@ -4,6 +4,7 @@
 // turtle is a shell, a head and four flippers on their own chains. Everything
 // the shader needs to paint a species is in the vertex: no textures.
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 #include "render/camera.h"
@@ -55,6 +56,8 @@ constexpr int kVisualFood = 2;
 constexpr int kVisualCloud = 6;
 /** Decorations: 11 + DecorKind (coral head 11, branching coral 12, giant clam 13, stone 14). */
 constexpr int kVisualDecor = 11;
+/** A fish someone drew (Visual::Drawn): aux[0] its layer among the drawings, aux[1] which side shows (+1, -1). */
+constexpr int kVisualDrawn = 15;
 
 struct Vertex {
     float x, y;        // mm on the table plane
@@ -105,6 +108,7 @@ public:
 
 private:
     void fish(const Creature& c, Mesh& m);
+    void drawn(const Creature& c, Mesh& m, const CameraParams& cam, float now);
     void turtle(const Creature& c, Mesh& m);
     void food(const Food& f, Mesh& m);
     void ray(const Creature& c, Mesh& m, float floorZ);
@@ -122,6 +126,17 @@ private:
         int64_t key;
     };
     std::vector<Item> order_;
+    /**
+     * How far each drawn fish has rolled over: +1 showing the drawing as it
+     * was drawn (swimming to the left of the screen), -1 its other side
+     * (swimming right), through 0 edge on. Only the look, so it lives here.
+     */
+    struct Roll {
+        float side = 1;
+        float seen = 0;
+    };
+    std::unordered_map<int64_t, Roll> rolls_;
+    float lastBuild_ = -1;
 };
 
 }  // namespace dt

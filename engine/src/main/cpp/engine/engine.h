@@ -94,7 +94,9 @@ public:
     void setDeterministic(bool on, uint64_t seed);
     void setPaused(bool paused);
     void spawn(int64_t id, Visual v, Locomotion l, const SpeciesParams& sp, float length, uint32_t seed, Vec3 at,
-               bool ghost = false);
+               bool ghost = false, int skin = -1);
+    /** A drawing for drawn fish to wear: [Renderer::kSkinW] x [kSkinH] RGBA (sRGB) into layer [layer]. */
+    void setSkin(int layer, std::vector<uint8_t> rgba);
     void setFoodSlot(int slot);
     /** One tick of a shared lagoon: applies what came in, answers what goes out. Blocks. */
     NetOut exchange(const NetIn& in);

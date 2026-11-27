@@ -19,6 +19,8 @@ enum class Visual : int32_t {
     GreenChromis = 0, GreenSeaTurtle = 1, EagleRay = 3, Octopus = 4, HermitCrab = 5,
     // More schooling fish of the lagoon (2 is food and 6 clouds).
     ConvictSurgeonfish = 7, BluestripeSnapper = 8, YellowstripeGoatfish = 9, ScissortailSergeant = 10,
+    // 11 .. 14 are the decorations. A fish someone drew, wearing its drawing (Creature::skin).
+    Drawn = 15,
 };
 
 /** A fish that schools, swims with a tail beat and is drawn by the fish mesh. */

@@ -186,18 +186,15 @@ bool Renderer::ensureDevice() {
     VkCommandPoolCreateInfo pci{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     pci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     pci.queueFamilyIndex = queueFamily_;
-    if (vkCreateCommandPool(device_, &pci, nullptr, &cmdPool_) != VK_SUCCESS || !createDescriptors() ||
-        !createFrameBuffers(65536, 65536 * 3)) {
-        destroyDevice();
-        return false;
-    }
     VkSamplerCreateInfo sci{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
     sci.magFilter = VK_FILTER_LINEAR;
     sci.minFilter = VK_FILTER_LINEAR;
     sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
     sci.addressModeU = sci.addressModeV = sci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     sci.maxLod = 0;
-    if (vkCreateSampler(device_, &sci, nullptr, &sampler_) != VK_SUCCESS) {
+    if (vkCreateCommandPool(device_, &pci, nullptr, &cmdPool_) != VK_SUCCESS ||
+        vkCreateSampler(device_, &sci, nullptr, &sampler_) != VK_SUCCESS || !createDescriptors() || !createSkins() ||
+        !createFrameBuffers(65536, 65536 * 3)) {
         destroyDevice();
         return false;
     }
@@ -261,15 +258,21 @@ void Renderer::recordInlineUpload(VkCommandBuffer cb, PerFrame& f, const Mesh& m
 }
 
 bool Renderer::createDescriptors() {
-    VkDescriptorSetLayoutBinding ub{};
-    ub.binding = 0;
-    ub.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    ub.descriptorCount = 1;
-    ub.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    // Set 0: the frame's uniforms, and the drawings drawn fish wear.
+    VkDescriptorSetLayoutBinding fb[2]{};
+    fb[0].binding = 0;
+    fb[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    fb[0].descriptorCount = 1;
+    fb[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    fb[1].binding = 1;
+    fb[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    fb[1].descriptorCount = 1;
+    fb[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     VkDescriptorSetLayoutCreateInfo lci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    lci.bindingCount = 1;
-    lci.pBindings = &ub;
+    lci.bindingCount = 2;
+    lci.pBindings = fb;
     VK_CHECK(vkCreateDescriptorSetLayout(device_, &lci, nullptr, &frameLayout_));
+    lci.bindingCount = 1;
 
     VkDescriptorSetLayoutBinding tb{};
     tb.binding = 0;
@@ -280,7 +283,7 @@ bool Renderer::createDescriptors() {
     VK_CHECK(vkCreateDescriptorSetLayout(device_, &lci, nullptr, &textureLayout_));
 
     VkDescriptorPoolSize sizes[2] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, (uint32_t)kFramesInFlight},
-                                     {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}};
+                                     {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 + (uint32_t)kFramesInFlight}};
     VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pci.maxSets = kFramesInFlight + 1;
     pci.poolSizeCount = 2;
@@ -304,6 +307,114 @@ bool Renderer::createDescriptors() {
     return true;
 }
 
+void Renderer::setSkin(int layer, std::vector<uint8_t> rgba) {
+    if (layer < 0 || layer >= kMaxSkins || rgba.size() != kSkinBytes) return;
+    skinPixels_[layer] = std::move(rgba);
+    skinDirty_[layer] = true;
+}
+
+bool Renderer::createSkins() {
+    VkImageCreateInfo ici{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    ici.imageType = VK_IMAGE_TYPE_2D;
+    ici.format = VK_FORMAT_R8G8B8A8_SRGB;
+    ici.extent = {(uint32_t)kSkinW, (uint32_t)kSkinH, 1};
+    ici.mipLevels = 1;
+    ici.arrayLayers = kMaxSkins;
+    ici.samples = VK_SAMPLE_COUNT_1_BIT;
+    ici.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ici.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VK_CHECK(vkCreateImage(device_, &ici, nullptr, &skinImage_));
+    VkMemoryRequirements req;
+    vkGetImageMemoryRequirements(device_, skinImage_, &req);
+    VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    mai.allocationSize = req.size;
+    mai.memoryTypeIndex = findMemoryType(req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (mai.memoryTypeIndex == UINT32_MAX) mai.memoryTypeIndex = findMemoryType(req.memoryTypeBits, 0);
+    VK_CHECK(vkAllocateMemory(device_, &mai, nullptr, &skinMem_));
+    VK_CHECK(vkBindImageMemory(device_, skinImage_, skinMem_, 0));
+    VkImageViewCreateInfo vci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    vci.image = skinImage_;
+    vci.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    vci.format = ici.format;
+    vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, (uint32_t)kMaxSkins};
+    VK_CHECK(vkCreateImageView(device_, &vci, nullptr, &skinView_));
+    if (!createDeviceBuffer(kSkinBytes * kMaxSkins, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, skinStage_, skinStageMem_)) return false;
+    skinsCleared_ = false;
+    // A new device has none of them yet.
+    for (int i = 0; i < kMaxSkins; i++) skinDirty_[i] = !skinPixels_[i].empty();
+    return true;
+}
+
+void Renderer::destroySkins() {
+    if (skinView_) vkDestroyImageView(device_, skinView_, nullptr);
+    if (skinImage_) vkDestroyImage(device_, skinImage_, nullptr);
+    if (skinMem_) vkFreeMemory(device_, skinMem_, nullptr);
+    if (skinStage_) vkDestroyBuffer(device_, skinStage_, nullptr);
+    if (skinStageMem_) vkFreeMemory(device_, skinStageMem_, nullptr);
+    skinView_ = VK_NULL_HANDLE;
+    skinImage_ = VK_NULL_HANDLE;
+    skinMem_ = VK_NULL_HANDLE;
+    skinStage_ = VK_NULL_HANDLE;
+    skinStageMem_ = VK_NULL_HANDLE;
+    skinsCleared_ = false;
+}
+
+void Renderer::recordSkinUploads(VkCommandBuffer cb) {
+    bool any = !skinsCleared_;
+    for (int i = 0; i < kMaxSkins; i++) any = any || skinDirty_[i];
+    if (!any) return;
+    const VkImageSubresourceRange all{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, (uint32_t)kMaxSkins};
+    // Whatever earlier frames still read or copy finishes first.
+    VkBufferMemoryBarrier sb{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+    sb.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    sb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    sb.srcQueueFamilyIndex = sb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    sb.buffer = skinStage_;
+    sb.size = VK_WHOLE_SIZE;
+    VkImageMemoryBarrier ib{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    ib.srcAccessMask = skinsCleared_ ? VK_ACCESS_SHADER_READ_BIT : 0;
+    ib.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    ib.oldLayout = skinsCleared_ ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+    ib.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    ib.srcQueueFamilyIndex = ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    ib.image = skinImage_;
+    ib.subresourceRange = all;
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &sb, 1, &ib);
+    if (!skinsCleared_) {
+        VkClearColorValue clear{};
+        vkCmdClearColorImage(cb, skinImage_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &all);
+    }
+    std::vector<VkBufferImageCopy> copies;
+    for (int i = 0; i < kMaxSkins; i++) {
+        if (!skinDirty_[i]) continue;
+        const VkDeviceSize off = (VkDeviceSize)i * kSkinBytes;
+        for (size_t o = 0; o < kSkinBytes; o += 65536)
+            vkCmdUpdateBuffer(cb, skinStage_, off + o, std::min<size_t>(65536, kSkinBytes - o), skinPixels_[i].data() + o);
+        VkBufferImageCopy c{};
+        c.bufferOffset = off;
+        c.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, (uint32_t)i, 1};
+        c.imageExtent = {(uint32_t)kSkinW, (uint32_t)kSkinH, 1};
+        copies.push_back(c);
+        skinDirty_[i] = false;
+    }
+    if (!copies.empty()) {
+        VkBufferMemoryBarrier wb = sb;
+        wb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        wb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &wb, 0, nullptr);
+        vkCmdCopyBufferToImage(cb, skinStage_, skinImage_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, (uint32_t)copies.size(), copies.data());
+    }
+    ib.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    ib.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    ib.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    ib.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr,
+                         1, &ib);
+    skinsCleared_ = true;
+}
+
 bool Renderer::createFrameBuffers(uint32_t vertexCap, uint32_t indexCap) {
     vertexCap_ = vertexCap;
     indexCap_ = indexCap;
@@ -325,13 +436,21 @@ bool Renderer::createFrameBuffers(uint32_t vertexCap, uint32_t indexCap) {
             VK_CHECK(vkAllocateDescriptorSets(device_, &ai, &f.set));
         }
         VkDescriptorBufferInfo bi{f.ubo, 0, sizeof(FrameUniforms)};
-        VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-        w.dstSet = f.set;
-        w.dstBinding = 0;
-        w.descriptorCount = 1;
-        w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        w.pBufferInfo = &bi;
-        vkUpdateDescriptorSets(device_, 1, &w, 0, nullptr);
+        VkDescriptorImageInfo si{sampler_, skinView_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkWriteDescriptorSet w[2]{};
+        w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w[0].dstSet = f.set;
+        w[0].dstBinding = 0;
+        w[0].descriptorCount = 1;
+        w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        w[0].pBufferInfo = &bi;
+        w[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w[1].dstSet = f.set;
+        w[1].dstBinding = 1;
+        w[1].descriptorCount = 1;
+        w[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        w[1].pImageInfo = &si;
+        vkUpdateDescriptorSets(device_, 2, w, 0, nullptr);
 
         if (!f.cmd) {
             VkCommandBufferAllocateInfo cbai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
@@ -802,6 +921,7 @@ void Renderer::record(PerFrame& f, uint32_t imageIndex, const Mesh& mesh, int mo
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(cb, &bi);
     if (inlineUpload_ && indexCount > 0) recordInlineUpload(cb, f, mesh);
+    recordSkinUploads(cb);
 
     // ---- scene
     VkClearValue clear{};
@@ -1016,6 +1136,7 @@ void Renderer::destroyDevice() {
     if (compositePass_) vkDestroyRenderPass(device_, compositePass_, nullptr);
     scenePass_ = compositePass_ = VK_NULL_HANDLE;
     destroyFrameBuffers();
+    destroySkins();
     for (auto& f : frames_) {
         if (f.imageAvailable) vkDestroySemaphore(device_, f.imageAvailable, nullptr);
         if (f.inFlight) vkDestroyFence(device_, f.inFlight, nullptr);

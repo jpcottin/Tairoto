@@ -1,5 +1,11 @@
 package com.jpcottin.tairoto.ui.preview
 
+import com.jpcottin.tairoto.ui.draw.DrawActions
+import com.jpcottin.tairoto.ui.draw.DrawSheet
+import com.jpcottin.tairoto.ui.tank.DrawPhase
+import com.jpcottin.tairoto.ui.tank.DrawUi
+import com.jpcottin.tairoto.world.FishTemplate
+import com.jpcottin.tairoto.world.Skin
 import com.jpcottin.tairoto.ui.share.ArrangeOverlay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -81,6 +87,29 @@ import com.jpcottin.tairoto.world.TankSize
  * it, so the layout over and beside it can be judged.
  */
 object PreviewData {
+    /** A fish as a child might colour it: orange with purple bands, a yellow tail and fins. */
+    val drawing: Skin by lazy {
+        val px = ByteArray(Skin.BYTES)
+        for (y in 0 until Skin.HEIGHT) for (x in 0 until Skin.WIDTH) {
+            val u = (x + 0.5f) / Skin.WIDTH
+            val v = (y + 0.5f) / Skin.HEIGHT * 2f - 1f
+            val a = FishTemplate.coverage(u, v, 1f / Skin.WIDTH, 2f / Skin.HEIGHT)
+            if (a <= 0f) continue
+            val rgb = when {
+                (Vec2(u, v) - FishTemplate.eye).length < 0.05f -> intArrayOf(30, 140, 60)
+                u > 0.72f || kotlin.math.abs(v) > 0.68f -> intArrayOf(250, 205, 30)
+                (u * 9f).toInt() % 2 == 1 && u > 0.2f -> intArrayOf(120, 50, 170)
+                else -> intArrayOf(250, 125, 25)
+            }
+            val i = (y * Skin.WIDTH + x) * 4
+            for (c in 0 until 3) px[i + c] = rgb[c].toByte()
+            px[i + 3] = (a * 255).toInt().toByte()
+        }
+        Skin.of(px)
+    }
+    val drawFound get() = DrawUi(phase = DrawPhase.FOUND, skin = drawing, inLagoon = 2)
+    val drawNoPage = DrawUi(phase = DrawPhase.NO_PAGE)
+
     val counts = SpeciesCatalog.all.associate { it.id to it.defaultCount }
     val total = counts.values.sum()
 
@@ -195,31 +224,44 @@ fun LagoonScreenPreviewContent(state: TankUiState = PreviewData.lagoon) {
  */
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
-fun LagoonWithPanePreviewContent(pane: PreviewPane, state: TankUiState = PreviewData.lagoon, share: ShareUi = PreviewData.shareStart) {
+fun LagoonWithPanePreviewContent(
+    pane: PreviewPane,
+    state: TankUiState = PreviewData.lagoon,
+    share: ShareUi = PreviewData.shareStart,
+    draw: DrawUi = DrawUi(),
+) {
     val directive = rememberLagoonDirective()
     val twoPane = directive.maxHorizontalPartitions > 1
     if (twoPane) {
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxHeight()) { LagoonScreenPreviewContent(state.copy(hintVisible = false)) }
-            Box(Modifier.width(directive.defaultPanePreferredWidth).fillMaxHeight()) { PaneContent(pane, inPane = true, share) }
+            Box(Modifier.width(directive.defaultPanePreferredWidth).fillMaxHeight()) { PaneContent(pane, inPane = true, share, draw) }
         }
         return
     }
     when (pane) {
-        PreviewPane.Species, PreviewPane.Decor, PreviewPane.Share -> Box(Modifier.fillMaxSize()) {
+        PreviewPane.Species, PreviewPane.Decor, PreviewPane.Share, PreviewPane.Draw -> Box(Modifier.fillMaxSize()) {
             LagoonScreenPreviewContent(state.copy(hintVisible = false, share = share))
             Box(Modifier.fillMaxSize().background(Color(0x66000000)))
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(0.8f),
-            ) { Column(Modifier.padding(top = 22.dp)) { PaneContent(pane, inPane = false, share) } }
+            ) { Column(Modifier.padding(top = 22.dp)) { PaneContent(pane, inPane = false, share, draw) } }
         }
-        PreviewPane.Settings -> PaneContent(pane, inPane = false, share)
+        PreviewPane.Settings -> PaneContent(pane, inPane = false, share, draw)
     }
 }
 
-enum class PreviewPane { Species, Decor, Settings, Share }
+enum class PreviewPane { Species, Decor, Settings, Share, Draw }
+
+private object NoDrawActions : DrawActions {
+    override fun print() = Unit
+    override fun takePhoto() = Unit
+    override fun choosePhoto() = Unit
+    override fun release() = Unit
+    override fun again() = Unit
+}
 
 private object NoShareActions : ShareActions {
     override fun share(route: ShareRoute) = Unit
@@ -230,10 +272,11 @@ private object NoShareActions : ShareActions {
 }
 
 @Composable
-private fun PaneContent(pane: PreviewPane, inPane: Boolean, share: ShareUi) {
+private fun PaneContent(pane: PreviewPane, inPane: Boolean, share: ShareUi, draw: DrawUi = DrawUi()) {
     when (pane) {
+        PreviewPane.Draw -> DrawSheet(draw, NoDrawActions, onClose = if (inPane) ({}) else null)
         PreviewPane.Share -> ShareSheet(share, NoShareActions, onClose = if (inPane) ({}) else null)
-        PreviewPane.Species -> SpeciesPicker(PreviewData.counts, 160 - PreviewData.total, onRelease = {}, onClose = if (inPane) ({}) else null)
+        PreviewPane.Species -> SpeciesPicker(PreviewData.counts, 160 - PreviewData.total, onRelease = {}, onClose = if (inPane) ({}) else null, onDraw = {})
         PreviewPane.Decor -> SpeciesPicker(
             PreviewData.counts, 160 - PreviewData.total, onRelease = {}, onClose = if (inPane) ({}) else null,
             decorCounts = PreviewData.decorCounts, decorRoomLeft = 17, startOnDecor = true,
@@ -408,3 +451,7 @@ private fun SharedHostPreview() = TairotoTheme {
 @NarrowPreviews
 @Composable
 private fun OutOfTouchPreview() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Share, share = PreviewData.outOfTouch) }
+
+@FormFactorPreviews
+@Composable
+private fun DrawSheetPreview() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Draw, draw = PreviewData.drawFound) }

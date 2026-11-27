@@ -71,5 +71,15 @@
             </intent-filter>
             <meta-data android:name="android.service.dream" android:resource="@xml/dream" />
         </service>
+            <!-- Lets the camera app write a photo of a coloured-in page for the app to read. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.photos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/photo_paths" />
+        </provider>
     </application>
 </manifest>

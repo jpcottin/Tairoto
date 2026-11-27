@@ -5,43 +5,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlin.random.Random
 
 class PageScannerTest {
-    private val pageCorners = listOf(Vec2(0f, 0f), Vec2(TemplatePage.WIDTH_MM, 0f), Vec2(TemplatePage.WIDTH_MM, TemplatePage.HEIGHT_MM), Vec2(0f, TemplatePage.HEIGHT_MM))
+    private val pageCorners = PagePhotos.pageCorners
 
-    /**
-     * A photo of the page coloured in (red above the middle, blue below, with
-     * a crayon's grain), its corners where [where] says in the photo, lit
-     * unevenly, on a darker table.
-     */
-    private fun photo(w: Int, h: Int, where: List<Vec2>, light: Float = 0.92f, cover: Int? = null, seed: Int = 1): Picture {
-        val toPage = Homography.fromPoints(where, pageCorners)!!
-        val rnd = Random(seed)
-        val px = IntArray(w * h)
-        for (y in 0 until h) for (x in 0 until w) {
-            val p = toPage.map(Vec2(x + 0.5f, y + 0.5f))
-            val shade = light * (0.75f + 0.25f * x / w)  // brighter to one side
-            var r: Float; var g: Float; var b: Float
-            if (p.x < 0 || p.y < 0 || p.x > TemplatePage.WIDTH_MM || p.y > TemplatePage.HEIGHT_MM) {
-                r = 0.32f; g = 0.27f; b = 0.22f  // a wooden table
-            } else if (TemplatePage.inkAt(p) && (cover == null || (p - TemplatePage.markers[cover]).length > TemplatePage.MARKER_MM)) {
-                r = 0.08f; g = 0.08f; b = 0.09f
-            } else {
-                // Paper with a slightly warm white, then the colouring.
-                r = 0.96f; g = 0.94f; b = 0.9f
-                val u = (p.x - TemplatePage.FISH_LEFT_MM) / TemplatePage.FISH_WIDTH_MM
-                val v = (p.y - TemplatePage.FISH_MIDDLE_MM) / TemplatePage.FISH_HALF_HEIGHT_MM
-                if (FishTemplate.inside(u, v)) {
-                    val grain = 0.08f * (rnd.nextFloat() - 0.5f)
-                    if (v < 0) { r = 0.85f + grain; g = 0.2f + grain; b = 0.15f + grain } else { r = 0.15f + grain; g = 0.3f + grain; b = 0.8f + grain }
-                }
-            }
-            fun c(f: Float) = ((f * shade).coerceIn(0f, 1f) * 255f).roundToInt()
-            px[y * w + x] = (0xFF shl 24) or (c(r) shl 16) or (c(g) shl 8) or c(b)
-        }
-        return Picture(w, h, px)
-    }
+    private fun photo(w: Int, h: Int, where: List<Vec2>, light: Float = 0.92f, cover: Int? = null, seed: Int = 1): Picture =
+        PagePhotos.photo(w, h, where, light, cover, seed)
 
     private fun Skin.rgbAt(u: Float, v: Float): IntArray {
         val p = pixels()!!
