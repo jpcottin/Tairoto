@@ -820,27 +820,29 @@ class TankViewModel(
     }
 
     /** A finger began to move from [start]: while arranging, did it come onto this screen over an edge? */
-    fun strokeStart(start: Vec2, toward: Vec2) {
+    fun strokeStart(start: Vec2, toward: Vec2, atMs: Long = signals.nowMs()) {
         if (!arrangingTable()) return
         val k = glassPxPerMm() ?: return
         val vp = viewport ?: return
         val hit = EdgeSwipes.entering(start, toward, vp.widthPx, vp.heightPx, EdgeSwipes.MARGIN_MM * k) ?: return
-        swipe(hit, entering = true, k)
+        swipe(hit, entering = true, k, atMs)
     }
 
     /** A finger was lifted at [end]: while arranging, did it leave this screen over an edge? */
-    fun strokeEnd(from: Vec2, end: Vec2) {
+    fun strokeEnd(from: Vec2, end: Vec2, atMs: Long = signals.nowMs()) {
         if (!arrangingTable()) return
         val k = glassPxPerMm() ?: return
         val vp = viewport ?: return
         val hit = EdgeSwipes.leaving(from, end, vp.widthPx, vp.heightPx, EdgeSwipes.MARGIN_MM * k) ?: return
-        swipe(hit, entering = false, k)
+        swipe(hit, entering = false, k, atMs)
     }
 
-    private fun swipe(hit: EdgeSwipes.AtEdge, entering: Boolean, pxPerMm: Float) {
+    private fun swipe(hit: EdgeSwipes.AtEdge, entering: Boolean, pxPerMm: Float, atMs: Long) {
         val sh = shared ?: return
-        netLog(json("swipe", "self" to sh.self.slot, "t" to sh.sharedNow(), "edge" to hit.edge.name, "along" to hit.alongPx / pxPerMm, "entering" to entering))
-        viewModelScope.launch { sh.edgeSwipe(hit.edge, hit.alongPx / pxPerMm, entering) }
+        // When the finger was there, not when this device got round to it.
+        val agoS = ((signals.nowMs() - atMs).coerceAtLeast(0L)) / 1000.0
+        netLog(json("swipe", "self" to sh.self.slot, "t" to sh.sharedNow() - agoS, "ago" to agoS, "edge" to hit.edge.name, "along" to hit.alongPx / pxPerMm, "entering" to entering))
+        viewModelScope.launch { sh.edgeSwipe(hit.edge, hit.alongPx / pxPerMm, entering, agoS) }
     }
 
     /** Pixels per mm of glass, as the shared camera draws it (life size). */
