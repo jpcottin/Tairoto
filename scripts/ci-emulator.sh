@@ -4,7 +4,7 @@
 # on every machine. Used by CI; locally it makes its own AVD, so it never
 # touches emulators already running.
 #
-#   scripts/ci-emulator.sh                  # AVD Tairoto_CI on port 5712
+#   scripts/ci-emulator.sh                  # AVD Tairoto_CI on port 5712 (CI: PORT=5554, where adb looks)
 #   PORT=5714 AVD=Other scripts/ci-emulator.sh
 #   ANDROID_SERIAL=emulator-5712 ./gradlew :app:connectedDebugAndroidTest
 set -euo pipefail
