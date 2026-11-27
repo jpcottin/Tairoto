@@ -1,14 +1,40 @@
 # Tairoto
 
-*Tairoto* is Tahitian for lagoon. This is one, for Android, seen from above:
-a school of *ʻatoti* (green chromis) and a *honu* (green sea turtle) over white
-coral sand, under moving caustic light. It is built to grow into one lagoon
-shared by several devices on a table, fish swimming from one screen to the next.
+[![CI](https://github.com/jpcottin/Tairoto/actions/workflows/ci.yml/badge.svg)](https://github.com/jpcottin/Tairoto/actions/workflows/ci.yml)
+![Android 11+](https://img.shields.io/badge/Android-11%2B-3DDC84?logo=android&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-Compose-7F52FF?logo=kotlin&logoColor=white)
+![C++ and Vulkan](https://img.shields.io/badge/C%2B%2B-Vulkan-AC162C?logo=vulkan&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> Work in progress. Milestones 1 (the solo lagoon),
-> 2 (food and feeding), 3 (the bottom dwellers), 4 (arranging the lagoon),
-> 5 (one lagoon across several devices), 5b (over Bluetooth too) and 6
-> (laying the screens out on the table) of 10.
+*Tairoto* is Tahitian for lagoon. This is one, for Android, seen from above:
+reef fish, a turtle, an eagle ray, an octopus and hermit crabs over white coral
+sand, under moving caustic light, every creature called by its Tahitian name.
+Lay several phones side by side and it becomes **one lagoon across all of
+them**: a fish swimming off one screen comes in on the next.
+
+<p align="center">
+  <img src="docs/media/lagoon.jpg" width="250" alt="The lagoon: an eagle ray over a coral head, a turtle, schools of goatfish and sergeants">
+  &nbsp;
+  <img src="docs/media/feeding.gif" width="250" alt="A finger sprinkles flakes; the fish come for them">
+  &nbsp;
+  <img src="docs/media/closeup.jpg" width="250" alt="Close up: a day octopus and two hermit crabs by a giant clam">
+</p>
+
+<p align="center">
+  <img src="docs/media/two-screens.gif" width="520" alt="Two phones side by side share one lagoon: a school crosses from one screen to the other for food dropped on the seam">
+  <br>
+  <em>Two phones, one lagoon: food dropped on the seam draws fish from both sides across it.</em>
+</p>
+
+Everything is drawn at run time, with no textures: a C++ simulation (schooling,
+beat-and-glide swimming, an octopus on soft arms, a ray that buries itself) and
+a Vulkan renderer (procedural sand, caustics, refraction, soft shadows,
+creatures painted in shaders), under a Jetpack Compose app.
+
+> Work in progress: milestones 1 to 6 of 10 are done. Solo lagoon, food and
+> feeding, bottom dwellers, arranging the lagoon, one lagoon across devices
+> (relay, Wi-Fi, Bluetooth), laying the screens out on the table. Next: sound
+> and a live wallpaper, scanning drawn fish with the camera, TV and Wear.
 
 Tahitian names are checked against a reference before they are used, and the
 source is noted next to each species in `Species.kt`.
@@ -106,6 +132,24 @@ adb shell am start -n com.jpcottin.tairoto/.MainActivity --ez tairoto.ci true --
 #       --ez tairoto.trace true   (log every ownership message of a shared lagoon)
 ```
 
+### Continuous integration
+
+Every push runs three jobs on GitHub Actions (`.github/workflows/ci.yml`):
+
+- **checks**: the Kotlin unit tests (core, engine, view model), the Compose
+  screenshot tests, the native C++ tests on the host, and the build.
+- **ui-tests**: the instrumented UI tests on a headless emulator that draws
+  with lavapipe, Mesa's software Vulkan, so no GPU is needed and every run
+  draws the same pixels (`scripts/ci-emulator.sh` makes the same emulator
+  locally, on its own port).
+- **two-emulators**: one lagoon on two lavapipe emulators: a finger swiped
+  across both lays them side by side (`scripts/arrange-e2e.sh`), and fish
+  change hands through the relay and over emulated Bluetooth, never simulated
+  twice, no food lost (`scripts/share-e2e.sh`).
+
+The pictures above come from `scripts/readme-media.sh`, recorded on emulators
+that draw on the computer's GPU.
+
 ## Gestures
 
 Tap the water: a ripple, and the fish nearby dart away (on the next screen too,
@@ -177,6 +221,12 @@ editor (milestone 6) will let you move them. A device that goes to the
 background leaves the lagoon, handing its creatures over.
 
 ### Laying the screens out
+
+<p align="center">
+  <img src="docs/media/arranging.jpg" width="480" alt="Two phones while their screens are arranged by hand: each shows its name">
+  &nbsp;
+  <img src="docs/media/table.jpg" width="200" alt="The share sheet's map of the table: two phones side by side">
+</p>
 
 The share sheet draws the table to scale. Drag a screen to where it lies;
 it snaps against its neighbours, frames touching. "Turn" lays it across in

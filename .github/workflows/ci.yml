@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Unit, native and screenshot tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Accept the Android SDK licences
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+      - name: Kotlin unit tests
+        run: ./gradlew --stacktrace :core:world:test :core:net:test :engine:testDebugUnitTest :app:testDebugUnitTest
+      - name: Screenshot tests
+        run: ./gradlew :app:validateDebugScreenshotTest
+      - name: Build the app and the relay
+        run: ./gradlew :app:assembleDebug :relay:installDist
+      - name: Native tests (simulation and meshes, on the host)
+        run: scripts/host-tests.sh
+      - name: Keep the reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-checks
+          path: |
+            **/build/reports/
+            **/build/test-results/
+            app/build/outputs/screenshotTest-results/
+          retention-days: 7
+
+  ui-tests:
+    name: UI tests on an emulator (lavapipe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Let the emulator use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Accept the Android SDK licences
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+      - name: Build the app and its tests
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Start a headless emulator drawing with lavapipe
+        run: LOG="$RUNNER_TEMP/emulator.log" scripts/ci-emulator.sh
+      - name: UI tests
+        run: ANDROID_SERIAL=emulator-5712 ./gradlew :app:connectedDebugAndroidTest
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-tests
+          path: |
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+            ${{ runner.temp }}/emulator.log
+          retention-days: 7
+
+  two-emulators:
+    name: One lagoon on two emulators (relay, swipe, Bluetooth)
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Let the emulators use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Accept the Android SDK licences
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+      - name: Build the app and the relay
+        run: ./gradlew :app:assembleDebug :relay:installDist
+      - name: Start two headless emulators drawing with lavapipe
+        run: |
+          LOG="$RUNNER_TEMP/emulator-a.log" scripts/ci-emulator.sh
+          AVD=Tairoto_CI2 PORT=5714 LOG="$RUNNER_TEMP/emulator-b.log" scripts/ci-emulator.sh
+      - name: A finger swiped across both lays them side by side
+        run: SERIALS="emulator-5712 emulator-5714" scripts/arrange-e2e.sh
+      - name: Fish change hands through the relay, never simulated twice, no food lost
+        run: SERIALS="emulator-5712 emulator-5714" FRENZY=30 scripts/share-e2e.sh
+      - name: The same over emulated Bluetooth (netsim)
+        run: SERIALS="emulator-5712 emulator-5714" FRENZY=30 VIA=bluetooth scripts/share-e2e.sh
+      - name: Keep the logs and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: two-emulators
+          path: |
+            build/share-e2e/
+            build/arrange-e2e/
+            ${{ runner.temp }}/emulator-*.log
+          retention-days: 7
