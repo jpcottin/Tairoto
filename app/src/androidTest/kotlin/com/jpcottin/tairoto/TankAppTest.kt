@@ -136,7 +136,7 @@ class TankAppTest {
             compose.waitForText(TankTags.COUNT) { it == "${DEFAULT + SpeciesCatalog.GreenChromis.addBatch} creatures" }
             compose.onNodeWithTag(TankTags.SETTINGS).performClick()
             compose.waitForTag(SettingsTags.RESET)
-            compose.onNodeWithTag(SettingsTags.RESET).performClick()
+            compose.onNodeWithTag(SettingsTags.RESET).performScrollTo().performClick()
             compose.waitForTag(SettingsTags.RESET_CONFIRM)
             compose.onNodeWithTag(SettingsTags.RESET_CONFIRM).performClick()
             compose.onNodeWithTag(SettingsTags.BACK).performClick()
