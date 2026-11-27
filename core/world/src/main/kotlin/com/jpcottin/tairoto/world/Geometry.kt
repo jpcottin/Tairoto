@@ -90,6 +90,16 @@ data class ScreenMm(val widthMm: Float, val heightMm: Float, val bezelMm: Float 
             return ScreenMm(widthPx / dx * MM_PER_INCH, heightPx / dy * MM_PER_INCH, bezelMm.coerceIn(0f, 20f))
         }
 
+        /**
+         * A television is watched from across the room, not laid on a table:
+         * its lagoon is drawn as if the screen were this wide, so the fish
+         * look as big from the sofa as they do on a phone in the hand.
+         */
+        const val TELEVISION_WIDTH_MM = 240f
+
+        /** The dpi that makes a screen [widthPx] wide (in landscape: its long side) [TELEVISION_WIDTH_MM]. */
+        fun televisionDpi(widthPx: Int, heightPx: Int): Float = maxOf(widthPx, heightPx) / TELEVISION_WIDTH_MM * MM_PER_INCH
+
         /** Pixels per millimetre at a given dpi (with the same fallback). */
         fun pxPerMm(dpi: Float): Float = (if (dpi in 72f..1200f) dpi else 420f) / MM_PER_INCH
     }

@@ -60,3 +60,14 @@ class GeometryTest {
         assertEquals(Vec2(1.5f, 2f), Vec2(3f, 4f) / 2f)
     }
 }
+
+class TelevisionTest {
+    @org.junit.Test fun `a television's lagoon is as wide as a big tablet, whatever its pixels`() {
+        for ((w, h) in listOf(1920 to 1080, 3840 to 2160, 1280 to 720)) {
+            val dpi = ScreenMm.televisionDpi(w, h)
+            val s = ScreenMm.fromPixels(w, h, dpi, dpi)
+            org.junit.Assert.assertEquals(ScreenMm.TELEVISION_WIDTH_MM, s.widthMm, 0.5f)
+            org.junit.Assert.assertEquals(ScreenMm.TELEVISION_WIDTH_MM * 9f / 16f, s.heightMm, 0.5f)
+        }
+    }
+}

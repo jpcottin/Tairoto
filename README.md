@@ -153,6 +153,40 @@ source is noted next to each species in `Species.kt`.
 The page photo above is made up for the tests (`PagePhotos.kt`); the other two
 pictures are the app on an emulator scanning it.
 
+## On a TV, with a remote or a keyboard
+
+<p align="center">
+  <img src="docs/media/tv.jpg" width="640" alt="The lagoon on an Android TV: a cursor ring on the water, fish gathering at food dropped there">
+</p>
+
+Tairoto is in the Android TV launcher. A TV is watched from across the room,
+so its lagoon is drawn as if the screen were 240 mm wide: the fish look as big
+from the sofa as on a phone in the hand. The water takes the remote's keys,
+and a keyboard or a game controller works the same on any device:
+
+| Key | Does |
+|---|---|
+| Arrows | move a cursor on the water; at the edge they pan the lagoon |
+| OK, Enter, A | tap the glass |
+| OK held | drop a pellet |
+| F, X, Play | sprinkle flakes |
+| + / −, channel up / down | zoom |
+| Up from the top edge | the buttons; Down from them comes back to the water |
+
+The buttons show a bright ring when they have the focus.
+
+## On a watch
+
+<p align="center">
+  <img src="docs/media/wear.jpg" width="227" alt="A round Wear OS screen: chromis and manini over a coral head, a hermit crab, flakes in the water">
+</p>
+
+The `wear` module is a standalone Wear OS app with the same engine and the
+same creatures: a small lagoon of its own (a school of ʻatoti, a few manini, a
+hermit crab round a coral head), drawn at the low quality tier. Tap the glass,
+drag a finger to sprinkle flakes, hold for a pellet, and turn the crown to
+zoom. It rests when the screen goes off, and keeps where everyone was.
+
 ## Build and test
 
 ```sh
@@ -236,6 +270,15 @@ Bluetooth LE (Android 12 and up: a BLE advertisement carries the number of an
 L2CAP channel, no pairing). A lagoon heard of both ways is listed once, on
 Wi-Fi. Android asks first for the local-network permission (Android 17) and
 the Bluetooth ones; without Bluetooth, sharing works over Wi-Fi alone.
+
+**Wi-Fi Direct** (Android 13 and up) works with no Wi-Fi network in common
+and no router. The host makes a Wi-Fi Direct group of its own and announces
+it, with its relay's port, through Wi-Fi Direct service discovery. A guest
+joins the group by its name and passphrase, so no invitation pops up on
+either phone, and reaches the same relay at the group owner's address. It is
+faster than Bluetooth, and a lagoon heard of several ways is listed once:
+Wi-Fi first, then Wi-Fi Direct, then Bluetooth. The emulators have no Wi-Fi
+Direct, so this way is tried on real phones only.
 
 The links are compressed (zlib, flushed at every frame: the messages are JSON
 and shrink about six times), which is what makes Bluetooth enough: in a

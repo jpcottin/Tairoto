@@ -1168,6 +1168,7 @@ class TankViewModel(
         val nearbyVia = when (launch.relay?.lowercase()) {
             "wifi" -> NearbyLagoon.Via.WIFI
             "bluetooth" -> NearbyLagoon.Via.BLUETOOTH
+            "wifidirect" -> NearbyLagoon.Via.WIFI_DIRECT
             else -> null
         }
         val relay = (if (nearbyVia == null) RelayAddress.parse(launch.relay) else null) ?: RelayAddress.EMULATOR_HOST

@@ -10,7 +10,23 @@
 
 #include "core/log.h"
 
+#if defined(__ANDROID__)
+#include <sys/system_properties.h>
+#endif
+
 namespace dt {
+
+namespace {
+/** True on the Android emulator, whatever GPU name it reports. */
+bool runningOnEmulator() {
+#if defined(__ANDROID__)
+    char v[PROP_VALUE_MAX] = {0};
+    if (__system_property_get("ro.boot.qemu", v) > 0 && v[0] == '1') return true;
+    if (__system_property_get("ro.hardware", v) > 0 && (std::string(v) == "ranchu" || std::string(v) == "goldfish")) return true;
+#endif
+    return false;
+}
+}  // namespace
 namespace {
 
 // SPIR-V compiled at build time by glslc (-mfmt=c) from shaders/.
@@ -161,7 +177,8 @@ bool Renderer::ensureDevice() {
     VkPhysicalDeviceProperties props;
     vkGetPhysicalDeviceProperties(phys_, &props);
     gpuName_ = props.deviceName;
-    inlineUpload_ = gpuName_.find("GFXStream") != std::string::npos;
+    // The emulator's virtualised GPU, under its own name or passing the host's through.
+    inlineUpload_ = gpuName_.find("GFXStream") != std::string::npos || runningOnEmulator();
     if (inlineUpload_) DT_LOGI("virtualised GPU: mesh uploads go through the command stream");
     DT_LOGI("GPU: %s (Vulkan %d.%d.%d)", props.deviceName, VK_VERSION_MAJOR(props.apiVersion),
             VK_VERSION_MINOR(props.apiVersion), VK_VERSION_PATCH(props.apiVersion));

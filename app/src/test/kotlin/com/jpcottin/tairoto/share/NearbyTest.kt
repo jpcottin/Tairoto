@@ -37,4 +37,36 @@ class NearbyTest {
         assertEquals(listOf(tabletWifi, phoneBt), NearbyLagoon.oneEach(listOf(tabletBt, phoneBt, tabletWifi)))
         assertEquals(listOf(phoneBt), NearbyLagoon.oneEach(listOf(phoneBt)))
     }
+
+    @Test fun `Wi-Fi Direct comes after the network and before Bluetooth`() {
+        val bt = NearbyLagoon("Tablet", "AA:BB:CC:DD:EE:01", 0x80, NearbyLagoon.Via.BLUETOOTH)
+        val direct = WifiDirectLagoons.Record("Tablet", 41234, "DIRECT-ab-Tairoto", "secretpass12").lagoon()
+        val wifi = NearbyLagoon("Tablet", "192.168.1.20", 41234)
+        assertEquals(listOf(direct), NearbyLagoon.oneEach(listOf(bt, direct)))
+        assertEquals(listOf(wifi), NearbyLagoon.oneEach(listOf(bt, direct, wifi)))
+    }
+
+    @Test fun `a Wi-Fi Direct lagoon says its group and port, and is read back`() {
+        val r = WifiDirectLagoons.Record("Moana's tablet", 41234, "DIRECT-ab-Tairoto", "k3yk3yk3yk3y")
+        assertEquals(r, WifiDirectLagoons.Record.parse(r.txt()))
+        val lagoon = r.lagoon()
+        assertEquals(NearbyLagoon.Via.WIFI_DIRECT, lagoon.via)
+        assertEquals(r, WifiDirectLagoons.Record.fromLagoon(lagoon))
+        // Not a lagoon: no port, a group that is not Wi-Fi Direct's, a passphrase too short.
+        assertNull(WifiDirectLagoons.Record.parse(r.txt() - "p"))
+        assertNull(WifiDirectLagoons.Record.parse(r.txt() + ("g" to "HomeWifi")))
+        assertNull(WifiDirectLagoons.Record.parse(r.txt() + ("k" to "short")))
+        assertNull(WifiDirectLagoons.Record.fromLagoon(NearbyLagoon("Tablet", "192.168.1.20", 41234)))
+        // A record without a name still joins.
+        assertEquals("A lagoon", WifiDirectLagoons.Record.parse(r.txt() - "n")!!.name)
+    }
+
+    @Test fun `a group's name and passphrase are what Wi-Fi Direct takes, and differ each time`() {
+        val random = java.util.Random(4)
+        val a = WifiDirectLagoons.Group.make(random)
+        val b = WifiDirectLagoons.Group.make(random)
+        assertTrue(a.networkName.matches(Regex("DIRECT-[A-Za-z0-9]{2}-Tairoto")))
+        assertTrue(a.passphrase.length in 8..63)
+        assertTrue(a != b)
+    }
 }

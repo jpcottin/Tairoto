@@ -1,5 +1,11 @@
 package com.jpcottin.tairoto.ui.tank
 
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.width
 import com.jpcottin.tairoto.ui.share.ArrangeOverlay
@@ -61,6 +67,7 @@ import com.jpcottin.tairoto.ui.theme.GlassBorder
 import com.jpcottin.tairoto.ui.theme.Ocean
 import com.jpcottin.tairoto.ui.theme.StatsText
 import com.jpcottin.tairoto.world.QualityTier
+import com.jpcottin.tairoto.world.ScreenMm
 import com.jpcottin.tairoto.world.Vec2
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -68,6 +75,7 @@ import java.util.Locale
 object TankTags {
     const val SURFACE = "tank_surface"
     const val GESTURES = "tank_gestures"
+    const val CURSOR = "tank_cursor"
     const val TITLE = "tank_title"
     const val COUNT = "tank_count"
     const val ADD = "tank_add"
@@ -117,15 +125,35 @@ fun TankScreen(
             override fun remove() = vm.removeSelected()
         }
     }
-    val metrics = LocalContext.current.resources.displayMetrics
+    val context = LocalContext.current
+    val metrics = context.resources.displayMetrics
+    // A television is seen from across the room: its lagoon is drawn larger than life (ScreenMm.TELEVISION_WIDTH_MM).
+    val television = remember(context) { context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK) }
+    fun dpi(w: Int, h: Int, d: Float) = if (television) ScreenMm.televisionDpi(w, h) else d
+    val remote = remember { RemoteState() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val remoteActions = remember {
+        object : RemoteActions {
+            override fun tap(at: Vec2) = vm.tap(at)
+            override fun pellet(at: Vec2) = vm.dropPellet(at)
+            override fun sprinkle(at: Vec2) {
+                vm.sprinkle(at, true)
+                vm.endSprinkle()
+            }
+            override fun pan(delta: Vec2) = vm.pan(delta)
+            override fun zoom(at: Vec2, factor: Float) = vm.zoom(at, factor)
+        }
+    }
+    // On a TV the water has the remote's keys from the start.
+    androidx.compose.runtime.LaunchedEffect(television) { if (television) runCatching { remote.focus.requestFocus() } }
     val edgeBandPx = with(androidx.compose.ui.platform.LocalDensity.current) { 48.dp.toPx() }
     val edgeTallPx = with(androidx.compose.ui.platform.LocalDensity.current) { 200.dp.toPx() }
 
     Box(Modifier.fillMaxSize().background(Ocean.Deep)) {
         AndroidExternalSurface(Modifier.fillMaxSize().testTag(TankTags.SURFACE)) {
             onSurface { surface, width, height ->
-                vm.onSurface(surface, width, height, metrics.xdpi, metrics.ydpi)
-                surface.onChanged { w, h -> vm.onSurfaceSize(w, h, metrics.xdpi, metrics.ydpi) }
+                vm.onSurface(surface, width, height, dpi(width, height, metrics.xdpi), dpi(width, height, metrics.ydpi))
+                surface.onChanged { w, h -> vm.onSurfaceSize(w, h, dpi(w, h, metrics.xdpi), dpi(w, h, metrics.ydpi)) }
                 surface.onDestroyed { vm.onSurfaceGone() }
             }
         }
@@ -142,8 +170,10 @@ fun TankScreen(
                     }
                 }
                 .then(if (state.share.arranging) Modifier.swipeEdgesForTheApp(edgeBandPx, edgeTallPx) else Modifier)
-                .tankGestures(handler),
+                .tankGestures(handler)
+                .remoteControl(remote, remoteActions, focusManager),
         )
+        RemoteCursorRing(remote)
         SelectionRing(state.edit.selection)
         NetSweepEffect(state.edit.sweep)
         if (state.share.arranging && state.share.phase == SharePhase.SHARED) {
@@ -157,8 +187,19 @@ fun TankScreen(
             // Shared and left alone, the buttons fade: the picture runs on across the screens without them.
             val hud by androidx.compose.animation.core.animateFloatAsState(if (state.hudHidden) 0f else 1f, androidx.compose.animation.core.tween(700), label = "hud")
             if (hud > 0f) TankHud(
-                modifier = Modifier.graphicsLayer { alpha = hud },
+                modifier = Modifier
+                    .graphicsLayer { alpha = hud }
+                    // Down past the last button goes back to the water (it fills the screen, so no button lies "below").
+                    .onKeyEvent { e ->
+                        if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown && !focusManager.moveFocus(FocusDirection.Down)) {
+                            runCatching { remote.focus.requestFocus() }
+                            true
+                        } else {
+                            false
+                        }
+                    },
                 state = state,
+                keysHint = television || remote.at != null,
                 onAdd = onOpenSpecies,
                 onSettings = onOpenSettings,
                 onArrange = { vm.setEditing(true) },
@@ -194,6 +235,8 @@ fun TankHud(
     onAdd: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The lagoon is driven by keys (a TV, or the water has had them): the hint is about the keys. */
+    keysHint: Boolean = false,
     onArrange: () -> Unit = {},
     onShare: () -> Unit = {},
     onArrangeScreens: () -> Unit = {},
@@ -263,8 +306,10 @@ fun TankHud(
                 shape = RoundedCornerShape(50),
                 modifier = Modifier.testTag(TankTags.HINT),
             ) {
+                // With keys (a TV remote, a keyboard), the hint is about the keys.
                 Text(
-                    "Drag to sprinkle food  ·  Hold for a pellet  ·  Pinch to explore",
+                    if (keysHint) "Arrows move  ·  OK taps the glass  ·  Hold OK for a pellet  ·  F feeds"
+                    else "Drag to sprinkle food  ·  Hold for a pellet  ·  Pinch to explore",
                     style = MaterialTheme.typography.labelLarge,
                     color = Ocean.Foam,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
@@ -320,10 +365,12 @@ private fun TitlePill(total: Int) {
 
 @Composable
 private fun GlassIconButton(onClick: () -> Unit, label: String, tag: String, icon: @Composable () -> Unit) {
+    val interaction = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Surface(
         onClick = onClick,
         color = Ocean.Glass,
-        border = GlassBorder,
+        border = com.jpcottin.tairoto.ui.theme.glassBorder(interaction),
+        interactionSource = interaction,
         shape = CircleShape,
         modifier = Modifier.size(48.dp).testTag(tag).semantics { contentDescription = label },
     ) {

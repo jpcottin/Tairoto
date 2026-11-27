@@ -28,14 +28,16 @@ data class RelayAddress(val host: String, val port: Int) {
 
 /**
  * A shared lagoon found nearby: on the local network ([host] an IP address,
- * [port] a TCP port) or over Bluetooth ([host] the device's address, [port]
- * its L2CAP channel).
+ * [port] a TCP port), over Wi-Fi Direct ([host] the group to join, [port] the
+ * relay's) or over Bluetooth ([host] the device's address, [port] its L2CAP
+ * channel).
  */
 data class NearbyLagoon(val name: String, val host: String, val port: Int, val via: Via = Via.WIFI) {
-    enum class Via { WIFI, BLUETOOTH }
+    /** The ways, fastest first. */
+    enum class Via { WIFI, WIFI_DIRECT, BLUETOOTH }
 
     companion object {
-        /** One entry a lagoon, the fastest way it was heard of (Wi-Fi before Bluetooth), in the order given. */
+        /** One entry a lagoon, the fastest way it was heard of (Wi-Fi, then Wi-Fi Direct, then Bluetooth), in the order given. */
         fun oneEach(lagoons: List<NearbyLagoon>): List<NearbyLagoon> =
             lagoons.groupBy { it.name }.values.map { ways -> ways.minBy { it.via.ordinal } }
     }

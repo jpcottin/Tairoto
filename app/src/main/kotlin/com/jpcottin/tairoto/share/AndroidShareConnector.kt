@@ -33,14 +33,16 @@ class AndroidShareConnector(context: Context) : ShareConnector {
     private val nsd = app.getSystemService(NsdManager::class.java)
     private val wifi = app.getSystemService(WifiManager::class.java)
     private val bluetooth = BluetoothLagoons(app)
+    private val wifiDirect = WifiDirectLagoons(app)
     private val found = MutableStateFlow<List<NearbyLagoon>>(emptyList())
     override val nearby: StateFlow<List<NearbyLagoon>> = found.asStateFlow()
     private val onWifi = MutableStateFlow<List<NearbyLagoon>>(emptyList())
     private val onBluetooth = MutableStateFlow<List<NearbyLagoon>>(emptyList())
+    private val onWifiDirect = MutableStateFlow<List<NearbyLagoon>>(emptyList())
 
-    /** Both lists in one, Wi-Fi first (a lagoon heard of both ways is in both). */
+    /** Every list in one, the fastest way first (a lagoon heard of several ways is in each). */
     private fun publish() {
-        found.value = onWifi.value.sortedBy { it.name } + onBluetooth.value.sortedBy { it.name }
+        found.value = onWifi.value.sortedBy { it.name } + onWifiDirect.value.sortedBy { it.name } + onBluetooth.value.sortedBy { it.name }
     }
 
     private var discovery: NsdManager.DiscoveryListener? = null
@@ -57,9 +59,11 @@ class AndroidShareConnector(context: Context) : ShareConnector {
                 val link = RelayLink.connect("127.0.0.1", server.port, ShareRoute.DEFAULT_SESSION, name, asHost = true)
                 val registration = advertise(name, server.port)
                 val overBluetooth = bluetooth.host(server, name)
+                val overWifiDirect = runCatching { wifiDirect.host(server, name) }.getOrNull()
                 relayConnection(link) {
                     registration?.let { runCatching { nsd?.unregisterService(it) } }
                     runCatching { overBluetooth?.close() }
+                    runCatching { overWifiDirect?.close() }
                     server.close()
                 }
             } catch (e: Exception) {
@@ -77,6 +81,18 @@ class AndroidShareConnector(context: Context) : ShareConnector {
             NearbyLagoon.Via.WIFI -> relayConnection(
                 RelayLink.connect(target.lagoon.host, target.lagoon.port, ShareRoute.DEFAULT_SESSION, name, asHost = false),
             )
+            NearbyLagoon.Via.WIFI_DIRECT -> {
+                val (address, group) = wifiDirect.join(target.lagoon)
+                try {
+                    relayConnection(
+                        RelayLink.connect(address.host, address.port, ShareRoute.DEFAULT_SESSION, name, asHost = false),
+                        onClose = { runCatching { group.close() } },
+                    )
+                } catch (e: Exception) {
+                    runCatching { group.close() }
+                    throw e
+                }
+            }
             NearbyLagoon.Via.BLUETOOTH -> relayConnection(
                 RelayLink.over(
                     withContext(Dispatchers.IO) { bluetooth.connect(target.lagoon) },
@@ -121,6 +137,10 @@ class AndroidShareConnector(context: Context) : ShareConnector {
     override fun discover() {
         bluetooth.scan { lagoons ->
             onBluetooth.value = lagoons
+            publish()
+        }
+        wifiDirect.scan { lagoons ->
+            onWifiDirect.value = lagoons
             publish()
         }
         val manager = nsd ?: return
@@ -172,6 +192,8 @@ class AndroidShareConnector(context: Context) : ShareConnector {
 
     override fun stopDiscovery() {
         bluetooth.stopScan()
+        wifiDirect.stopScan()
+        onWifiDirect.value = emptyList()
         discovery?.let { runCatching { nsd?.stopServiceDiscovery(it) } }
         discovery = null
         multicast?.release()
