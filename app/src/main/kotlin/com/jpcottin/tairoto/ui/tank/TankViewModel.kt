@@ -158,6 +158,8 @@ data class ShareUi(
     val localNetwork: Boolean = true,
     /** Someone is arranging the screens: each shows who it is, and a swipe across two lays them side by side. */
     val arranging: Boolean = false,
+    /** A screen just came in: a moment's word on how to line them up. */
+    val arrangeHint: Boolean = false,
 ) {
     val hostName: String? get() = devices.firstOrNull { it.host }?.name
 }
@@ -750,9 +752,15 @@ class TankViewModel(
         attach(ns, persist = options.persist && r == ShareRole.HOST) { sh.run() }
         val job = sessionJob!!
         viewModelScope.launch(job) {
+            var screens = 0
             sh.layout.collect { layout ->
                 applySharedCamera(layout)
                 setShare { it.copy(devices = devicesOnTable(layout, sh.self), tank = layout.tank, arranging = layout.arranging) }
+                // Another screen came in: say how to line them up, for a moment.
+                val n = layout.placements.size
+                if (n > screens && n > 1 && !layout.arranging) offerToArrange()
+                if (layout.arranging) setShare { it.copy(arrangeHint = false) }
+                screens = n
             }
         }
         viewModelScope.launch(job) {
@@ -809,6 +817,22 @@ class TankViewModel(
     // ------------------------------------------------------------ the table
 
     private fun arrangingTable() = shared != null && state.value.share.arranging
+
+    private var hintJob: Job? = null
+
+    private fun offerToArrange() {
+        setShare { it.copy(arrangeHint = true) }
+        hintJob?.cancel()
+        hintJob = viewModelScope.launch {
+            delay(ARRANGE_HINT_MS)
+            setShare { it.copy(arrangeHint = false) }
+        }
+    }
+
+    fun dismissArrangeHint() {
+        hintJob?.cancel()
+        setShare { it.copy(arrangeHint = false) }
+    }
 
     /** Lays [device]'s screen on the table at [center] (mm), turned [turns]: from the map, on any device. */
     fun arrangeScreen(device: DeviceId, center: Vec2, turns: Int) {
@@ -1193,6 +1217,7 @@ class TankViewModel(
 
     companion object {
         const val HINT_MS = 7_000L
+        const val ARRANGE_HINT_MS = 10_000L
         const val STATS_PERIOD_MS = 500L
         const val GOVERNOR_PERIOD_MS = 2_000L
         /** A window this much larger than any before (unfolding) widens the lagoon. */

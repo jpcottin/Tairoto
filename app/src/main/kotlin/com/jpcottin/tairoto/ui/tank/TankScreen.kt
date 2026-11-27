@@ -1,5 +1,6 @@
 package com.jpcottin.tairoto.ui.tank
 
+import androidx.compose.foundation.layout.width
 import com.jpcottin.tairoto.ui.share.ArrangeOverlay
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.ui.geometry.Rect
@@ -74,6 +75,7 @@ object TankTags {
     const val STATS = "tank_stats"
     const val ZOOM = "tank_zoom"
     const val UNSUPPORTED = "tank_unsupported"
+    const val ARRANGE_HINT = "tank_arrange_hint"
 }
 
 @Composable
@@ -156,6 +158,10 @@ fun TankScreen(
                 onSettings = onOpenSettings,
                 onArrange = { vm.setEditing(true) },
                 onShare = onOpenShare,
+                onArrangeScreens = {
+                    vm.dismissArrangeHint()
+                    vm.setArranging(true)
+                },
             )
         }
     }
@@ -185,6 +191,7 @@ fun TankHud(
     modifier: Modifier = Modifier,
     onArrange: () -> Unit = {},
     onShare: () -> Unit = {},
+    onArrangeScreens: () -> Unit = {},
 ) {
     Box(modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(14.dp)) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -213,6 +220,32 @@ fun TankHud(
             }
         }
         ZoomChip(state.zoom, Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp))
+        AnimatedVisibility(
+            visible = state.share.arrangeHint,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            Surface(
+                onClick = onArrangeScreens,
+                color = Ocean.GlassStrong,
+                border = GlassBorder,
+                shape = RoundedCornerShape(50),
+                modifier = Modifier.testTag(TankTags.ARRANGE_HINT),
+            ) {
+                Row(Modifier.padding(start = 18.dp, end = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${state.share.devices.size} screens: line them up?",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Ocean.Foam,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Surface(color = Ocean.SeaGlass, shape = RoundedCornerShape(50)) {
+                        Text("Arrange", style = MaterialTheme.typography.labelLarge, color = Ocean.Deep, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+                    }
+                }
+            }
+        }
         AnimatedVisibility(
             visible = state.hintVisible && state.ready,
             enter = fadeIn() + slideInVertically { it / 2 },

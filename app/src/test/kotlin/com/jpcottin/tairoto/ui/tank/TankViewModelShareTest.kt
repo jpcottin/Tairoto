@@ -425,4 +425,29 @@ class TankViewModelShareTest {
         assertEquals(hostOwn, host.vm.ui.value.total)
         assertTrue(host.engine.creatures.values.none { it.home != null })
     }
+
+    @Test fun `a second screen coming in offers, for a moment, to line them up`() = shareTest {
+        val connector = FakeShareConnector(network())
+        val host = device(connector, "Tablet", 1)
+        host.vm.shareLagoon(ShareRoute.Nearby)
+        advanceTimeBy(500)
+        // Alone, nothing to line up.
+        assertTrue(!host.vm.ui.value.share.arrangeHint)
+        val guest = device(connector, "Phone", 2)
+        guest.vm.joinLagoon(JoinTarget.Relay(RelayAddress.EMULATOR_HOST))
+        advanceTimeBy(1_000)
+        assertTrue(host.vm.ui.value.share.arrangeHint && guest.vm.ui.value.share.arrangeHint)
+        advanceTimeBy(TankViewModel.ARRANGE_HINT_MS)
+        assertTrue(!host.vm.ui.value.share.arrangeHint && !guest.vm.ui.value.share.arrangeHint)
+    }
+
+    @Test fun `taking up the offer starts arranging on every screen, and the offer goes`() = shareTest {
+        val (host, guest) = pair(FakeShareConnector(network()))
+        assertTrue(guest.vm.ui.value.share.arrangeHint)
+        guest.vm.dismissArrangeHint()
+        guest.vm.setArranging(true)
+        advanceTimeBy(300)
+        assertTrue(host.vm.ui.value.share.arranging && guest.vm.ui.value.share.arranging)
+        assertTrue(!host.vm.ui.value.share.arrangeHint && !guest.vm.ui.value.share.arrangeHint)
+    }
 }
