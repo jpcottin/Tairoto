@@ -271,6 +271,15 @@ L2CAP channel, no pairing). A lagoon heard of both ways is listed once, on
 Wi-Fi. Android asks first for the local-network permission (Android 17) and
 the Bluetooth ones; without Bluetooth, sharing works over Wi-Fi alone.
 
+**Wi-Fi Direct** (Android 13 and up) works with no Wi-Fi network in common
+and no router. The host makes a Wi-Fi Direct group of its own and announces
+it, with its relay's port, through Wi-Fi Direct service discovery. A guest
+joins the group by its name and passphrase, so no invitation pops up on
+either phone, and reaches the same relay at the group owner's address. It is
+faster than Bluetooth, and a lagoon heard of several ways is listed once:
+Wi-Fi first, then Wi-Fi Direct, then Bluetooth. The emulators have no Wi-Fi
+Direct, so this way is tried on real phones only.
+
 The links are compressed (zlib, flushed at every frame: the messages are JSON
 and shrink about six times), which is what makes Bluetooth enough: in a
 feeding frenzy the busiest screen sends some 30–40 kB/s. A relay tells a
