@@ -27,6 +27,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Accept the Android SDK licences
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+      - name: Put adb on the PATH
+        run: echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
       - name: Kotlin unit tests
         run: ./gradlew --stacktrace :core:world:test :core:net:test :engine:testDebugUnitTest :app:testDebugUnitTest
       - name: Screenshot tests
@@ -64,6 +66,8 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Accept the Android SDK licences
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+      - name: Put adb on the PATH
+        run: echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
       - name: Build the app and its tests
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Start a headless emulator drawing with lavapipe
@@ -100,6 +104,8 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Accept the Android SDK licences
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+      - name: Put adb on the PATH
+        run: echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
       - name: Build the app and the relay
         run: ./gradlew :app:assembleDebug :relay:installDist
       - name: Start two headless emulators drawing with lavapipe

@@ -14,6 +14,8 @@ IMAGE="${IMAGE:-system-images;android-37.0;default;x86_64}"
 SERIAL="emulator-$PORT"
 sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
 bin="$sdk/cmdline-tools/latest/bin"
+# The SDK's own adb: a CI machine may have none on its PATH.
+export PATH="$sdk/platform-tools:$PATH"
 
 avd_dir="$HOME/.android/avd/$AVD.avd"
 if [ ! -f "$avd_dir/config.ini" ]; then
