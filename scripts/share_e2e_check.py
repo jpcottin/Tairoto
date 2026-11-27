@@ -89,12 +89,17 @@ def main(out_dir, serials):
                 intervals[cid].append((open_at.pop(cid), e["t"], slot[s]))
         for cid, st in open_at.items():
             intervals[cid].append((st, float("inf"), slot[s]))
-    overlaps, gaps, lost = [], [], []
+    overlaps, gaps, lost, pauses = [], [], [], []
     for cid in sorted(ids):
         ivs = sorted(intervals.get(cid, []))
         for a, b in zip(ivs, ivs[1:]):
             if b[0] < a[1] - TOLERANCE_S:
                 overlaps.append((cid, a, b))
+            elif a[2] == b[2]:
+                # The same device stopped and started again: out of touch with the host for a
+                # moment (fenced), it simulates nothing until the host answers. Safe, not a hand-over.
+                if b[0] - a[1] > MAX_GAP_S:
+                    pauses.append((cid, a, b))
             elif b[0] - a[1] > MAX_GAP_S:
                 gaps.append((cid, a, b))
         last = ivs[-1] if ivs else None
@@ -108,6 +113,9 @@ def main(out_dir, serials):
           (f" ({len(overlaps)}, first {overlaps[0]})" if overlaps else ""))
     check(not gaps, f"no creature went unsimulated longer than {MAX_GAP_S}s while changing hands" +
           (f" ({len(gaps)}, first {gaps[0]})" if gaps else ""))
+    if pauses:
+        longest = max(b[0] - a[1] for _, a, b in pauses)
+        print(f"        {len(pauses)} pauses of a device out of touch with the host (longest {longest:.1f}s): safe, not hand-overs")
     check(not lost, "every creature is simulated by one device at the end" +
           (f" ({len(lost)} not: {lost[:3]})" if lost else ""))
 
