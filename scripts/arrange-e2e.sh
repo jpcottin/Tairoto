@@ -65,6 +65,8 @@ sleep 4
 for s in "${serials[@]}"; do
     adbs "$s" exec-out screencap -p > "$out/$s.png" || true
     adbs "$s" exec-out run-as "$pkg" cat files/net-log.jsonl > "$out/$s.log"
+    # If the app stopped answering, Android kept what its main thread was doing.
+    adbs "$s" shell dumpsys dropbox --print data_app_anr > "$out/$s-anr.txt" 2>/dev/null || true
 done
 echo "Logs and screenshots in $out"
 python3 scripts/arrange_e2e_check.py "$out" "$host" "$guest"
