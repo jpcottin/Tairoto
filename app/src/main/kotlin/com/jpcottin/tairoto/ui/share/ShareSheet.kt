@@ -120,6 +120,8 @@ object ShareTags {
     const val LOOKING = "share_looking"
     const val ALLOW = "share_allow"
     const val TURN = "share_turn"
+    const val REJOINING = "share_rejoining"
+    const val STOP_REJOINING = "share_stop_rejoining"
     const val ARRANGE = "share_arrange"
     fun screen(slot: Int) = "share_map_screen_$slot"
     fun nearby(name: String, via: NearbyLagoon.Via = NearbyLagoon.Via.WIFI) =
@@ -161,7 +163,11 @@ fun ShareSheet(ui: ShareUi, actions: ShareActions, onClose: (() -> Unit)?) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Header(ui)
-            ui.message?.let { Message(it, actions::dismissMessage) }
+            if (ui.rejoining) {
+                Rejoining(ui.message, actions::stop)
+            } else {
+                ui.message?.let { Message(it, actions::dismissMessage) }
+            }
             when (ui.phase) {
                 SharePhase.OFF -> Start(ui, actions)
                 SharePhase.CONNECTING -> Connecting(actions::stop)
@@ -318,6 +324,24 @@ private fun ThroughAComputer(relay: String, actions: ShareActions) {
                     ) { Text("Join") }
                 }
             }
+        }
+    }
+}
+
+/** The link to the host broke: trying to rejoin, with a way to stop trying. */
+@Composable
+private fun Rejoining(message: String?, onStop: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth().testTag(ShareTags.REJOINING)) {
+        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            Spacer(Modifier.size(12.dp))
+            Text(
+                message ?: "Trying to rejoin",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onStop, modifier = Modifier.testTag(ShareTags.STOP_REJOINING)) { Text("Stop trying") }
         }
     }
 }
@@ -565,21 +589,24 @@ fun SharePill(ui: ShareUi, onClick: () -> Unit, modifier: Modifier = Modifier) {
         border = com.jpcottin.tairoto.ui.theme.GlassBorder,
         shape = RoundedCornerShape(50),
         modifier = modifier.heightIn(min = 40.dp).widthIn(min = 48.dp).testTag(SharePillTag).semantics {
-            contentDescription = when (ui.phase) {
+            contentDescription = when {
+                ui.rejoining && ui.phase != SharePhase.SHARED -> "Rejoining the lagoon"
+                else -> when (ui.phase) {
                 SharePhase.SHARED -> "Shared on ${screens(ui.devices.size)}"
                 SharePhase.CONNECTING -> "Connecting"
                 SharePhase.OFF -> "Share the lagoon"
+                }
             }
         },
     ) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (ui.phase == SharePhase.CONNECTING) {
+            if (ui.phase == SharePhase.CONNECTING || (ui.rejoining && ui.phase != SharePhase.SHARED)) {
                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Ocean.SeaGlass)
             } else {
                 Icon(Icons.Outlined.Devices, null, Modifier.size(18.dp), tint = if (ui.phase == SharePhase.SHARED) Ocean.SeaGlass else Ocean.Foam)
             }
             Text(
-                when (ui.phase) {
+                if (ui.rejoining && ui.phase != SharePhase.SHARED) "Rejoining" else when (ui.phase) {
                     SharePhase.SHARED -> screens(ui.devices.size) + if (!ui.connected) " · waiting" else ""
                     SharePhase.CONNECTING -> "Connecting"
                     SharePhase.OFF -> "Share"

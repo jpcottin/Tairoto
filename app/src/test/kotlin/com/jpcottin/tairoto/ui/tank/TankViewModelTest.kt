@@ -1,5 +1,6 @@
 package com.jpcottin.tairoto.ui.tank
 
+import kotlinx.coroutines.flow.first
 import com.jpcottin.tairoto.LaunchOptions
 import com.jpcottin.tairoto.data.AppSettings
 import com.jpcottin.tairoto.data.InMemorySettings
@@ -338,5 +339,45 @@ class TankViewModelTest {
         runCurrent()
         assertEquals(open, vm.ui.value.tankSize)
         assertEquals(creatures, engine.creatures.size)
+    }
+
+    // ------------------------------------------------------------ sound
+
+    @Test fun `the lagoon is heard at the volume set, and silent when the sound is off`() = runTest(dispatcher) {
+        val store = InMemorySettings(com.jpcottin.tairoto.data.AppSettings(soundVolume = 0.4f))
+        val vm = TankViewModel(engine, store, LaunchOptions(seed = 7, hints = false), signals, dispatcher)
+        runCurrent()
+        assertEquals(0.4f, engine.soundVolume!!, 1e-6f)
+        vm.setSound(false)
+        runCurrent()
+        assertEquals(0f, engine.soundVolume!!, 1e-6f)
+        assertEquals(false, vm.ui.value.sound)
+        vm.setSound(true)
+        vm.setSoundVolume(0.9f)
+        runCurrent()
+        assertEquals(0.9f, engine.soundVolume!!, 1e-6f)
+        assertEquals(0.9f, vm.ui.value.soundVolume, 1e-6f)
+    }
+
+    @Test fun `dragging the volume is heard at once and kept only when let go`() = runTest(dispatcher) {
+        val store = InMemorySettings()
+        val vm = TankViewModel(engine, store, LaunchOptions(seed = 7, hints = false), signals, dispatcher)
+        runCurrent()
+        vm.previewSoundVolume(0.2f)
+        assertEquals(0.2f, engine.soundVolume!!, 1e-6f)
+        assertEquals(com.jpcottin.tairoto.data.AppSettings.DEFAULT_SOUND_VOLUME, store.settings.first().soundVolume, 1e-6f)
+        vm.setSoundVolume(0.2f)
+        runCurrent()
+        assertEquals(0.2f, store.settings.first().soundVolume, 1e-6f)
+    }
+
+    @Test fun `a test run is silent unless it asks, whatever the settings`() = runTest(dispatcher) {
+        TankViewModel(engine, InMemorySettings(), LaunchOptions(ci = true, sound = 0f), signals, dispatcher)
+        runCurrent()
+        assertEquals(0f, engine.soundVolume!!, 1e-6f)
+        val loud = FakeEngine()
+        TankViewModel(loud, InMemorySettings(com.jpcottin.tairoto.data.AppSettings(sound = false)), LaunchOptions(sound = 0.5f), signals, dispatcher)
+        runCurrent()
+        assertEquals(0.5f, loud.soundVolume!!, 1e-6f)
     }
 }

@@ -33,6 +33,8 @@ data class LaunchOptions(
     val trace: Boolean = false,
     /** Hosting, start arranging the screens at once (tests swipe across emulators). */
     val arrange: Boolean = false,
+    /** The sound's volume whatever the settings say (0 silent); a CI run is silent unless asked. */
+    val sound: Float? = null,
     /** At most this many frames a second (tests on machines drawing in software). */
     val maxFps: Int? = null,
 ) {
@@ -60,6 +62,7 @@ data class LaunchOptions(
         const val SESSION = "tairoto.session"
         const val TRACE = "tairoto.trace"
         const val ARRANGE = "tairoto.arrange"
+        const val SOUND = "tairoto.sound"
         const val FPS = "tairoto.fps"
 
         /** Reads `kind:count,kind:count` of decorations; unknown or malformed entries are skipped. */
@@ -104,6 +107,7 @@ data class LaunchOptions(
                 trace = intent.getBooleanExtra(TRACE, false),
                 arrange = intent.getBooleanExtra(ARRANGE, false),
                 maxFps = if (intent.hasExtra(FPS)) intent.getIntExtra(FPS, 0).takeIf { it in 1..240 } else null,
+                sound = if (intent.hasExtra(SOUND)) intent.getFloatExtra(SOUND, 0f).coerceIn(0f, 1f) else if (ci) 0f else null,
             )
         }
     }

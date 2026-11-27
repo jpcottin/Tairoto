@@ -12,6 +12,7 @@
 #include <thread>
 #include <vector>
 
+#include "audio/audio_out.h"
 #include "render/camera.h"
 #include "render/mesh.h"
 #include "render/quality.h"
@@ -67,6 +68,8 @@ struct EngineStats {
     float eatenMg = 0;
     float hunger = 0;       // mean over the creatures
     std::string gpu;
+    int audio = 0;          // 0 off, 1 playing, 2 the device has no way out
+    int audioRate = 0;      // Hz
 };
 
 /** One creature's place, for tests and for saving. */
@@ -105,6 +108,8 @@ public:
     /** Drops food at a point of the surface (kind: 0 flake, 1 pellet). */
     void dropFood(Vec2 world, int kind, int count);
     void setTilt(Vec2 tilt);
+    /** How loud the lagoon is, 0..1; 0 is silence, and no audio stream at all. */
+    void setSound(float volume);
     /** At most this many frames a second (0: as many as the display shows). Saves battery, and CPU. */
     void setMaxFps(int fps);
 
@@ -121,6 +126,9 @@ private:
     void run();
     void runOnThread(std::function<void()> fn);  // posts and waits
     void frame();
+    /** Plays while there is a window, the lagoon runs and the sound is up; otherwise stops. */
+    void updateAudio();
+    void playSounds();
 
     std::thread thread_;
     std::mutex mutex_;
@@ -142,6 +150,8 @@ private:
     Ripple ripples_[8];
     int nextRipple_ = 0;
     Vec2 tilt_;
+    audio::AudioOut audio_;
+    float soundVolume_ = 0;
     int64_t minFrameNs_ = 0;
     int64_t nextFrameNs_ = 0;
     int64_t lastFrameNs_ = 0;

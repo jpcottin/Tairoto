@@ -227,9 +227,12 @@ class TankViewModelShareTest {
         advanceTimeBy(2_000)
         assertEquals(SharePhase.OFF, host.vm.ui.value.share.phase)
         assertNull(host.vm.ui.value.share.message)
-        assertEquals(SharePhase.OFF, guest.vm.ui.value.share.phase)
-        assertEquals("Tablet stopped sharing", guest.vm.ui.value.share.message)
+        // The guest cannot tell a host that stopped from a broken link: home, it tries to rejoin a while.
         assertEquals(own, guest.vm.ui.value.total)
+        assertEquals("Lost touch with Tablet: trying to rejoin", guest.vm.ui.value.share.message)
+        advanceTimeBy((TankViewModel.REJOIN_S * 1000).toLong())
+        assertEquals(SharePhase.OFF, guest.vm.ui.value.share.phase)
+        assertEquals("Could not rejoin Tablet", guest.vm.ui.value.share.message)
         // The host keeps everything, simulated by itself again.
         assertTrue(host.engine.ghosts.isEmpty())
     }
@@ -424,5 +427,121 @@ class TankViewModelShareTest {
         advanceTimeBy(2_000)
         assertEquals(hostOwn, host.vm.ui.value.total)
         assertTrue(host.engine.creatures.values.none { it.home != null })
+    }
+
+    @Test fun `a second screen coming in offers, for a moment, to line them up`() = shareTest {
+        val connector = FakeShareConnector(network())
+        val host = device(connector, "Tablet", 1)
+        host.vm.shareLagoon(ShareRoute.Nearby)
+        advanceTimeBy(500)
+        // Alone, nothing to line up.
+        assertTrue(!host.vm.ui.value.share.arrangeHint)
+        val guest = device(connector, "Phone", 2)
+        guest.vm.joinLagoon(JoinTarget.Relay(RelayAddress.EMULATOR_HOST))
+        advanceTimeBy(1_000)
+        assertTrue(host.vm.ui.value.share.arrangeHint && guest.vm.ui.value.share.arrangeHint)
+        advanceTimeBy(TankViewModel.ARRANGE_HINT_MS)
+        assertTrue(!host.vm.ui.value.share.arrangeHint && !guest.vm.ui.value.share.arrangeHint)
+    }
+
+    @Test fun `taking up the offer starts arranging on every screen, and the offer goes`() = shareTest {
+        val (host, guest) = pair(FakeShareConnector(network()))
+        assertTrue(guest.vm.ui.value.share.arrangeHint)
+        guest.vm.dismissArrangeHint()
+        guest.vm.setArranging(true)
+        advanceTimeBy(300)
+        assertTrue(host.vm.ui.value.share.arranging && guest.vm.ui.value.share.arranging)
+        assertTrue(!host.vm.ui.value.share.arrangeHint && !guest.vm.ui.value.share.arrangeHint)
+    }
+
+    @Test fun `a shared screen left alone fades its buttons, and a touch brings them back`() = shareTest {
+        val (host, _) = pair(FakeShareConnector(network()))
+        host.vm.dismissArrangeHint()
+        host.vm.touched()
+        advanceTimeBy(3_000)
+        assertTrue(!host.vm.ui.value.hudHidden)
+        advanceTimeBy(5_000)
+        assertTrue(host.vm.ui.value.hudHidden)
+        host.vm.touched()
+        assertTrue(!host.vm.ui.value.hudHidden)
+        // Back on its own, the buttons stay.
+        advanceTimeBy(8_000)
+        assertTrue(host.vm.ui.value.hudHidden)
+        host.vm.stopSharing()
+        advanceTimeBy(2_000)
+        assertTrue(!host.vm.ui.value.hudHidden)
+        advanceTimeBy(10_000)
+        assertTrue(!host.vm.ui.value.hudHidden)
+    }
+
+    @Test fun `while arranging, or offering to, the buttons stay`() = shareTest {
+        val (host, _) = pair(FakeShareConnector(network()))
+        advanceTimeBy(8_000) // the offer is up for ten seconds
+        assertTrue(!host.vm.ui.value.hudHidden)
+        host.vm.setArranging(true)
+        advanceTimeBy(20_000)
+        assertTrue(!host.vm.ui.value.hudHidden)
+    }
+
+    @Test fun `a host launched before its relay is up keeps trying, then shares`() = shareTest {
+        val connector = FakeShareConnector(network())
+        connector.failure = IOException("connection refused")
+        val host = device(connector, "Tablet", 1, LaunchOptions(seed = 7, hints = false, share = ShareLaunch(true, "10.0.2.2:7171", "ci")))
+        advanceTimeBy(1_500)
+        assertEquals(SharePhase.OFF, host.vm.ui.value.share.phase)
+        connector.failure = null
+        advanceTimeBy(3_000)
+        assertEquals(SharePhase.SHARED, host.vm.ui.value.share.phase)
+    }
+
+    // ------------------------------------------------------------ rejoining
+
+    @Test fun `a guest whose link broke goes home, tries to rejoin, and is back in once the link heals`() = shareTest {
+        val net = network()
+        val connector = FakeShareConnector(net)
+        val (host, guest) = pair(connector)
+        val h = host.vm.ui.value.share.devices.single { it.host }.id
+        val g = guest.vm.ui.value.share.devices.single { it.self }.id
+        // The link breaks, and for a while nothing gets through.
+        net.setCut(h, g, isCut = true)
+        connector.failure = IOException("out of reach")
+        advanceTimeBy(10_000)
+        // Out of touch past the guest's patience: home with its own lagoon, and trying.
+        val trying = guest.vm.ui.value.share
+        assertTrue("$trying", trying.rejoining)
+        assertEquals(SharePhase.OFF, trying.phase)
+        assertEquals("Lost touch with Tablet: trying to rejoin", trying.message)
+        net.setCut(h, g, isCut = false)
+        connector.failure = null
+        advanceTimeBy(6_000)
+        val back = guest.vm.ui.value.share
+        assertEquals(SharePhase.SHARED, back.phase)
+        assertTrue(!back.rejoining)
+        assertEquals(2, host.vm.ui.value.share.devices.size)
+    }
+
+    @Test fun `when the host is really gone, the guest stops trying after a while and says so`() = shareTest {
+        val (host, guest) = pair(FakeShareConnector(network()))
+        host.vm.stopSharing()
+        advanceTimeBy(3_000)
+        assertTrue(guest.vm.ui.value.share.rejoining)
+        advanceTimeBy((TankViewModel.REJOIN_S * 1000).toLong() + 3_000)
+        val s = guest.vm.ui.value.share
+        assertTrue(!s.rejoining)
+        assertEquals(SharePhase.OFF, s.phase)
+        assertTrue(s.message!!.startsWith("Could not rejoin"))
+    }
+
+    @Test fun `stop trying stops`() = shareTest {
+        val connector = FakeShareConnector(network())
+        val (host, guest) = pair(connector)
+        host.vm.stopSharing()
+        advanceTimeBy(3_000)
+        assertTrue(guest.vm.ui.value.share.rejoining)
+        guest.vm.stopSharing()
+        val tries = connector.targets.size
+        advanceTimeBy(20_000)
+        assertTrue(!guest.vm.ui.value.share.rejoining)
+        assertEquals(tries, connector.targets.size)
     }
 }

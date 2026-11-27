@@ -147,6 +147,9 @@ object PreviewData {
     /** The guest's map once the screens were laid out as they lie, the phone across. */
     val sharedArranged = sharedGuest.copy(devices = onTable(self = 1, arranged), tank = arranged.tank)
 
+    /** A second screen just came in: the offer to line them up. */
+    val offerToArrange = sharedHost.copy(devices = onTable(self = 0).take(2), arrangeHint = true)
+
     /** Someone is arranging the screens by hand: each shows who it is. */
     val arranging = sharedGuest.copy(arranging = true)
 

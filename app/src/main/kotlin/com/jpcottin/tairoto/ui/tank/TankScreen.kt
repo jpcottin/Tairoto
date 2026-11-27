@@ -1,5 +1,7 @@
 package com.jpcottin.tairoto.ui.tank
 
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.width
 import com.jpcottin.tairoto.ui.share.ArrangeOverlay
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.ui.geometry.Rect
@@ -74,6 +76,7 @@ object TankTags {
     const val STATS = "tank_stats"
     const val ZOOM = "tank_zoom"
     const val UNSUPPORTED = "tank_unsupported"
+    const val ARRANGE_HINT = "tank_arrange_hint"
 }
 
 @Composable
@@ -100,6 +103,7 @@ fun TankScreen(
             override fun onGestureEnd() = vm.finishGesture()
             override fun onStrokeStart(start: Vec2, toward: Vec2, atMs: Long) = vm.strokeStart(start, toward, atMs)
             override fun onStrokeEnd(from: Vec2, end: Vec2, atMs: Long) = vm.strokeEnd(from, end, atMs)
+            override fun onDown() = vm.touched()
         }
     }
     val actions = remember {
@@ -150,12 +154,19 @@ fun TankScreen(
                 Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(14.dp),
             )
         } else {
-            TankHud(
+            // Shared and left alone, the buttons fade: the picture runs on across the screens without them.
+            val hud by androidx.compose.animation.core.animateFloatAsState(if (state.hudHidden) 0f else 1f, androidx.compose.animation.core.tween(700), label = "hud")
+            if (hud > 0f) TankHud(
+                modifier = Modifier.graphicsLayer { alpha = hud },
                 state = state,
                 onAdd = onOpenSpecies,
                 onSettings = onOpenSettings,
                 onArrange = { vm.setEditing(true) },
                 onShare = onOpenShare,
+                onArrangeScreens = {
+                    vm.dismissArrangeHint()
+                    vm.setArranging(true)
+                },
             )
         }
     }
@@ -185,6 +196,7 @@ fun TankHud(
     modifier: Modifier = Modifier,
     onArrange: () -> Unit = {},
     onShare: () -> Unit = {},
+    onArrangeScreens: () -> Unit = {},
 ) {
     Box(modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(14.dp)) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -213,6 +225,32 @@ fun TankHud(
             }
         }
         ZoomChip(state.zoom, Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp))
+        AnimatedVisibility(
+            visible = state.share.arrangeHint,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            Surface(
+                onClick = onArrangeScreens,
+                color = Ocean.GlassStrong,
+                border = GlassBorder,
+                shape = RoundedCornerShape(50),
+                modifier = Modifier.testTag(TankTags.ARRANGE_HINT),
+            ) {
+                Row(Modifier.padding(start = 18.dp, end = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${state.share.devices.size} screens: line them up?",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Ocean.Foam,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Surface(color = Ocean.SeaGlass, shape = RoundedCornerShape(50)) {
+                        Text("Arrange", style = MaterialTheme.typography.labelLarge, color = Ocean.Deep, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+                    }
+                }
+            }
+        }
         AnimatedVisibility(
             visible = state.hintVisible && state.ready,
             enter = fadeIn() + slideInVertically { it / 2 },
@@ -304,6 +342,12 @@ fun StatsPanel(stats: EngineStats, tier: QualityTier, gpu: String, thermalHeadro
                 String.format(Locale.US, "food %d  ·  %.1f mg  ·  eaten %.1f mg  ·  hunger %.2f", stats.food, stats.foodMg, stats.eatenMg, stats.hunger),
                 style = StatsText,
             )
+            if (stats.audio != com.jpcottin.tairoto.engine.AudioState.OFF) {
+                Text(
+                    if (stats.audio == com.jpcottin.tairoto.engine.AudioState.PLAYING) "sound ${stats.audioRateHz} Hz" else "sound: no output",
+                    style = StatsText,
+                )
+            }
             Text(
                 "thermal headroom " + (thermalHeadroom?.let { String.format(Locale.US, "%.2f", it) } ?: "n/a") +
                     if (thermalIgnored) "  (emulator: ignored)" else "",

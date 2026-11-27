@@ -31,10 +31,11 @@ beat-and-glide swimming, an octopus on soft arms, a ray that buries itself) and
 a Vulkan renderer (procedural sand, caustics, refraction, soft shadows,
 creatures painted in shaders), under a Jetpack Compose app.
 
-> Work in progress: milestones 1 to 6 of 10 are done. Solo lagoon, food and
-> feeding, bottom dwellers, arranging the lagoon, one lagoon across devices
-> (relay, Wi-Fi, Bluetooth), laying the screens out on the table. Next: sound
-> and a live wallpaper, scanning drawn fish with the camera, TV and Wear.
+> Work in progress: milestones 1 to 7 of 10. Solo lagoon, food and feeding,
+> bottom dwellers, arranging the lagoon, one lagoon across devices (relay,
+> Wi-Fi, Bluetooth), laying the screens out on the table, and the lagoon's
+> sound, live wallpaper and screensaver. Next: scanning drawn fish with the
+> camera, TV and Wear.
 
 Tahitian names are checked against a reference before they are used, and the
 source is noted next to each species in `Species.kt`.
@@ -80,6 +81,19 @@ source is noted next to each species in `Species.kt`.
   move them between the two, and the lagoon widens for a bigger window
   (Navigation 3 scenes: supporting pane, bottom sheet).
 
+- **Sound, made as it plays** (`engine/src/main/cpp/audio`): no recordings.
+  Lapping water over the crackle of a reef (snapping shrimp), and a sound for
+  what happens: a knock on the glass, flakes pattering, a pellet's plop, fish
+  snapping at food, the giant clam clapping shut, sand puffing up, the octopus
+  jetting away, the turtle breathing at the surface. Each is placed where it
+  happens on the glass and duller the deeper it is; in a shared lagoon a
+  screen plays what it shows. AAudio, stopped whenever the lagoon is unseen.
+  `scripts/host-tests.sh` writes twenty scripted seconds to
+  `build/host-tests/lagoon.wav`.
+- **Live wallpaper and screensaver**: the lagoon behind the home screens
+  (swiping between them pans across it, a tap ripples the water) and as the
+  screensaver while charging; drawn at the Low tier, silent, paused when
+  unseen. Settings, *Beyond the app*.
 - **Food and feeding**: drag to sprinkle flakes, hold for a pellet; a scent that grows
   with the food and the feeders draws fish from further away; messy bites, crumbs,
   decomposition, every milligram accounted for; a current grid stirred by tails.

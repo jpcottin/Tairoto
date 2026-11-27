@@ -263,20 +263,26 @@ JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeStepFor
 }
 
 /** Fills out with [fps, workMs, creatures, drawn, frames, quality, vulkan, sceneW, sceneH, w, h, simTime,
- *  food, foodMg, eatenMg, hunger]. */
+ *  food, foodMg, eatenMg, hunger, audio, audioRate]. */
 JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeStats(JNIEnv* env, jclass, jlong h,
                                                                                jfloatArray out) {
     EngineStats s = engine(h)->stats();
-    float v[16] = {s.fps, s.workMs, (float)s.creatures, (float)s.drawn, (float)s.frames, (float)s.quality,
+    float v[18] = {s.fps, s.workMs, (float)s.creatures, (float)s.drawn, (float)s.frames, (float)s.quality,
                    (float)s.vulkan, (float)s.sceneWidth, (float)s.sceneHeight, (float)s.width, (float)s.height,
-                   s.simTime, (float)s.food, s.foodMg, s.eatenMg, s.hunger};
+                   s.simTime, (float)s.food, s.foodMg, s.eatenMg, s.hunger, (float)s.audio, (float)s.audioRate};
     jsize n = env->GetArrayLength(out);
-    env->SetFloatArrayRegion(out, 0, n < 16 ? n : 16, v);
+    env->SetFloatArrayRegion(out, 0, n < 18 ? n : 18, v);
 }
 
 JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetMaxFps(JNIEnv*, jclass, jlong h, jint fps) {
     engine(h)->setMaxFps(fps);
 }
+
+JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetSound(JNIEnv*, jclass, jlong h,
+                                                                                  jfloat volume) {
+    engine(h)->setSound(volume);
+}
+
 
 JNIEXPORT jstring JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeGpuName(JNIEnv* env, jclass, jlong h) {
     return env->NewStringUTF(engine(h)->stats().gpu.c_str());

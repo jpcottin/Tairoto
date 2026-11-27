@@ -1,5 +1,7 @@
 package com.jpcottin.tairoto.ui.settings
 
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.automirrored.rounded.VolumeDown
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material3.Slider
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,6 +61,10 @@ object SettingsTags {
     const val STATS = "settings_stats"
     const val RESET = "settings_reset"
     const val RESET_CONFIRM = "settings_reset_confirm"
+    const val SOUND = "settings_sound"
+    const val VOLUME = "settings_volume"
+    const val WALLPAPER = "settings_wallpaper"
+    const val SCREENSAVER = "settings_screensaver"
     fun quality(mode: QualityMode) = "settings_quality_" + when (mode) {
         QualityMode.Auto -> "auto"
         is QualityMode.Fixed -> mode.tier.name.lowercase()
@@ -64,11 +75,34 @@ data class SettingsUi(
     val quality: QualityMode = QualityMode.Auto,
     val activeTier: QualityTier = QualityTier.HIGH,
     val showStats: Boolean = false,
+    val sound: Boolean = true,
+    val soundVolume: Float = 0.7f,
+    /** The device has no way to play sound (no output, or it refused). */
+    val soundUnavailable: Boolean = false,
     val creatures: Int = 0,
     val gpu: String = "",
     val version: String = "",
     val tankMm: String = "",
 )
+
+/** What the sound settings do; the default does nothing (previews). */
+interface SoundActions {
+    fun setOn(on: Boolean) {}
+    /** The slider moves: heard at once, not kept yet. */
+    fun preview(volume: Float) {}
+    /** The slider is let go: kept. */
+    fun setVolume(volume: Float) {}
+
+    object None : SoundActions
+}
+
+/** The lagoon beyond the app: as the wallpaper, as the screensaver. Nothing by default (previews). */
+interface AmbientActions {
+    fun setWallpaper() {}
+    fun openScreensaver() {}
+
+    object None : AmbientActions
+}
 
 @Composable
 fun SettingsScreen(
@@ -79,6 +113,8 @@ fun SettingsScreen(
     onResetTank: () -> Unit,
     /** Shown beside the lagoon on a wide window rather than on its own. */
     inPane: Boolean = false,
+    sound: SoundActions = SoundActions.None,
+    ambient: AmbientActions = AmbientActions.None,
 ) {
     Scaffold(
         modifier = Modifier.testTag(SettingsTags.SCREEN),
@@ -98,7 +134,7 @@ fun SettingsScreen(
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
-            SettingsContent(ui, onQuality, onShowStats, onResetTank, Modifier.widthIn(max = 640.dp))
+            SettingsContent(ui, onQuality, onShowStats, onResetTank, Modifier.widthIn(max = 640.dp), sound, ambient)
         }
     }
 }
@@ -110,6 +146,8 @@ fun SettingsContent(
     onShowStats: (Boolean) -> Unit,
     onResetTank: () -> Unit,
     modifier: Modifier = Modifier,
+    sound: SoundActions = SoundActions.None,
+    ambient: AmbientActions = AmbientActions.None,
 ) {
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     Column(
@@ -137,6 +175,58 @@ fun SettingsContent(
                 }
                 Spacer(Modifier.width(16.dp))
                 Switch(checked = ui.showStats, onCheckedChange = null)
+            }
+        }
+        Section("Sound") {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .toggleable(ui.sound, role = Role.Switch, onValueChange = sound::setOn)
+                    .testTag(SettingsTags.SOUND)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Sound of the lagoon", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (ui.soundUnavailable) "This device has no way to play it right now."
+                        else "The water lapping, the reef crackling, and what happens on the glass, made as it plays.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(16.dp))
+                Switch(checked = ui.sound, onCheckedChange = null)
+            }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.AutoMirrored.Rounded.VolumeDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                // The value under the finger, not the last one drawn: letting go may come before the next frame.
+                var dragged by remember { mutableFloatStateOf(ui.soundVolume) }
+                Slider(
+                    value = ui.soundVolume,
+                    onValueChange = {
+                        dragged = it
+                        sound.preview(it)
+                    },
+                    onValueChangeFinished = { sound.setVolume(dragged) },
+                    enabled = ui.sound,
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp).testTag(SettingsTags.VOLUME)
+                        .semantics { contentDescription = "Volume of the lagoon" },
+                )
+                Icon(Icons.AutoMirrored.Rounded.VolumeUp, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Section("Beyond the app") {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Your lagoon behind the home screens (swipe between them to look across it), or as the screensaver while the device charges. Drawn gently, silent, still when unseen.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = ambient::setWallpaper, modifier = Modifier.testTag(SettingsTags.WALLPAPER)) { Text("Set as wallpaper") }
+                    OutlinedButton(onClick = ambient::openScreensaver, modifier = Modifier.testTag(SettingsTags.SCREENSAVER)) { Text("Screensaver") }
+                }
             }
         }
         Section("Lagoon") {

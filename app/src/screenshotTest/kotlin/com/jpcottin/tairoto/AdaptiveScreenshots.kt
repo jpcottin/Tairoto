@@ -112,3 +112,10 @@ fun LagoonArranging() = TairotoTheme { LagoonArrangingPreviewContent() }
 @NarrowPreviews
 @Composable
 fun SharedTableArranged() = TairotoTheme { LagoonWithPanePreviewContent(PreviewPane.Share, share = PreviewData.sharedArranged) }
+
+@PreviewTest
+@NarrowPreviews
+@Composable
+fun LagoonOfferToArrange() = TairotoTheme {
+    LagoonScreenPreviewContent(PreviewData.lagoon.copy(hintVisible = false, share = PreviewData.offerToArrange))
+}

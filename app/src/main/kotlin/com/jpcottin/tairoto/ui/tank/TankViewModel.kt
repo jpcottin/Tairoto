@@ -100,7 +100,12 @@ data class TankUiState(
     val stats: EngineStats = EngineStats(),
     val tier: QualityTier = QualityTier.HIGH,
     val qualityMode: QualityMode = QualityMode.Auto,
+    /** The lagoon's sound, as set. */
+    val sound: Boolean = true,
+    val soundVolume: Float = com.jpcottin.tairoto.data.AppSettings.DEFAULT_SOUND_VOLUME,
     val hintVisible: Boolean = true,
+    /** Shared and left alone a while: the buttons fade, so the picture runs on across the screens. */
+    val hudHidden: Boolean = false,
     val vulkanUnsupported: Boolean = false,
     val gpu: String = "",
     /** Thermal headroom as last read (1.0 = about to throttle), or null when the device does not say. */
@@ -155,6 +160,10 @@ data class ShareUi(
     val localNetwork: Boolean = true,
     /** Someone is arranging the screens: each shows who it is, and a swipe across two lays them side by side. */
     val arranging: Boolean = false,
+    /** A screen just came in: a moment's word on how to line them up. */
+    val arrangeHint: Boolean = false,
+    /** The link to the host broke: this device is trying to rejoin, for a while. */
+    val rejoining: Boolean = false,
 ) {
     val hostName: String? get() = devices.firstOrNull { it.host }?.name
 }
@@ -252,8 +261,9 @@ class TankViewModel(
         viewModelScope.launch {
             settingsStore.settings.collect { s ->
                 settings = s.copy(showStats = options.stats ?: s.showStats)
-                state.update { it.copy(showStats = settings.showStats, qualityMode = s.quality) }
+                state.update { it.copy(showStats = settings.showStats, qualityMode = s.quality, sound = s.sound, soundVolume = s.soundVolume) }
                 applyQuality()
+                applySound()
             }
         }
         if (options.hints) {
@@ -706,11 +716,15 @@ class TankViewModel(
     }
 
     /** Joins another device's lagoon. This device's own is saved and comes back on leaving. */
-    fun joinLagoon(target: JoinTarget) {
+    fun joinLagoon(target: JoinTarget) = join(target, rejoining = false)
+
+    private fun join(target: JoinTarget, rejoining: Boolean) {
         val c = connector ?: return
         val screen = screenMm ?: return
         if (shared != null || state.value.share.phase == SharePhase.CONNECTING) return
-        setShare { it.copy(phase = SharePhase.CONNECTING, message = null) }
+        if (!rejoining) stopRejoining()
+        lastTarget = target
+        setShare { it.copy(phase = SharePhase.CONNECTING, message = if (rejoining) it.message else null) }
         shareJob = viewModelScope.launch {
             val conn = try {
                 c.join(deviceName, target)
@@ -747,13 +761,18 @@ class TankViewModel(
         attach(ns, persist = options.persist && r == ShareRole.HOST) { sh.run() }
         val job = sessionJob!!
         viewModelScope.launch(job) {
+            var screens = 0
             sh.layout.collect { layout ->
                 applySharedCamera(layout)
                 setShare { it.copy(devices = devicesOnTable(layout, sh.self), tank = layout.tank, arranging = layout.arranging) }
+                // Another screen came in: say how to line them up, for a moment.
+                val n = layout.placements.size
+                if (n > screens && n > 1 && !layout.arranging) offerToArrange()
+                if (layout.arranging) setShare { it.copy(arrangeHint = false) }
+                screens = n
             }
         }
         viewModelScope.launch(job) {
-            var lostSince: Double? = null
             sh.status.collect { st ->
                 setShare {
                     it.copy(
@@ -766,22 +785,34 @@ class TankViewModel(
                     lastStatusLog = now
                     logStatus(sh, st)
                 }
-                if (st.gone) {
-                    endShare("The lagoon went on without this device")
-                } else if (!st.connected && r == ShareRole.GUEST) {
-                    val since = lostSince ?: now.also { lostSince = it }
-                    if (now - since > GIVE_UP_S) endShare("Lost touch with ${state.value.share.hostName ?: "the lagoon"}")
-                } else {
+                if (st.gone) endShare("The lagoon went on without this device", rejoin = r == ShareRole.GUEST)
+            }
+        }
+        // Out of touch, nothing changes, so nothing is said: the time is checked on its own.
+        if (r == ShareRole.GUEST) viewModelScope.launch(job) {
+            var lostSince: Double? = null
+            while (true) {
+                delay(1_000)
+                val now = clockS()
+                if (sh.status.value.connected) {
                     lostSince = null
+                } else {
+                    val since = lostSince ?: now.also { lostSince = it }
+                    if (now - since > GIVE_UP_S) endShare("Lost touch with ${state.value.share.hostName ?: "the lagoon"}", rejoin = true)
                 }
             }
         }
         viewModelScope.launch(job) {
             conn.ended.collect { reason ->
-                endShare(if (r == ShareRole.GUEST) "${state.value.share.hostName ?: "The host"} stopped sharing" else "Sharing stopped: $reason")
+                // A guest cannot tell a host that stopped from a link that broke: it tries to rejoin, a while.
+                endShare(
+                    if (r == ShareRole.GUEST) "${state.value.share.hostName ?: "The host"} stopped sharing" else "Sharing stopped: $reason",
+                    rejoin = r == ShareRole.GUEST,
+                )
             }
         }
         if (options.arrange && r == ShareRole.HOST) viewModelScope.launch(job) { sh.setArranging(true) }
+        viewModelScope.launch(job) { watchIdle() }
         netLog(json("share", "role" to r.name.lowercase(), "self" to sh.self.slot, "name" to sh.self.name, "t" to sh.sharedNow()))
         // Who is in the lagoon as it starts here, so a log can account for every one of them.
         netLog(json("scene", "self" to sh.self.slot, "ids" to ns.scene.value.creatures.joinToString(",", "[", "]") { it.id.raw.toString() }))
@@ -806,6 +837,41 @@ class TankViewModel(
     // ------------------------------------------------------------ the table
 
     private fun arrangingTable() = shared != null && state.value.share.arranging
+
+    private var lastTouchS = 0.0
+
+    /** A finger on the glass: the buttons come back, for a while. */
+    fun touched() {
+        lastTouchS = clockS()
+        if (state.value.hudHidden) state.update { it.copy(hudHidden = false) }
+    }
+
+    /** Fades the buttons of a shared screen nobody has touched for [HUD_IDLE_S], until it is touched. */
+    private suspend fun watchIdle() {
+        lastTouchS = clockS()
+        while (true) {
+            delay(1_000)
+            val s = state.value
+            val idle = clockS() - lastTouchS > HUD_IDLE_S && !s.share.arranging && !s.share.arrangeHint && !s.edit.active
+            if (idle != s.hudHidden) state.update { it.copy(hudHidden = idle) }
+        }
+    }
+
+    private var hintJob: Job? = null
+
+    private fun offerToArrange() {
+        setShare { it.copy(arrangeHint = true) }
+        hintJob?.cancel()
+        hintJob = viewModelScope.launch {
+            delay(ARRANGE_HINT_MS)
+            setShare { it.copy(arrangeHint = false) }
+        }
+    }
+
+    fun dismissArrangeHint() {
+        hintJob?.cancel()
+        setShare { it.copy(arrangeHint = false) }
+    }
 
     /** Lays [device]'s screen on the table at [center] (mm), turned [turns]: from the map, on any device. */
     fun arrangeScreen(device: DeviceId, center: Vec2, turns: Int) {
@@ -879,6 +945,7 @@ class TankViewModel(
 
     /** Stops sharing: a guest goes back to its own lagoon, a host keeps its lagoon with every creature in it. */
     fun stopSharing() {
+        stopRejoining()
         if (shared == null) {
             shareJob?.cancel()
             setShare { it.copy(phase = SharePhase.OFF) }
@@ -896,9 +963,51 @@ class TankViewModel(
         if (shared != null) stopSharing()
     }
 
-    private fun endShare(message: String) {
+    private fun endShare(message: String, rejoin: Boolean = false) {
         if (shared == null) return
-        viewModelScope.launch { finish(graceful = false, message = message) }
+        val host = state.value.share.hostName
+        viewModelScope.launch {
+            finish(graceful = false, message = message)
+            if (rejoin) startRejoining(host)
+        }
+    }
+
+    // ------------------------------------------------------------ rejoining
+
+    /** The lagoon this device last joined, to try again if the link breaks. */
+    private var lastTarget: JoinTarget? = null
+    private var rejoinJob: Job? = null
+
+    /**
+     * The link to the host broke (or the host stopped: a guest cannot tell).
+     * Home again, it tries to join the same lagoon for [REJOIN_S], saying so;
+     * a link that dropped for a moment (Bluetooth does) heals by itself.
+     */
+    private fun startRejoining(host: String?) {
+        val target = lastTarget ?: return
+        val who = host ?: "the lagoon"
+        setShare { it.copy(rejoining = true, message = "Lost touch with $who: trying to rejoin") }
+        rejoinJob?.cancel()
+        rejoinJob = viewModelScope.launch {
+            val until = clockS() + REJOIN_S
+            while (shared == null && clockS() < until) {
+                if (state.value.share.phase == SharePhase.OFF) join(target, rejoining = true)
+                delay(REJOIN_RETRY_MS)
+            }
+            if (shared == null) {
+                // A try still waiting for an answer would say something else, later: it stops here.
+                shareJob?.cancel()
+                setShare { it.copy(phase = SharePhase.OFF, rejoining = false, message = "Could not rejoin $who") }
+            } else {
+                setShare { it.copy(rejoining = false, message = null) }
+            }
+        }
+    }
+
+    private fun stopRejoining() {
+        rejoinJob?.cancel()
+        rejoinJob = null
+        if (state.value.share.rejoining) setShare { it.copy(rejoining = false, message = null) }
     }
 
     private suspend fun finish(graceful: Boolean, message: String?) {
@@ -935,6 +1044,7 @@ class TankViewModel(
             if (screen != null) createSession(screen)
         }
         camera = null
+        state.update { it.copy(hudHidden = false) }
         setShare { ShareUi(relay = it.relay, message = message) }
         if (vp != null && screen != null) {
             val size = session?.scene?.value?.size
@@ -947,7 +1057,8 @@ class TankViewModel(
 
     private fun failShare(e: Exception?, what: String) {
         val why = e?.message?.takeIf { it.isNotBlank() }
-        setShare { it.copy(phase = SharePhase.OFF, message = if (why != null) "$what: $why" else what) }
+        // While rejoining, a try that fails says nothing new: it tries again.
+        setShare { it.copy(phase = SharePhase.OFF, message = if (it.rejoining) it.message else if (why != null) "$what: $why" else what) }
     }
 
     /** Starts looking for lagoons shared nearby (while the share sheet is open). */
@@ -1022,7 +1133,16 @@ class TankViewModel(
         val relay = (if (nearbyVia == null) RelayAddress.parse(launch.relay) else null) ?: RelayAddress.EMULATOR_HOST
         if (nearbyVia == null) setShare { it.copy(relay = relay.toString()) }
         if (launch.host) {
-            shareLagoon(if (nearbyVia != null) ShareRoute.Nearby else ShareRoute.Relay(relay, launch.session))
+            // The relay may not be up yet either: try for a while too.
+            viewModelScope.launch {
+                val until = clockS() + AUTO_JOIN_S
+                while (shared == null && clockS() < until) {
+                    if (state.value.share.phase == SharePhase.OFF) {
+                        shareLagoon(if (nearbyVia != null) ShareRoute.Nearby else ShareRoute.Relay(relay, launch.session))
+                    }
+                    delay(AUTO_JOIN_RETRY_MS)
+                }
+            }
         } else {
             if (nearbyVia != null) lookForLagoons(true)
             // The host may not be up yet: try for a while.
@@ -1118,6 +1238,25 @@ class TankViewModel(
         viewModelScope.launch { settingsStore.setShowStats(show) }
     }
 
+    fun setSound(on: Boolean) {
+        viewModelScope.launch { settingsStore.setSound(on) }
+    }
+
+    /** While a finger drags the slider the engine follows at once; the setting is kept when it lets go. */
+    fun previewSoundVolume(volume: Float) {
+        state.update { it.copy(soundVolume = volume.coerceIn(0f, 1f)) }
+        if (options.sound == null && settings.sound) engine.setSound(volume.coerceIn(0f, 1f))
+    }
+
+    fun setSoundVolume(volume: Float) {
+        viewModelScope.launch { settingsStore.setSoundVolume(volume) }
+    }
+
+    private fun applySound() = engine.setSound(soundVolume())
+
+    /** What the engine plays at: the launch's word first (tests), then the settings. */
+    internal fun soundVolume(): Float = options.sound ?: if (settings.sound) settings.soundVolume else 0f
+
     private fun applyQuality() {
         val tier = when {
             options.quality != null -> options.quality
@@ -1173,6 +1312,8 @@ class TankViewModel(
 
     companion object {
         const val HINT_MS = 7_000L
+        const val ARRANGE_HINT_MS = 10_000L
+        const val HUD_IDLE_S = 6.0
         const val STATS_PERIOD_MS = 500L
         const val GOVERNOR_PERIOD_MS = 2_000L
         /** A window this much larger than any before (unfolding) widens the lagoon. */
@@ -1188,6 +1329,8 @@ class TankViewModel(
         const val GOODBYE_MS = 150L
         /** A guest out of touch with the host this long gives up and goes back to its own lagoon. */
         const val GIVE_UP_S = 6.0
+        const val REJOIN_S = 30.0
+        const val REJOIN_RETRY_MS = 2_000L
         const val STATUS_LOG_S = 2.0
         const val AUTO_JOIN_S = 90.0
         const val AUTO_JOIN_RETRY_MS = 2_000L
