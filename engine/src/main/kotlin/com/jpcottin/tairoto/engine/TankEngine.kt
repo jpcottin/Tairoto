@@ -29,6 +29,8 @@ interface TankEngine : Closeable {
     fun setPaused(paused: Boolean)
     /** How loud the lagoon is, 0..1 (0: silent, no audio stream). */
     fun setSound(volume: Float) = Unit
+    /** At most this many frames a second; 0 for as many as the display shows. */
+    fun setMaxFps(fps: Int) = Unit
     /** Adds a creature; a [ghost] is simulated by another device and only shown here. */
     fun spawn(creature: CreatureSpec, species: Species, ghost: Boolean = false)
     fun remove(id: EntityId)

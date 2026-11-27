@@ -274,6 +274,10 @@ JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeStats(J
     env->SetFloatArrayRegion(out, 0, n < 18 ? n : 18, v);
 }
 
+JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetMaxFps(JNIEnv*, jclass, jlong h, jint fps) {
+    engine(h)->setMaxFps(fps);
+}
+
 JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetSound(JNIEnv*, jclass, jlong h,
                                                                                   jfloat volume) {
     engine(h)->setSound(volume);

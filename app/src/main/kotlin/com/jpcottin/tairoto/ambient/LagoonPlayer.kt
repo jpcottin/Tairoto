@@ -48,6 +48,7 @@ class LagoonPlayer(
 
     init {
         engine.setQuality(QualityTier.LOW)
+        engine.setMaxFps(AMBIENT_FPS)
         engine.setSound(0f)
         engine.setPaused(true)
     }
@@ -132,5 +133,7 @@ class LagoonPlayer(
     companion object {
         /** The drift moves a mm or two a second: thirty steps a second keep each under a pixel. */
         const val DRIFT_STEP_MS = 33L
+        /** Fish behind the icons need no more: half the frames, half the battery. */
+        const val AMBIENT_FPS = 30
     }
 }

@@ -69,6 +69,13 @@ void Engine::setWindow(ANativeWindow* window) {
     });
 }
 
+void Engine::setMaxFps(int fps) {
+    post([this, fps] {
+        minFrameNs_ = fps > 0 ? 1'000'000'000LL / fps : 0;
+        nextFrameNs_ = 0;
+    });
+}
+
 void Engine::setSound(float volume) {
     post([this, volume] {
         soundVolume_ = clamp(volume, 0.0f, 1.0f);
@@ -252,6 +259,11 @@ void Engine::run() {
             if (queue_.empty() && !quit_) {
                 if (!canDraw) wake_.wait(lock);
                 else if (renderer_->needsRecovery()) wake_.wait_for(lock, std::chrono::milliseconds(250));
+                else if (minFrameNs_ > 0) {
+                    // Capped: rest until the next frame is due (a command wakes it sooner).
+                    int64_t rest = nextFrameNs_ - nowNs();
+                    if (rest > 0) wake_.wait_for(lock, std::chrono::nanoseconds(rest));
+                }
             }
             if (quit_) break;
             work.swap(queue_);
@@ -259,7 +271,11 @@ void Engine::run() {
         for (auto& fn : work) fn();
         if (window_ && !paused_) {
             if (renderer_->needsRecovery()) renderer_->tryRecover();
-            if (renderer_->ready()) frame();
+            int64_t now = nowNs();
+            if (renderer_->ready() && (minFrameNs_ == 0 || now >= nextFrameNs_)) {
+                nextFrameNs_ = now + minFrameNs_;
+                frame();
+            }
         }
     }
     renderer_->cleanup();

@@ -110,6 +110,8 @@ public:
     void setTilt(Vec2 tilt);
     /** How loud the lagoon is, 0..1; 0 is silence, and no audio stream at all. */
     void setSound(float volume);
+    /** At most this many frames a second (0: as many as the display shows). Saves battery, and CPU. */
+    void setMaxFps(int fps);
 
     /** Advances the simulation without drawing, on the calling thread's behalf (tests). Blocks. */
     void stepForTest(float seconds);
@@ -150,6 +152,8 @@ private:
     Vec2 tilt_;
     audio::AudioOut audio_;
     float soundVolume_ = 0;
+    int64_t minFrameNs_ = 0;
+    int64_t nextFrameNs_ = 0;
     int64_t lastFrameNs_ = 0;
     double fpsWindowStart_ = 0;
     int fpsFrames_ = 0;
