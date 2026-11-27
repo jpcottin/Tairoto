@@ -162,6 +162,8 @@ data class ShareUi(
     val arranging: Boolean = false,
     /** A screen just came in: a moment's word on how to line them up. */
     val arrangeHint: Boolean = false,
+    /** The link to the host broke: this device is trying to rejoin, for a while. */
+    val rejoining: Boolean = false,
 ) {
     val hostName: String? get() = devices.firstOrNull { it.host }?.name
 }
@@ -714,11 +716,15 @@ class TankViewModel(
     }
 
     /** Joins another device's lagoon. This device's own is saved and comes back on leaving. */
-    fun joinLagoon(target: JoinTarget) {
+    fun joinLagoon(target: JoinTarget) = join(target, rejoining = false)
+
+    private fun join(target: JoinTarget, rejoining: Boolean) {
         val c = connector ?: return
         val screen = screenMm ?: return
         if (shared != null || state.value.share.phase == SharePhase.CONNECTING) return
-        setShare { it.copy(phase = SharePhase.CONNECTING, message = null) }
+        if (!rejoining) stopRejoining()
+        lastTarget = target
+        setShare { it.copy(phase = SharePhase.CONNECTING, message = if (rejoining) it.message else null) }
         shareJob = viewModelScope.launch {
             val conn = try {
                 c.join(deviceName, target)
@@ -767,7 +773,6 @@ class TankViewModel(
             }
         }
         viewModelScope.launch(job) {
-            var lostSince: Double? = null
             sh.status.collect { st ->
                 setShare {
                     it.copy(
@@ -780,19 +785,30 @@ class TankViewModel(
                     lastStatusLog = now
                     logStatus(sh, st)
                 }
-                if (st.gone) {
-                    endShare("The lagoon went on without this device")
-                } else if (!st.connected && r == ShareRole.GUEST) {
-                    val since = lostSince ?: now.also { lostSince = it }
-                    if (now - since > GIVE_UP_S) endShare("Lost touch with ${state.value.share.hostName ?: "the lagoon"}")
-                } else {
+                if (st.gone) endShare("The lagoon went on without this device", rejoin = r == ShareRole.GUEST)
+            }
+        }
+        // Out of touch, nothing changes, so nothing is said: the time is checked on its own.
+        if (r == ShareRole.GUEST) viewModelScope.launch(job) {
+            var lostSince: Double? = null
+            while (true) {
+                delay(1_000)
+                val now = clockS()
+                if (sh.status.value.connected) {
                     lostSince = null
+                } else {
+                    val since = lostSince ?: now.also { lostSince = it }
+                    if (now - since > GIVE_UP_S) endShare("Lost touch with ${state.value.share.hostName ?: "the lagoon"}", rejoin = true)
                 }
             }
         }
         viewModelScope.launch(job) {
             conn.ended.collect { reason ->
-                endShare(if (r == ShareRole.GUEST) "${state.value.share.hostName ?: "The host"} stopped sharing" else "Sharing stopped: $reason")
+                // A guest cannot tell a host that stopped from a link that broke: it tries to rejoin, a while.
+                endShare(
+                    if (r == ShareRole.GUEST) "${state.value.share.hostName ?: "The host"} stopped sharing" else "Sharing stopped: $reason",
+                    rejoin = r == ShareRole.GUEST,
+                )
             }
         }
         if (options.arrange && r == ShareRole.HOST) viewModelScope.launch(job) { sh.setArranging(true) }
@@ -929,6 +945,7 @@ class TankViewModel(
 
     /** Stops sharing: a guest goes back to its own lagoon, a host keeps its lagoon with every creature in it. */
     fun stopSharing() {
+        stopRejoining()
         if (shared == null) {
             shareJob?.cancel()
             setShare { it.copy(phase = SharePhase.OFF) }
@@ -946,9 +963,51 @@ class TankViewModel(
         if (shared != null) stopSharing()
     }
 
-    private fun endShare(message: String) {
+    private fun endShare(message: String, rejoin: Boolean = false) {
         if (shared == null) return
-        viewModelScope.launch { finish(graceful = false, message = message) }
+        val host = state.value.share.hostName
+        viewModelScope.launch {
+            finish(graceful = false, message = message)
+            if (rejoin) startRejoining(host)
+        }
+    }
+
+    // ------------------------------------------------------------ rejoining
+
+    /** The lagoon this device last joined, to try again if the link breaks. */
+    private var lastTarget: JoinTarget? = null
+    private var rejoinJob: Job? = null
+
+    /**
+     * The link to the host broke (or the host stopped: a guest cannot tell).
+     * Home again, it tries to join the same lagoon for [REJOIN_S], saying so;
+     * a link that dropped for a moment (Bluetooth does) heals by itself.
+     */
+    private fun startRejoining(host: String?) {
+        val target = lastTarget ?: return
+        val who = host ?: "the lagoon"
+        setShare { it.copy(rejoining = true, message = "Lost touch with $who: trying to rejoin") }
+        rejoinJob?.cancel()
+        rejoinJob = viewModelScope.launch {
+            val until = clockS() + REJOIN_S
+            while (shared == null && clockS() < until) {
+                if (state.value.share.phase == SharePhase.OFF) join(target, rejoining = true)
+                delay(REJOIN_RETRY_MS)
+            }
+            if (shared == null) {
+                // A try still waiting for an answer would say something else, later: it stops here.
+                shareJob?.cancel()
+                setShare { it.copy(phase = SharePhase.OFF, rejoining = false, message = "Could not rejoin $who") }
+            } else {
+                setShare { it.copy(rejoining = false, message = null) }
+            }
+        }
+    }
+
+    private fun stopRejoining() {
+        rejoinJob?.cancel()
+        rejoinJob = null
+        if (state.value.share.rejoining) setShare { it.copy(rejoining = false, message = null) }
     }
 
     private suspend fun finish(graceful: Boolean, message: String?) {
@@ -998,7 +1057,8 @@ class TankViewModel(
 
     private fun failShare(e: Exception?, what: String) {
         val why = e?.message?.takeIf { it.isNotBlank() }
-        setShare { it.copy(phase = SharePhase.OFF, message = if (why != null) "$what: $why" else what) }
+        // While rejoining, a try that fails says nothing new: it tries again.
+        setShare { it.copy(phase = SharePhase.OFF, message = if (it.rejoining) it.message else if (why != null) "$what: $why" else what) }
     }
 
     /** Starts looking for lagoons shared nearby (while the share sheet is open). */
@@ -1269,6 +1329,8 @@ class TankViewModel(
         const val GOODBYE_MS = 150L
         /** A guest out of touch with the host this long gives up and goes back to its own lagoon. */
         const val GIVE_UP_S = 6.0
+        const val REJOIN_S = 30.0
+        const val REJOIN_RETRY_MS = 2_000L
         const val STATUS_LOG_S = 2.0
         const val AUTO_JOIN_S = 90.0
         const val AUTO_JOIN_RETRY_MS = 2_000L
