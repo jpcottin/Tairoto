@@ -25,6 +25,7 @@ inline CueKind kindOf(Sound s) {
         case Sound::Sand: return CueKind::Sand;
         case Sound::Ink: return CueKind::Ink;
         case Sound::Breath: return CueKind::Breath;
+        case Sound::Scatter: return CueKind::Scatter;
     }
     return CueKind::Tap;
 }

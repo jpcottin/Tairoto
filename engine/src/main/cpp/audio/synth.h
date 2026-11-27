@@ -12,7 +12,7 @@
 
 namespace dt::audio {
 
-enum class CueKind : int32_t { Tap, Flakes, Pellet, Bite, ClamShut, Sand, Ink, Breath, Count };
+enum class CueKind : int32_t { Tap, Flakes, Pellet, Bite, ClamShut, Sand, Ink, Breath, Scatter, Count };
 
 /** One sound to play, placed on the glass. */
 struct Cue {

@@ -17,6 +17,7 @@ enum class Sound : int32_t {
     Sand = 5,      // sand puffed up: a ray settling, a crab digging, a startled fish
     Ink = 6,       // the octopus inks and jets away
     Breath = 7,    // the turtle breathes at the surface
+    Scatter = 8,   // a school darts off at once: the rush of many tails (strength: how many)
 };
 
 struct SoundEvent {

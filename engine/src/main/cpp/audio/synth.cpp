@@ -10,8 +10,8 @@ constexpr float kPi = 3.14159265f;
 constexpr float kTau = 6.28318531f;
 
 /** How long each kind lasts, in seconds, and how soon another of the same kind starts a voice of its own. */
-constexpr float kLength[] = {0.45f, 0.7f, 0.3f, 0.05f, 0.75f, 0.6f, 0.95f, 1.4f};
-constexpr float kApart[] = {0.02f, 0.06f, 0.03f, 0.015f, 0.2f, 0.07f, 0.3f, 0.5f};
+constexpr float kLength[] = {0.45f, 0.7f, 0.3f, 0.05f, 0.75f, 0.6f, 0.95f, 1.4f, 0.55f};
+constexpr float kApart[] = {0.02f, 0.06f, 0.03f, 0.015f, 0.2f, 0.07f, 0.3f, 0.5f, 0.15f};
 
 float smooth(float a, float b, float x) {
     float t = (x - a) / (b - a);
@@ -161,6 +161,10 @@ void Synth::play(const Cue& cue) {
             v->f1.set(300, 0.7f, sr_);
             for (int i = 0; i < 4; i++) v->extra[i] = 0.25f + 0.55f * v->rng.unit();
             break;
+        case CueKind::Scatter:
+            v->f1.set(900, 0.9f, sr_);
+            v->f2.set(2600, 1.2f, sr_);
+            break;
         case CueKind::Breath:
             v->f1.set(850, 1.3f, sr_);
             v->f2.set(2200, 0.7f, sr_);
@@ -236,6 +240,16 @@ float Synth::voiceSample(Voice& v) {
             v.f1.run(n);
             out = v.f1.lp * std::pow(shape, 1.5f) * 1.5f;
             for (int i = 0; i < 4; i++) out += bubble(t, v.extra[i], 700.0f + 300.0f * (float)i, 0.12f);
+            break;
+        }
+        case CueKind::Scatter: {
+            // A school bolting: a rush of water, falling in pitch as it goes, flickering with the tails.
+            if ((v.t & 31) == 0) v.f1.set(1100.0f * std::exp(-t / 0.25f) + 300.0f, 0.9f, sr_);
+            v.f1.run(n);
+            v.f2.run(n);
+            float rush = v.f1.bp * smooth(0, 0.02f, t) * std::exp(-t / 0.14f) * 2.2f;
+            float flicker = 0.6f + 0.4f * std::sin(kTau * (28.0f + 10.0f * v.size) * t);
+            out = (rush * flicker + v.f2.bp * std::exp(-t / 0.04f) * 0.8f) * (0.5f + 0.5f * v.size);
             break;
         }
         case CueKind::Breath: {

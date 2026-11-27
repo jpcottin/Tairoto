@@ -195,6 +195,25 @@ TEST(WorldSounds, WhatHappensInTheLagoonIsHeard) {
     EXPECT_TRUE(w.takeSounds().empty());
 }
 
+TEST(WorldSounds, ASchoolBoltingFromATapIsHeard) {
+    World w;
+    w.setTank({200, 300, 55});
+    w.setSeed(3);
+    for (int i = 0; i < 12; i++)
+        w.spawn(i + 1, Visual::GreenChromis, Locomotion::Swim, SpeciesParams::greenChromis(), 15, 100 + i,
+                Vec3(100 + (float)(i % 4) * 3, 150 + (float)(i / 4) * 3, 20));
+    w.takeSounds();
+    w.startle({103, 152});
+    auto heard = w.takeSounds();
+    ASSERT_EQ(2u, heard.size());
+    EXPECT_EQ(Sound::Tap, heard[0].kind);
+    EXPECT_EQ(Sound::Scatter, heard[1].kind);
+    EXPECT_NEAR(105.0f, heard[1].at.x, 5.0f);
+    // A tap far from any fish is only a tap.
+    w.startle({10, 10});
+    EXPECT_EQ(1u, w.takeSounds().size());
+}
+
 TEST(WorldSounds, ADinIsCapped) {
     World w;
     w.setTank({200, 300, 55});
@@ -249,7 +268,7 @@ TEST(Demo, WritesTwentySecondsOfTheLagoon) {
         {6.0f, {CueKind::Pellet, -0.5f, 1, 0, 1}},    {8.0f, {CueKind::ClamShut, 0.5f, 1, 0.9f, 1}},
         {10.0f, {CueKind::Sand, -0.4f, 0.8f, 1, 0.8f}}, {10.2f, {CueKind::Sand, -0.35f, 0.5f, 1, 0.5f}},
         {12.0f, {CueKind::Ink, 0.3f, 1, 0.6f, 1}},   {15.0f, {CueKind::Breath, -0.2f, 1, 0, 1}},
-        {17.5f, {CueKind::Tap, 0.4f, 1, 0, 1}},
+        {17.5f, {CueKind::Tap, 0.4f, 1, 0, 1}},       {17.52f, {CueKind::Scatter, 0.3f, 0.9f, 0.3f, 0.8f}},
     };
     size_t next = 0;
     const float block = 0.01f;
