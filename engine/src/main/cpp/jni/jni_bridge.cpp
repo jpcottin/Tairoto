@@ -283,9 +283,6 @@ JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetSoun
     engine(h)->setSound(volume);
 }
 
-JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetMaxFps(JNIEnv*, jclass, jlong h, jint fps) {
-    engine(h)->setMaxFps(fps);
-}
 
 JNIEXPORT jstring JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeGpuName(JNIEnv* env, jclass, jlong h) {
     return env->NewStringUTF(engine(h)->stats().gpu.c_str());

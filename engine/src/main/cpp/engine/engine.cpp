@@ -115,13 +115,6 @@ void Engine::setPaused(bool p) {
 }
 void Engine::setTilt(Vec2 t) { post([this, t] { tilt_ = t; }); }
 
-void Engine::setMaxFps(int fps) {
-    post([this, fps] {
-        minFrameNs_ = fps > 0 ? 1'000'000'000LL / fps : 0;
-        nextFrameNs_ = 0;
-    });
-}
-
 void Engine::setDeterministic(bool on, uint64_t seed) {
     post([this, on, seed] {
         deterministic_ = on;
