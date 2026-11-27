@@ -22,7 +22,8 @@ if ! "$bin/avdmanager" list avd -c | grep -qx "$AVD"; then
     [ -d "$imgdir" ] || need+=("$IMAGE")
     [ -x "$sdk/emulator/emulator" ] || need+=(emulator)
     [ -x "$sdk/platform-tools/adb" ] || need+=(platform-tools)
-    if [ ${#need[@]} -gt 0 ]; then yes | "$bin/sdkmanager" --install "${need[@]}" > /dev/null; fi
+    # `yes` dies of a broken pipe once sdkmanager is done: not a failure.
+    if [ ${#need[@]} -gt 0 ]; then { yes || true; } | "$bin/sdkmanager" --install "${need[@]}" > /dev/null; fi
     echo no | "$bin/avdmanager" create avd -n "$AVD" -k "$IMAGE" -d pixel_6 > /dev/null
     # Enough memory and a fixed size, so screenshots and layouts are the same every run.
     cfg="$HOME/.android/avd/$AVD.avd/config.ini"
