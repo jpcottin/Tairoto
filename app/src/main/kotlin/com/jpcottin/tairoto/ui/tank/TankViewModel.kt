@@ -1070,7 +1070,16 @@ class TankViewModel(
         val relay = (if (nearbyVia == null) RelayAddress.parse(launch.relay) else null) ?: RelayAddress.EMULATOR_HOST
         if (nearbyVia == null) setShare { it.copy(relay = relay.toString()) }
         if (launch.host) {
-            shareLagoon(if (nearbyVia != null) ShareRoute.Nearby else ShareRoute.Relay(relay, launch.session))
+            // The relay may not be up yet either: try for a while too.
+            viewModelScope.launch {
+                val until = clockS() + AUTO_JOIN_S
+                while (shared == null && clockS() < until) {
+                    if (state.value.share.phase == SharePhase.OFF) {
+                        shareLagoon(if (nearbyVia != null) ShareRoute.Nearby else ShareRoute.Relay(relay, launch.session))
+                    }
+                    delay(AUTO_JOIN_RETRY_MS)
+                }
+            }
         } else {
             if (nearbyVia != null) lookForLagoons(true)
             // The host may not be up yet: try for a while.

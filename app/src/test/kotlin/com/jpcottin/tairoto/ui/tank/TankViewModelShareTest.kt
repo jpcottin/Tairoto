@@ -479,4 +479,15 @@ class TankViewModelShareTest {
         advanceTimeBy(20_000)
         assertTrue(!host.vm.ui.value.hudHidden)
     }
+
+    @Test fun `a host launched before its relay is up keeps trying, then shares`() = shareTest {
+        val connector = FakeShareConnector(network())
+        connector.failure = IOException("connection refused")
+        val host = device(connector, "Tablet", 1, LaunchOptions(seed = 7, hints = false, share = ShareLaunch(true, "10.0.2.2:7171", "ci")))
+        advanceTimeBy(1_500)
+        assertEquals(SharePhase.OFF, host.vm.ui.value.share.phase)
+        connector.failure = null
+        advanceTimeBy(3_000)
+        assertEquals(SharePhase.SHARED, host.vm.ui.value.share.phase)
+    }
 }
