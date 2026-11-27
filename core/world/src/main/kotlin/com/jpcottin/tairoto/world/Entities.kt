@@ -69,6 +69,8 @@ data class CreatureSpec(
     val spawnDepthMm: Float,
     /** The slot of the device whose own lagoon it came from, visiting a shared one: it goes home with it. */
     val home: Int? = null,
+    /** A fish someone drew: the [Skin] of the lagoon that carries its colours. */
+    val skin: String? = null,
 )
 
 /** The tank as a list of what is in it. */
@@ -78,7 +80,30 @@ data class TankScene(
     val creatures: List<CreatureSpec> = emptyList(),
     /** What stands on the sand: coral heads, branching coral, clams, stones. */
     val decor: List<DecorSpec> = emptyList(),
+    /** The drawings its drawn fish wear, each once however many fish wear it. */
+    val skins: List<Skin> = emptyList(),
 ) {
+    fun skin(id: String?): Skin? = id?.let { i -> skins.firstOrNull { it.id == i } }
+
+    /**
+     * The scene carrying [skin] as well, making room by forgetting drawings no
+     * fish wears any more; null when [MAX_SKINS] drawings are all worn.
+     */
+    fun withSkin(skin: Skin): TankScene? {
+        if (skins.any { it.id == skin.id }) return this
+        val worn = skinsWorn()
+        if (worn.size >= MAX_SKINS) return null
+        return copy(skins = worn + skin)
+    }
+
+    /** Only the drawings a fish wears: what is worth saving or sending. */
+    fun withoutUnusedSkins(): TankScene = skinsWorn().let { if (it.size == skins.size) this else copy(skins = it) }
+
+    private fun skinsWorn(): List<Skin> {
+        val used = creatures.mapNotNullTo(HashSet()) { it.skin }
+        return skins.filter { it.id in used }
+    }
+
     fun count(speciesId: String): Int = creatures.count { it.speciesId == speciesId }
     fun countDecor(kindId: String): Int = decor.count { it.kindId == kindId }
     fun decor(id: EntityId): DecorSpec? = decor.firstOrNull { it.id == id }
@@ -92,6 +117,8 @@ data class TankScene(
         const val MAX_CREATURES = 160
         /** Enough to build a reef, few enough to leave sand to walk on. */
         const val MAX_DECOR = 24
+        /** Drawn fish in one lagoon: the engine keeps this many drawings on the GPU. */
+        const val MAX_SKINS = 16
     }
 }
 

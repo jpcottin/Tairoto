@@ -44,7 +44,7 @@ class ComponentsTest {
     @Test fun theSheetListsEverySpeciesAndReleasesTheOneTapped() {
         val released = mutableListOf<String>()
         compose.setContent {
-            TairotoTheme { SpeciesSheetContent(mapOf("green_chromis" to 22, "green_sea_turtle" to 1), 137) { released += it } }
+            TairotoTheme { SpeciesSheetContent(mapOf("green_chromis" to 22, "green_sea_turtle" to 1), 137, onRelease = { released += it }) }
         }
         compose.onNodeWithText("ʻAtoti").assertIsDisplayed()
         compose.onNodeWithText("Green chromis · Chromis viridis").assertIsDisplayed()
@@ -58,7 +58,7 @@ class ComponentsTest {
 
     @Test fun theSheetListsEveryCreatureByItsTahitianName() {
         val released = mutableListOf<String>()
-        compose.setContent { TairotoTheme { SpeciesSheetContent(mapOf("green_chromis" to 22), 22) { released += it } } }
+        compose.setContent { TairotoTheme { SpeciesSheetContent(mapOf("green_chromis" to 22), 22, onRelease = { released += it }) } }
         for (species in SpeciesCatalog.all) {
             compose.onNodeWithTag(SheetTags.release(species.id)).performScrollTo()
             compose.onNodeWithText(species.displayName).assertIsDisplayed()
@@ -70,7 +70,7 @@ class ComponentsTest {
     }
 
     @Test fun aFullTankDisablesRelease() {
-        compose.setContent { TairotoTheme { SpeciesSheetContent(mapOf("green_chromis" to 160), 0) {} } }
+        compose.setContent { TairotoTheme { SpeciesSheetContent(mapOf("green_chromis" to 160), 0, onRelease = {}) } }
         compose.onNodeWithText("The lagoon is full.").assertIsDisplayed()
         compose.onNodeWithTag(SheetTags.release("green_chromis")).assertIsNotEnabled()
         compose.onNodeWithTag(SheetTags.count("green_chromis")).assertTextEquals("160 in the lagoon")

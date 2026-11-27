@@ -32,6 +32,9 @@ layout(location = 8) in vec4 vAux;
 
 layout(location = 0) out vec4 outColor;
 
+/** The drawings drawn fish wear, one a layer (sRGB, so read here as linear). */
+layout(set = 0, binding = 1) uniform sampler2DArray skins;
+
 struct Lit {
     vec3 sun;
     vec3 ambient;
@@ -926,6 +929,33 @@ vec4 stone(Lit l, float caustic) {
     return finish(lit, decorAlpha(rho));
 }
 
+// ------------------------------------------------------------------ a drawn fish
+
+/**
+ * A fish someone coloured in: its drawing, cut out by the drawing's own
+ * alpha, lit as a rounded body. vAux.x is its layer, vAux.y which side shows
+ * (+1 as drawn, -1 its other side, mirrored, between them rolling over).
+ */
+vec4 drawnFish(Lit l, float caustic) {
+    float side = vAux.y;
+    float u = clamp(vUv.x, 0.0, 1.0);
+    float texV = 0.5 - 0.5 * vUv.y * (side >= 0.0 ? 1.0 : -1.0);
+    vec4 tex = vAux.z > 0.5 ? texture(skins, vec3(u, texV, vAux.x)) : vec4(0.9, 0.9, 0.88, step(abs(vUv.y), 0.6));
+    float aa = max(fwidth(tex.a) * 1.2, 0.04);
+    float cut = smoothstep(0.5 - aa, 0.5 + aa, tex.a);
+    if (cut <= 0.003) discard;
+    // Round across the body, flatter as it rolls edge on.
+    float v = vUv.y;
+    vec3 n = toWorld(vec3(0.0, v * 0.75 * abs(side), sqrt(max(1.0 - v * v * 0.6, 0.1))));
+    vec3 L = normalize(F.sun.xyz);
+    float ndl = max(dot(n, L), 0.0);
+    float spec = pow(max(dot(n, l.H), 0.0), 40.0) * 0.18;
+    vec3 albedo = tex.rgb * mix(0.65, 1.0, abs(side));
+    vec3 color = albedo * (l.ambient * 1.25 + l.sun * (0.25 + 0.75 * ndl)) + l.sun * spec;
+    float depthBlur = 0.02 + 0.28 * smoothstep(0.25, 1.0, vZ / F.tank.z);
+    return finish(color, cut * (1.0 - depthBlur * 0.5));
+}
+
 void main() {
     float depth = vZ / F.tank.z;
     float caustic = causticsAt(vWorld, timeS(), 1) * (1.0 - 0.55 * depth);
@@ -941,6 +971,7 @@ void main() {
         case 12: outColor = vPart == 1 ? coralTip(l, caustic) : coralBranch(l, caustic); break;
         case 13: outColor = giantClam(l, caustic); break;
         case 14: outColor = stone(l, caustic); break;
+        case 15: outColor = drawnFish(l, caustic); break;
         default: outColor = vPart == 0 ? fishBody(l, caustic) : fishFin(l, caustic); break;  // the schooling fish
     }
 }

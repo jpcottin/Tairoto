@@ -19,7 +19,7 @@ sealed interface Msg {
     data class Hello(val device: DeviceId, val screen: ScreenMm, val brings: Visitors? = null) : Msg
 
     @Serializable @SerialName("spawn")
-    data class Spawn(val creature: CreatureSpec, val owner: DeviceId) : Msg
+    data class Spawn(val creature: CreatureSpec, val owner: DeviceId, val skin: Skin? = null) : Msg
 
     @Serializable @SerialName("remove")
     data class Remove(val id: EntityId) : Msg
@@ -141,7 +141,12 @@ sealed interface Msg {
  * however it lies, with new ids.
  */
 @Serializable
-data class Visitors(val creatures: List<CreatureSpec> = emptyList(), val decor: List<DecorSpec> = emptyList()) {
+data class Visitors(
+    val creatures: List<CreatureSpec> = emptyList(),
+    val decor: List<DecorSpec> = emptyList(),
+    /** The drawings its drawn fish wear. */
+    val skins: List<Skin> = emptyList(),
+) {
     val isEmpty: Boolean get() = creatures.isEmpty() && decor.isEmpty()
 }
 

@@ -34,10 +34,11 @@ void World::setTank(const Tank& t) {
 }
 
 bool World::spawn(int64_t id, Visual visual, Locomotion loco, const SpeciesParams& sp, float length,
-                  uint32_t seed, Vec3 at, bool ghost) {
+                  uint32_t seed, Vec3 at, bool ghost, int skin) {
     if (find(id)) return false;
     Creature c;
     c.id = id;
+    c.skin = skin;
     c.visual = visual;
     c.loco = loco;
     c.sp = sp;

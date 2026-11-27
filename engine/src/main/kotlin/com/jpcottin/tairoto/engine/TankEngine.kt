@@ -7,6 +7,7 @@ import com.jpcottin.tairoto.world.DecorKind
 import com.jpcottin.tairoto.world.DecorSpec
 import com.jpcottin.tairoto.world.EntityId
 import com.jpcottin.tairoto.world.QualityTier
+import com.jpcottin.tairoto.world.Skin
 import com.jpcottin.tairoto.world.Species
 import com.jpcottin.tairoto.world.TankSize
 import com.jpcottin.tairoto.world.Vec2
@@ -31,8 +32,8 @@ interface TankEngine : Closeable {
     fun setSound(volume: Float) = Unit
     /** At most this many frames a second; 0 for as many as the display shows. */
     fun setMaxFps(fps: Int) = Unit
-    /** Adds a creature; a [ghost] is simulated by another device and only shown here. */
-    fun spawn(creature: CreatureSpec, species: Species, ghost: Boolean = false)
+    /** Adds a creature; a [ghost] is simulated by another device and only shown here. A drawn fish wears its [skin]. */
+    fun spawn(creature: CreatureSpec, species: Species, ghost: Boolean = false, skin: Skin? = null)
     fun remove(id: EntityId)
     fun clear()
     fun placeDecor(decor: DecorSpec, kind: DecorKind)

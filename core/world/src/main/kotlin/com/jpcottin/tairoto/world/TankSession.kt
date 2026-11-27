@@ -101,12 +101,31 @@ class TankSession(
         return n
     }
 
+    /**
+     * Releases a fish wearing a drawing near [around]. False when the lagoon
+     * is full, or already holds [TankScene.MAX_SKINS] drawn fish.
+     */
+    suspend fun addDrawn(skin: Skin, around: Vec2? = null): Boolean {
+        val cur = sceneState.value
+        if (cur.creatures.size + pendingSpawns.size >= TankScene.MAX_CREATURES) return false
+        if (cur.withSkin(skin) == null) return false
+        val released = Population.release(SpeciesCatalog.Drawn, 1, cur.size, ids, random, around).map { it.copy(skin = skin.id) }
+        skinsSeen[skin.id] = skin
+        spawnAll(released)
+        record(Edit.Released(released))
+        return true
+    }
+
+    /** Every drawing this session has held, so a drawn fish netted and put back still has its colours. */
+    private val skinsSeen = LinkedHashMap<String, Skin>()
+
     private suspend fun spawnAll(creatures: List<CreatureSpec>) {
         val room = (TankScene.MAX_CREATURES - sceneState.value.creatures.size - pendingSpawns.size).coerceAtLeast(0)
         creatures.take(room).forEach {
             if (sceneState.value.creature(it.id) != null) return@forEach
+            val skin = it.skin?.let { id -> sceneState.value.skin(id) ?: skinsSeen[id] ?: return@forEach }
             pendingSpawns += it.id
-            link.send(Msg.Spawn(it, owner = link.self))
+            link.send(Msg.Spawn(it, owner = link.self, skin = skin))
         }
     }
 
@@ -219,13 +238,21 @@ class TankSession(
         fun inside(p: Vec2, margin: Float) = Vec2(p.x.coerceIn(margin, size.widthMm - margin), p.y.coerceIn(margin, size.heightMm - margin))
         val roomC = (TankScene.MAX_CREATURES - cur.creatures.size - pendingSpawns.size).coerceAtLeast(0)
         val roomD = (TankScene.MAX_DECOR - cur.decor.size).coerceAtLeast(0)
-        val creatures = v.creatures.filter { SpeciesCatalog[it.speciesId] != null }.take(roomC).map {
+        // A drawn fish comes only with its drawing, and only while there is room for one more.
+        val brought = v.skins.filter { it.isIntact }.associateBy { it.id }
+        var withSkins = cur
+        val creatures = v.creatures.filter { SpeciesCatalog[it.speciesId] != null }.filter { c ->
+            val id = c.skin ?: return@filter true
+            val skin = brought[id] ?: return@filter false
+            withSkins.withSkin(skin)?.let { withSkins = it.copy(creatures = it.creatures + c) } != null
+        }.take(roomC).map {
             it.copy(id = ids.allocate(), spawnAt = inside(place(it.spawnAt), 2f), home = home.slot)
         }
         val decor = v.decor.filter { DecorCatalog[it.kindId] != null }.take(roomD).map {
             it.copy(id = ids.allocate(), at = inside(place(it.at), 0f), angle = it.angle + turnRad, home = home.slot)
         }
-        return Visitors(creatures, decor)
+        val worn = creatures.mapNotNullTo(HashSet()) { it.skin }
+        return Visitors(creatures, decor, brought.values.filter { it.id in worn && cur.skin(it.id) == null })
     }
 
     /** Starts over with the default population and floor. Nothing before it can be undone. */
@@ -250,8 +277,14 @@ class TankSession(
                 if (cur.creatures.any { it.id == m.creature.id }) return
                 if (SpeciesCatalog[m.creature.speciesId] == null) return
                 if (cur.creatures.size >= TankScene.MAX_CREATURES) return
+                // A drawn fish needs its drawing: the lagoon's, or the one that came with it.
+                val withSkin = m.creature.skin?.let { id ->
+                    val skin = cur.skin(id) ?: m.skin?.takeIf { it.id == id && it.isIntact } ?: return
+                    skinsSeen[id] = skin
+                    cur.withSkin(skin) ?: return
+                } ?: cur
                 registry.register(m.creature.id, m.owner)
-                sceneState.value = cur.copy(creatures = cur.creatures + m.creature)
+                sceneState.value = withSkin.copy(creatures = withSkin.creatures + m.creature)
             }
             is Msg.Remove -> {
                 val cur = sceneState.value

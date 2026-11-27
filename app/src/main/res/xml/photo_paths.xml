@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Photos of a coloured-in page, taken by the camera app into the app's cache and read back. -->
+<paths>
+    <cache-path name="photos" path="photos/" />
+</paths>

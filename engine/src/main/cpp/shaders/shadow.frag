@@ -11,6 +11,9 @@ layout(location = 5) in vec4 vAux;
 
 layout(location = 0) out vec4 outColor;
 
+/** The drawings drawn fish wear: their shadow is their outline. */
+layout(set = 0, binding = 1) uniform sampler2DArray skins;
+
 /** How dark each part's shadow is: thin fins and antennae let most light by. */
 float strengthOf(int visual, int part) {
     if (visual == 2) return 0.3;                                  // food
@@ -25,6 +28,7 @@ float strengthOf(int visual, int part) {
     if (visual == 11 || visual == 14) return 0.6;                 // coral head, stone
     if (visual == 12) return 0.5;                                 // branching coral, light between the branches
     if (visual == 13) return 0.45;                                // giant clam
+    if (visual == 15) return 0.55;                                // a drawn fish
     if (part == 0 || part == 10) return 0.62;                     // body, shell
     if (part == 11 || part == 12) return 0.55;                    // head, flippers
     if (part == 1) return 0.18;                                   // tail fin
@@ -40,6 +44,12 @@ void main() {
     float soft = clamp(0.45 + vHeight * 0.6, 0.45, 0.98);
     if (vVisual == 6) soft = 0.9;
     float a = (1.0 - smoothstep(1.0 - soft, 1.0, edge)) * strength * mix(0.9, 0.35, vHeight);
+    if (vVisual == 15) {
+        // A drawn fish: its drawing's outline, blurred by height.
+        float texV = 0.5 - 0.5 * vUv.y * (vAux.y >= 0.0 ? 1.0 : -1.0);
+        float cover = vAux.z > 0.5 ? texture(skins, vec3(clamp(vUv.x, 0.0, 1.0), texV, vAux.x)).a : step(abs(vUv.y), 0.6);
+        a = smoothstep(0.5 - soft * 0.5, 0.5 + soft * 0.5, cover) * strength * mix(0.9, 0.35, vHeight);
+    }
     // Blending multiplies the sand by (1 - a).
     outColor = vec4(0.0, 0.0, 0.0, a);
 }

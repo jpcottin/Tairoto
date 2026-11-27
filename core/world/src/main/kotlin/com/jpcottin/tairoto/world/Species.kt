@@ -407,12 +407,47 @@ object SpeciesCatalog {
         addBatch = 1,
     )
 
+    /**
+     * A fish someone coloured in on the printed page and scanned: it wears its
+     * drawing ([CreatureSpec.skin]) and swims like a calm lagoon fish. Not in
+     * [all]: it is never released from the list, only from a drawing.
+     */
+    val Drawn = Species(
+        id = "drawn_fish",
+        tahitianName = null,
+        commonName = "Your fish",
+        scientificName = "Piscis pictus",
+        description = "A fish you coloured in yourself, swimming with the others.",
+        tankType = TankType.REEF,
+        locomotion = Locomotion.SWIM,
+        visualId = 15,
+        lengthMm = 36f..42f,
+        cruiseBodyLengthsPerS = 0.75f,
+        burstBodyLengthsPerS = 3.2f,
+        // Near the top, where the water blurs it least.
+        depthBand = 0.12f..0.45f,
+        schooling = 0.25f,
+        shyness = 0.3f,
+        turnRateRadPerS = 2.0f,
+        // Drawn from the side, shown from above: as wide as the page's outline, half its length.
+        bodyWidth = 0.5f,
+        tailBeatHz = 1.7f,
+        smell = 1f,
+        biteMg = 0.9f,
+        messiness = 0.35f,
+        stomachMg = 10f,
+        hungerPerSecond = 1f / 170f,
+        bottomFeeder = false,
+        defaultCount = 0,
+        addBatch = 1,
+    )
+
     val all: List<Species> = listOf(
         GreenChromis, ConvictSurgeonfish, BluestripeSnapper, YellowstripeGoatfish, ScissortailSergeant,
         GreenSeaTurtle, SpottedEagleRay, DayOctopus, HermitCrab,
     )
 
-    private val byId = all.associateBy { it.id }
+    private val byId = (all + Drawn).associateBy { it.id }
 
     operator fun get(id: String): Species? = byId[id]
 

@@ -58,7 +58,7 @@ public:
 
     /** Adds a creature at a point; false if the id is taken. A ghost is simulated by another device. */
     bool spawn(int64_t id, Visual visual, Locomotion loco, const SpeciesParams& sp, float length,
-               uint32_t seed, Vec3 at, bool ghost = false);
+               uint32_t seed, Vec3 at, bool ghost = false, int skin = -1);
     bool remove(int64_t id);
     void clear() { creatures_.clear(); }
 

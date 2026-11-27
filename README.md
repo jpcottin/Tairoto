@@ -64,6 +64,10 @@ source is noted next to each species in `Species.kt`.
   and tap a creature to scoop it out. Every change can be undone and redone
   (a whole drag is one change; undoing a netted creature puts it back where
   it was caught).
+- **Draw your own fish**: print a fish outline from the picker (Creatures tab,
+  "Draw your own fish"), colour it in, and photograph it. The app finds the
+  page by its four corner squares, straightens it, and the fish swims in the
+  lagoon wearing the drawing (see [Draw your own fish](#draw-your-own-fish)).
 - **The lagoon is kept**: saved a moment after every change and when the app
   goes to the background, every creature where it is at that moment, and
   restored at the next launch (a versioned file that tolerates damage and
@@ -118,6 +122,36 @@ source is noted next to each species in `Species.kt`.
   device on a local network.
 - **Compose app**: full-bleed tank, glass HUD, creature picker with drawn
   species portraits, settings (Navigation 3, DataStore).
+
+## Draw your own fish
+
+<p align="center">
+  <img src="docs/media/drawn-page.jpg" height="300" alt="A coloured-in fish page lying on a table, photographed at an angle">
+  &nbsp;
+  <img src="docs/media/drawn-scan.jpg" height="300" alt="The app shows the fish cut out of the photo, ready to swim">
+  &nbsp;
+  <img src="docs/media/drawn-fish.jpg" height="300" alt="The drawn fish swimming over a coral head among the chromis">
+</p>
+
+1. **Print the page**: an A4 page (Letter works too) with a fish outline and a
+   black square in each corner, the top-left one hollow. It goes through the
+   system's printing, so it can also be saved as a PDF.
+2. **Colour it in** with anything bright, keeping the four squares clean.
+3. **Take a photo** with the camera app, or choose one. The scanner
+   (`PageScanner.kt`, plain Kotlin) finds the squares as dark blobs against
+   their surroundings, so uneven light does not matter. The hollow square
+   tells it which way up the page is, whichever way the phone was held. It
+   straightens the page with a homography, reads the paper's own white as
+   white, and cuts the fish out along the printed outline.
+4. **Let it swim**: the drawing becomes a 128 × 64 skin, a few kilobytes. It
+   is saved with the lagoon, sent to the other screens of a shared lagoon,
+   and brought along by a guest. In the engine, drawings sit in a texture
+   array, up to 16 in a lagoon. A drawn fish is one ribbon wearing its
+   drawing. When it turns to swim the other way, it rolls over to show its
+   other side rather than swim upside down.
+
+The page photo above is made up for the tests (`PagePhotos.kt`); the other two
+pictures are the app on an emulator scanning it.
 
 ## Build and test
 

@@ -119,12 +119,22 @@ JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSpawn(J
                                                                                jint visual, jint loco,
                                                                                jfloatArray params, jfloat length,
                                                                                jint seed, jfloat x, jfloat y, jfloat z,
-                                                                               jboolean ghost) {
+                                                                               jboolean ghost, jint skin) {
     jsize n = env->GetArrayLength(params);
     jfloat* p = env->GetFloatArrayElements(params, nullptr);
     SpeciesParams sp = SpeciesParams::fromArray(p, n);
     env->ReleaseFloatArrayElements(params, p, JNI_ABORT);
-    engine(h)->spawn(id, (Visual)visual, (Locomotion)loco, sp, length, (uint32_t)seed, Vec3(x, y, z), ghost);
+    engine(h)->spawn(id, (Visual)visual, (Locomotion)loco, sp, length, (uint32_t)seed, Vec3(x, y, z), ghost, skin);
+}
+
+/** A drawing for drawn fish to wear, into one layer of the renderer's drawings. */
+JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetSkin(JNIEnv* env, jclass, jlong h, jint layer,
+                                                                                 jbyteArray rgba) {
+    jsize n = env->GetArrayLength(rgba);
+    if (n != (jsize)Renderer::kSkinBytes) return;
+    std::vector<uint8_t> px((size_t)n);
+    env->GetByteArrayRegion(rgba, 0, n, reinterpret_cast<jbyte*>(px.data()));
+    engine(h)->setSkin(layer, std::move(px));
 }
 
 JNIEXPORT void JNICALL Java_com_jpcottin_tairoto_engine_NativeTank_nativeSetFoodSlot(JNIEnv*, jclass, jlong h, jint slot) {

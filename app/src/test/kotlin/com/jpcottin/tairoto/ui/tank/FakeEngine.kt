@@ -15,6 +15,7 @@ import com.jpcottin.tairoto.world.NetCreature
 import com.jpcottin.tairoto.world.QualityTier
 import com.jpcottin.tairoto.world.SimInput
 import com.jpcottin.tairoto.world.SimOutput
+import com.jpcottin.tairoto.world.Skin
 import com.jpcottin.tairoto.world.Species
 import com.jpcottin.tairoto.world.TankSize
 import com.jpcottin.tairoto.world.Vec2
@@ -45,8 +46,11 @@ class FakeEngine : TankEngine {
     override fun setDeterministic(on: Boolean, seed: Long) { deterministic = on to seed }
     var paused: Boolean? = null
     override fun setPaused(paused: Boolean) { this.paused = paused }
-    override fun spawn(creature: CreatureSpec, species: Species, ghost: Boolean) {
+    /** The drawing each drawn fish was handed, by creature. */
+    val skins = HashMap<EntityId, Skin>()
+    override fun spawn(creature: CreatureSpec, species: Species, ghost: Boolean, skin: Skin?) {
         creatures[creature.id] = creature
+        if (skin != null) skins[creature.id] = skin else skins -= creature.id
         if (ghost) ghosts += creature.id else ghosts -= creature.id
     }
     override fun remove(id: EntityId) { creatures.remove(id); ghosts -= id }
