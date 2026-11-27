@@ -115,11 +115,11 @@ jobs:
           PORT=5554 LOG="$RUNNER_TEMP/emulator-a.log" scripts/ci-emulator.sh
           AVD=Tairoto_CI2 PORT=5556 LOG="$RUNNER_TEMP/emulator-b.log" scripts/ci-emulator.sh
       - name: A finger swiped across both lays them side by side
-        run: SERIALS="emulator-5554 emulator-5556" QUALITY=low FPS=20 scripts/arrange-e2e.sh
+        run: SERIALS="emulator-5554 emulator-5556" QUALITY=low FPS=10 scripts/arrange-e2e.sh
       - name: Fish change hands through the relay, never simulated twice, no food lost
-        run: SERIALS="emulator-5554 emulator-5556" QUALITY=low FPS=20 FRENZY=30 scripts/share-e2e.sh
+        run: SERIALS="emulator-5554 emulator-5556" QUALITY=low FPS=10 FRENZY=30 scripts/share-e2e.sh
       - name: The same over emulated Bluetooth (netsim)
-        run: SERIALS="emulator-5554 emulator-5556" QUALITY=low FPS=20 FRENZY=30 VIA=bluetooth scripts/share-e2e.sh
+        run: SERIALS="emulator-5554 emulator-5556" QUALITY=low FPS=10 FRENZY=30 VIA=bluetooth scripts/share-e2e.sh
       - name: Keep the logs and screenshots
         if: always()
         uses: actions/upload-artifact@v4
