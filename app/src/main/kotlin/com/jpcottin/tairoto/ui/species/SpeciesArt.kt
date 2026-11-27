@@ -39,6 +39,8 @@ fun SpeciesArt(speciesId: String, modifier: Modifier = Modifier) {
             SpeciesCatalog.BluestripeSnapper.id -> drawSchool(FishArt.Taape)
             SpeciesCatalog.YellowstripeGoatfish.id -> drawSchool(FishArt.Ouma)
             SpeciesCatalog.ScissortailSergeant.id -> drawSchool(FishArt.Mamo)
+            SpeciesCatalog.RaccoonButterflyfish.id -> drawPair()
+            SpeciesCatalog.BlacktipReefShark.id -> drawShark()
             else -> drawChromisTrio()
         }
     }
@@ -190,6 +192,66 @@ private enum class FishArt(
     Taape(Color(0xFFE6BC40), Color(0xFFFADB5C), Color(0xDDF5CF48), 0.2f, stripe = Color(0xFF3D7DF0)),
     Ouma(Color(0xFF8E9184), Color(0xFFEDEDE5), Color(0xCCF2E6A0), 0.17f, stripe = Color(0xFFF7CF3A)),
     Mamo(Color(0xFFAABB98), Color(0xFFE5EDE0), Color(0xCCE5EDE0), 0.24f, listOf(0.24f, 0.4f, 0.56f, 0.72f, 0.86f), 0.07f),
+    Paraharaha(Color(0xFFDB9E24), Color(0xFFFAD133), Color(0xDDF8CC38), 0.2f, listOf(0.1f), 0.07f),
+}
+
+/** Paraharaha go two by two: the black mask, and the white band behind it. */
+private fun DrawScope.drawPair() {
+    val s = size.minDimension
+    for ((c, a) in listOf(Offset(s * 0.42f, s * 0.4f) to -24f, Offset(s * 0.6f, s * 0.62f) to -18f)) {
+        drawFish(FishArt.Paraharaha, c, s * 0.46f, a)
+        rotate(a, c) {
+            val x = c.x + s * 0.46f * (0.42f - 0.8f * 0.18f)
+            drawLine(Color(0xFFF4F2E8), Offset(x, c.y - s * 0.075f), Offset(x, c.y + s * 0.075f), strokeWidth = s * 0.022f)
+        }
+    }
+}
+
+/** A blacktip reef shark from above: a long grey body, swept fins, black tips. */
+private fun DrawScope.drawShark() {
+    val s = size.minDimension
+    rotate(-32f, Offset(s / 2f, s / 2f)) {
+        translate(s / 2f, s / 2f) {
+            val len = s * 0.86f
+            val w = len * 0.075f
+            val grey = Color(0xFF7D786A)
+            val tip = Color(0xFF111111)
+            // Pectoral fins, swept back, tipped black.
+            for (side in listOf(-1f, 1f)) {
+                val fin = Path().apply {
+                    moveTo(len * 0.18f, side * w * 0.8f)
+                    lineTo(-len * 0.02f, side * w * 3.4f)
+                    lineTo(len * 0.04f, side * w * 0.9f)
+                    close()
+                }
+                drawPath(fin, grey)
+                drawCircle(tip, radius = w * 0.45f, center = Offset(-len * 0.0f, side * w * 3.1f))
+            }
+            // The tail: a long upper lobe.
+            val tail = Path().apply {
+                moveTo(-len * 0.36f, 0f)
+                lineTo(-len * 0.56f, -w * 1.6f)
+                lineTo(-len * 0.48f, 0f)
+                lineTo(-len * 0.52f, w * 1.1f)
+                close()
+            }
+            drawPath(tail, grey)
+            drawCircle(tip, radius = w * 0.4f, center = Offset(-len * 0.545f, -w * 1.45f))
+            val body = Path().apply {
+                moveTo(len * 0.44f, 0f)
+                cubicTo(len * 0.36f, -w * 1.1f, len * 0.05f, -w * 1.2f, -len * 0.38f, -w * 0.25f)
+                lineTo(-len * 0.38f, w * 0.25f)
+                cubicTo(len * 0.05f, w * 1.2f, len * 0.36f, w * 1.1f, len * 0.44f, 0f)
+                close()
+            }
+            drawPath(body, Brush.verticalGradient(listOf(Color(0xFFA7A291), Color(0xFF6E6A5C), Color(0xFFA7A291)), startY = -w, endY = w))
+            // The dorsal fin seen from above: a dark ridge, its tip black.
+            drawLine(Color(0xFF5E5A4E), Offset(len * 0.08f, 0f), Offset(-len * 0.06f, 0f), strokeWidth = w * 0.5f)
+            drawCircle(tip, radius = w * 0.28f, center = Offset(-len * 0.06f, 0f))
+            drawCircle(Color(0xFF0B0F0F), radius = w * 0.16f, center = Offset(len * 0.33f, -w * 0.6f))
+            drawCircle(Color(0xFF0B0F0F), radius = w * 0.16f, center = Offset(len * 0.33f, w * 0.6f))
+        }
+    }
 }
 
 private fun DrawScope.drawFish(art: FishArt, center: Offset, length: Float, angleDeg: Float) {

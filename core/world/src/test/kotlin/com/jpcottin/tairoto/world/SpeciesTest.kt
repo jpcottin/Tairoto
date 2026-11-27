@@ -93,7 +93,7 @@ class SpeciesTest {
         assertEquals(listOf(0, 1, 2, 3, 4), Locomotion.entries.map { it.nativeId })
         // Visual 2 is food on the native side.
         assertTrue(SpeciesCatalog.all.none { it.visualId == 2 })
-        assertEquals(setOf(0, 1, 3, 4, 5, 7, 8, 9, 10), SpeciesCatalog.all.map { it.visualId }.toSet())
+        assertEquals(setOf(0, 1, 3, 4, 5, 7, 8, 9, 10, 16, 17), SpeciesCatalog.all.map { it.visualId }.toSet())
         // 6 is the clouds of sand and ink.
         assertTrue(SpeciesCatalog.all.none { it.visualId == 6 })
     }

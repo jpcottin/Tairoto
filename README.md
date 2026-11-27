@@ -45,7 +45,8 @@ source is noted next to each species in `Species.kt`.
 - **The creatures of the lagoon**, each by its Tahitian name (sources in `Species.kt`):
   five schools of small fish — ʻatoti (green chromis), manini (convict surgeonfish),
   taape (bluestripe snapper), ʻouma (yellowstripe goatfish, with its barbels) and
-  mamo (scissortail sergeant) — the honu (green sea turtle), the fai manu
+  mamo (scissortail sergeant) — a pair of paraharaha (raccoon butterflyfish),
+  a maʻo mauri (blacktip reef shark) on its slow patrol, the honu (green sea turtle), the fai manu
   (ocellated eagle ray) that flaps, glides and buries itself in the sand, the feʻe
   (day octopus) that walks on soft arms, camouflages, inks and jets away, and the
   uʻa (hermit crab) that steps on planted feet and hides in its shell.

@@ -75,6 +75,8 @@ float MeshBuilder::fishProfile(Visual v, float t) {
         case Visual::BluestripeSnapper: widest = 0.36f; snout = 0.75f; peduncle = 0.22f; break;  // a pointed head
         case Visual::YellowstripeGoatfish: widest = 0.32f; snout = 1.6f; peduncle = 0.2f; break;  // long sloping snout
         case Visual::ScissortailSergeant: widest = 0.35f; snout = 0.6f; peduncle = 0.22f; break;
+        case Visual::RaccoonButterflyfish: widest = 0.42f; snout = 0.45f; peduncle = 0.32f; break;  // a disc on edge, a little snout
+        case Visual::BlacktipReefShark: widest = 0.3f; snout = 1.5f; peduncle = 0.14f; break;      // a long pointed head
         default: return chromisProfile(t);
     }
     t = saturate(t);
@@ -298,11 +300,14 @@ void MeshBuilder::fish(const Creature& c, Mesh& m) {
             const int rows = 3;
             Vec2 cl[rows];
             float hw[rows], uu[rows], fr[rows];
-            float finLen = L * 0.17f;
+            // A shark's pectorals are wings: long, broad at the root, swept back, barely moving.
+            const bool shark = c.visual == Visual::BlacktipReefShark;
+            float finLen = L * (shark ? 0.2f : 0.17f);
+            if (shark) out = rotate(perp(dir) * (float)side, (float)side * 0.75f);
             for (int r = 0; r < rows; r++) {
                 float t = (float)r / (rows - 1);
                 cl[r] = root + out * (finLen * t);
-                hw[r] = L * 0.045f * (r == 0 ? 0.6f : (r == 1 ? 1.0f : 0.55f));
+                hw[r] = L * (shark ? 0.05f : 0.045f) * (r == 0 ? (shark ? 1.0f : 0.6f) : (r == 1 ? 1.0f : (shark ? 0.3f : 0.55f)));
                 uu[r] = t;
                 fr[r] = angleOf(out);
             }
@@ -326,7 +331,8 @@ void MeshBuilder::fish(const Creature& c, Mesh& m) {
                 p += fromAngle(ang) * (finLen / (rows - 1));
             }
             cl[r] = p;
-            hw[r] = lerp(half[kJ - 1] * 0.9f, L * 0.15f, std::pow(t, 0.75f));
+            // A shark's tail, seen from above, is a narrow blade (its lobes stand up and down).
+            hw[r] = lerp(half[kJ - 1] * 0.9f, L * (c.visual == Visual::BlacktipReefShark ? 0.06f : 0.15f), std::pow(t, 0.75f));
             uu[r] = t;
             fr[r] = ang + kPi;  // keep the frame pointing forward like the body
         }
