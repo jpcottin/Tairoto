@@ -34,7 +34,7 @@ data class SavedLagoon(val version: Int = VERSION, val scene: TankScene) {
             encodeDefaults = true
         }
 
-        fun encode(scene: TankScene): String = json.encodeToString(serializer(), SavedLagoon(VERSION, scene))
+        fun encode(scene: TankScene): String = json.encodeToString(serializer(), SavedLagoon(VERSION, scene.withoutUnusedSkins()))
 
         fun decode(text: String): TankScene? {
             val saved = try {
@@ -45,10 +45,15 @@ data class SavedLagoon(val version: Int = VERSION, val scene: TankScene) {
             }
             if (saved.version > VERSION || saved.version < 1) return null
             val s = saved.scene
-            val creatures = s.creatures.filter { SpeciesCatalog[it.speciesId] != null }.distinctBy { it.id }
+            // A drawing that does not match its id (damaged) is dropped, and the fish that wore it.
+            val skins = s.skins.distinctBy { it.id }.filter { it.isIntact }.take(TankScene.MAX_SKINS)
+            val skinIds = skins.mapTo(HashSet()) { it.id }
+            val creatures = s.creatures.filter { SpeciesCatalog[it.speciesId] != null }
+                .filter { it.skin == null || it.skin in skinIds }
+                .distinctBy { it.id }
                 .take(TankScene.MAX_CREATURES)
             val decor = s.decor.filter { DecorCatalog[it.kindId] != null }.distinctBy { it.id }.take(TankScene.MAX_DECOR)
-            return s.copy(creatures = creatures, decor = decor)
+            return s.copy(creatures = creatures, decor = decor, skins = skins).withoutUnusedSkins()
         }
     }
 }

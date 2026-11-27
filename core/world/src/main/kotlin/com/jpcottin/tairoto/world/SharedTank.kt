@@ -419,10 +419,12 @@ class SharedTank(
         val places = HashMap<EntityId, CreaturePlace>()
         for ((id, st) in lastState) places[id] = CreaturePlace(st.first.at, st.first.z)
         for (st in lastOwned) places[st.id] = CreaturePlace(st.at, st.z)
-        val scene = session.scene.value.withPlaces(places).let { it.copy(creatures = it.creatures + visitors.creatures, decor = it.decor + visitors.decor) }
+        val scene = session.scene.value.withPlaces(places).withoutUnusedSkins().let {
+            it.copy(creatures = it.creatures + visitors.creatures, decor = it.decor + visitors.decor, skins = it.skins + visitors.skins)
+        }
         send(Msg.Join(scene, ownersSnapshot() + visitors.creatures.map { OwnerEntry(it.id, device, 0) }, next, now()), device)
         // Everyone else (and this device) hears of them as of anything new.
-        for (c in visitors.creatures) broadcast(Msg.Spawn(c, device))
+        for (c in visitors.creatures) broadcast(Msg.Spawn(c, device, visitors.skins.firstOrNull { it.id == c.skin }))
         for (d in visitors.decor) broadcast(Msg.PlaceDecor(d))
         publishStatus()
     }
