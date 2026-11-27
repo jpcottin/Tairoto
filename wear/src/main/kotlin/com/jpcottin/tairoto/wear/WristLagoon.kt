@@ -5,6 +5,7 @@ import com.jpcottin.tairoto.engine.SceneSync
 import com.jpcottin.tairoto.engine.TankEngine
 import com.jpcottin.tairoto.world.Camera
 import com.jpcottin.tairoto.world.CreaturePlace
+import com.jpcottin.tairoto.world.DayCycle
 import com.jpcottin.tairoto.world.DecorCatalog
 import com.jpcottin.tairoto.world.EntityIdAllocator
 import com.jpcottin.tairoto.world.Population
@@ -29,6 +30,8 @@ class WristLagoon(
     /** The lagoon kept from last time, if any. */
     saved: TankScene? = null,
     private val random: Random = Random.Default,
+    /** The hour where the watch is: its lagoon has the light of the time of day. */
+    private val localHours: () -> Float = { java.time.LocalTime.now().let { it.hour + it.minute / 60f } },
 ) {
     private val sync = SceneSync(engine)
     var scene: TankScene? = saved
@@ -47,6 +50,7 @@ class WristLagoon(
         viewport = vp
         val sc = scene ?: starter(TankSize.forScreen(screen, areaFactor = AREA_FACTOR), random).also { scene = it }
         engine.setQuality(QualityTier.LOW)
+        engine.setDaylight(DayCycle.at(localHours()))
         sync.apply(sc)
         // Life size, a fish would fill a watch: it starts zoomed out, and the crown brings them close.
         camera = (camera ?: Camera.initial(vp, sc.size).zoomedAbout(vp.center, START_ZOOM, vp, sc.size)).clamped(vp, sc.size)
@@ -102,7 +106,10 @@ class WristLagoon(
         return sc.withPlaces(places).also { scene = it }
     }
 
-    fun resume() = engine.setPaused(false)
+    fun resume() {
+        engine.setDaylight(DayCycle.at(localHours()))
+        engine.setPaused(false)
+    }
 
     private fun toWater(px: Vec2): Vec2? {
         val vp = viewport ?: return null

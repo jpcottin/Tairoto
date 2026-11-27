@@ -188,6 +188,7 @@ fun TairotoNavigation(vm: TankViewModel) {
                         showStats = state.showStats,
                         sound = state.sound,
                         soundVolume = state.soundVolume,
+                        timeOfDay = state.timeOfDay,
                         soundUnavailable = state.sound && state.stats.audio == com.jpcottin.tairoto.engine.AudioState.UNAVAILABLE,
                         creatures = state.total,
                         gpu = state.gpu,
@@ -204,6 +205,7 @@ fun TairotoNavigation(vm: TankViewModel) {
                             override fun setOn(on: Boolean) = vm.setSound(on)
                             override fun preview(volume: Float) = vm.previewSoundVolume(volume)
                             override fun setVolume(volume: Float) = vm.setSoundVolume(volume)
+                            override fun setTimeOfDay(time: com.jpcottin.tairoto.world.TimeOfDay) = vm.setTimeOfDay(time)
                         }
                     },
                     ambient = androidx.compose.ui.platform.LocalContext.current.let { context ->

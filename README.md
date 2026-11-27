@@ -45,7 +45,8 @@ source is noted next to each species in `Species.kt`.
 - **The creatures of the lagoon**, each by its Tahitian name (sources in `Species.kt`):
   five schools of small fish — ʻatoti (green chromis), manini (convict surgeonfish),
   taape (bluestripe snapper), ʻouma (yellowstripe goatfish, with its barbels) and
-  mamo (scissortail sergeant) — the honu (green sea turtle), the fai manu
+  mamo (scissortail sergeant) — a pair of paraharaha (raccoon butterflyfish),
+  a maʻo mauri (blacktip reef shark) on its slow patrol, the honu (green sea turtle), the fai manu
   (ocellated eagle ray) that flaps, glides and buries itself in the sand, the feʻe
   (day octopus) that walks on soft arms, camouflages, inks and jets away, and the
   uʻa (hermit crab) that steps on planted feet and hides in its shell.
@@ -122,6 +123,19 @@ source is noted next to each species in `Species.kt`.
   device on a local network.
 - **Compose app**: full-bleed tank, glass HUD, creature picker with drawn
   species portraits, settings (Navigation 3, DataStore).
+
+## Day and night
+
+<p align="center">
+  <img src="docs/media/night.jpg" width="270" alt="The lagoon at night: moonlit blue, and specks of glowing plankton along a ring where the glass was tapped">
+</p>
+
+The lagoon has the light of the hour where you are (Settings, *Time of day*):
+full sun by day, the gold of a low sun at dawn and dusk, moonlight at night.
+As in Tahiti, the sun rises and sets around six, and quickly. At night the
+plankton glows where you touch the water. *Always day* and *Always night*
+fix the light whatever the hour. The wallpaper, the screensaver and the watch
+follow the clock too, and test runs are always at noon.
 
 ## Draw your own fish
 

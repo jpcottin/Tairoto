@@ -1,5 +1,6 @@
 package com.jpcottin.tairoto
 
+import com.jpcottin.tairoto.world.TimeOfDay
 import android.content.Intent
 import com.jpcottin.tairoto.world.QualityTier
 
@@ -35,6 +36,8 @@ data class LaunchOptions(
     val arrange: Boolean = false,
     /** The sound's volume whatever the settings say (0 silent); a CI run is silent unless asked. */
     val sound: Float? = null,
+    /** The light whatever the settings say; a CI run is always at noon, so frames compare. */
+    val timeOfDay: TimeOfDay? = null,
     /** At most this many frames a second (tests on machines drawing in software). */
     val maxFps: Int? = null,
 ) {
@@ -63,6 +66,8 @@ data class LaunchOptions(
         const val TRACE = "tairoto.trace"
         const val ARRANGE = "tairoto.arrange"
         const val SOUND = "tairoto.sound"
+        /** "local", "day" or "night". */
+        const val TIME = "tairoto.time"
         const val FPS = "tairoto.fps"
 
         /** Reads `kind:count,kind:count` of decorations; unknown or malformed entries are skipped. */
@@ -108,6 +113,7 @@ data class LaunchOptions(
                 arrange = intent.getBooleanExtra(ARRANGE, false),
                 maxFps = if (intent.hasExtra(FPS)) intent.getIntExtra(FPS, 0).takeIf { it in 1..240 } else null,
                 sound = if (intent.hasExtra(SOUND)) intent.getFloatExtra(SOUND, 0f).coerceIn(0f, 1f) else if (ci) 0f else null,
+                timeOfDay = TimeOfDay.parse(intent.getStringExtra(TIME)) ?: if (ci) TimeOfDay.DAY else null,
             )
         }
     }

@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.jpcottin.tairoto.world.QualityMode
 import com.jpcottin.tairoto.world.QualityTier
+import com.jpcottin.tairoto.world.TimeOfDay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -21,6 +22,8 @@ data class AppSettings(
     val sound: Boolean = true,
     /** 0..1, under the device's own media volume. */
     val soundVolume: Float = DEFAULT_SOUND_VOLUME,
+    /** The lagoon's light: the local time of day, or always day, or always night. */
+    val timeOfDay: TimeOfDay = TimeOfDay.LOCAL,
 ) {
     companion object {
         const val DEFAULT_SOUND_VOLUME = 0.7f
@@ -34,6 +37,7 @@ interface SettingsStore {
     suspend fun setShowStats(show: Boolean)
     suspend fun setSound(on: Boolean)
     suspend fun setSoundVolume(volume: Float)
+    suspend fun setTimeOfDay(time: TimeOfDay)
 }
 
 /** "auto", "low", "high", "ultra": how a quality mode is written down. */
@@ -58,6 +62,7 @@ class DataStoreSettings(context: Context) : SettingsStore {
     private val statsKey = booleanPreferencesKey("show_stats")
     private val soundKey = booleanPreferencesKey("sound")
     private val volumeKey = floatPreferencesKey("sound_volume")
+    private val timeKey = stringPreferencesKey("time_of_day")
 
     override val settings: Flow<AppSettings> = store.data.map {
         AppSettings(
@@ -65,7 +70,12 @@ class DataStoreSettings(context: Context) : SettingsStore {
             showStats = it[statsKey] ?: false,
             sound = it[soundKey] ?: true,
             soundVolume = (it[volumeKey] ?: AppSettings.DEFAULT_SOUND_VOLUME).coerceIn(0f, 1f),
+            timeOfDay = TimeOfDay.parse(it[timeKey]) ?: TimeOfDay.LOCAL,
         )
+    }
+
+    override suspend fun setTimeOfDay(time: TimeOfDay) {
+        store.edit { it[timeKey] = time.name.lowercase() }
     }
 
     override suspend fun setSound(on: Boolean) {
@@ -99,5 +109,8 @@ class InMemorySettings(initial: AppSettings = AppSettings()) : SettingsStore {
     }
     override suspend fun setSoundVolume(volume: Float) {
         state.value = state.value.copy(soundVolume = volume.coerceIn(0f, 1f))
+    }
+    override suspend fun setTimeOfDay(time: TimeOfDay) {
+        state.value = state.value.copy(timeOfDay = time)
     }
 }

@@ -26,6 +26,7 @@ class LagoonDreamService : DreamService() {
         val p = LagoonPlayer(
             NativeTank(), FileLagoonStore(applicationContext.filesDir), s, drift = true,
             clockS = { SystemClock.uptimeMillis() / 1000.0 },
+                daylight = { settingsDaylight(applicationContext) },
         )
         player = p
         val view = SurfaceView(this)

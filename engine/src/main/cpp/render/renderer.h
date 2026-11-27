@@ -33,6 +33,8 @@ struct FrameInput {
     const Mesh* mesh = nullptr;
     const Ripple* ripples = nullptr;  // kMaxRipples of them
     Vec2 tilt;
+    float light = 1;   // 0 under the moon .. 1 full day
+    float warmth = 0;  // the gold of a low sun, 0 .. 1
 };
 
 class Renderer {

@@ -407,6 +407,69 @@ object SpeciesCatalog {
         addBatch = 1,
     )
 
+    val RaccoonButterflyfish = Species(
+        id = "raccoon_butterflyfish",
+        // Tetiaroa Society (raccoon butterflyfish, paraharaha); paraharaha names the butterflyfish in general
+        // (GBIF, Chaetodon quadrimaculatus; Bishop Museum, Cook Islands database, for several Chaetodon).
+        tahitianName = "Paraharaha",
+        commonName = "Raccoon butterflyfish",
+        scientificName = "Chaetodon lunula",
+        description = "Golden yellow, with a black mask through the eye and a white band behind it, like a " +
+            "raccoon. Paraharaha go two by two among the coral heads, picking at them, and are busiest at dusk.",
+        tankType = TankType.REEF,
+        locomotion = Locomotion.SWIM,
+        visualId = 16,
+        lengthMm = 24f..30f,
+        cruiseBodyLengthsPerS = 0.8f,
+        burstBodyLengthsPerS = 3.5f,
+        depthBand = 0.3f..0.65f,
+        schooling = 0.45f,
+        shyness = 0.55f,
+        turnRateRadPerS = 3.2f,
+        // A disc on edge: seen from above, a narrow fish.
+        bodyWidth = 0.17f,
+        tailBeatHz = 2.0f,
+        smell = 1f,
+        biteMg = 0.7f,
+        messiness = 0.3f,
+        stomachMg = 7f,
+        hungerPerSecond = 1f / 150f,
+        bottomFeeder = false,
+        defaultCount = 2,
+        addBatch = 2,
+    )
+
+    val BlacktipReefShark = Species(
+        id = "blacktip_reef_shark",
+        // Tetiaroa Society (blacktip reef shark, maʻo mauri); Bishop Museum, Cook Islands database
+        // (Mao Mauri, Tahitian); DIREN Polynésie française, Reconnaître les raies et requins du fenua (mauri).
+        tahitianName = "Maʻo mauri",
+        commonName = "Blacktip reef shark",
+        scientificName = "Carcharhinus melanopterus",
+        description = "A small reef shark, grey-brown with black-tipped fins. Maʻo mauri patrol the lagoon " +
+            "shallows in slow, sweeping loops: shy of people, curious about anything that falls into the water.",
+        tankType = TankType.REEF,
+        locomotion = Locomotion.SWIM,
+        visualId = 17,
+        lengthMm = 110f..130f,
+        cruiseBodyLengthsPerS = 0.45f,
+        burstBodyLengthsPerS = 2.0f,
+        depthBand = 0.35f..0.8f,
+        schooling = 0f,
+        shyness = 0.15f,
+        turnRateRadPerS = 1.1f,
+        bodyWidth = 0.15f,
+        tailBeatHz = 1.1f,
+        smell = 1.4f,
+        biteMg = 3f,
+        messiness = 0.4f,
+        stomachMg = 60f,
+        hungerPerSecond = 1f / 240f,
+        bottomFeeder = false,
+        defaultCount = 1,
+        addBatch = 1,
+    )
+
     /**
      * A fish someone coloured in on the printed page and scanned: it wears its
      * drawing ([CreatureSpec.skin]) and swims like a calm lagoon fish. Not in
@@ -444,6 +507,7 @@ object SpeciesCatalog {
 
     val all: List<Species> = listOf(
         GreenChromis, ConvictSurgeonfish, BluestripeSnapper, YellowstripeGoatfish, ScissortailSergeant,
+        RaccoonButterflyfish, BlacktipReefShark,
         GreenSeaTurtle, SpottedEagleRay, DayOctopus, HermitCrab,
     )
 

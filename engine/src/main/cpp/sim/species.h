@@ -21,12 +21,15 @@ enum class Visual : int32_t {
     ConvictSurgeonfish = 7, BluestripeSnapper = 8, YellowstripeGoatfish = 9, ScissortailSergeant = 10,
     // 11 .. 14 are the decorations. A fish someone drew, wearing its drawing (Creature::skin).
     Drawn = 15,
+    // More of the lagoon: paraharaha (raccoon butterflyfish), maʻo mauri (blacktip reef shark).
+    RaccoonButterflyfish = 16, BlacktipReefShark = 17,
 };
 
 /** A fish that schools, swims with a tail beat and is drawn by the fish mesh. */
 inline bool isSchoolingFish(Visual v) {
     return v == Visual::GreenChromis || v == Visual::ConvictSurgeonfish || v == Visual::BluestripeSnapper ||
-           v == Visual::YellowstripeGoatfish || v == Visual::ScissortailSergeant;
+           v == Visual::YellowstripeGoatfish || v == Visual::ScissortailSergeant || v == Visual::RaccoonButterflyfish ||
+           v == Visual::BlacktipReefShark;
 }
 
 struct SpeciesParams {

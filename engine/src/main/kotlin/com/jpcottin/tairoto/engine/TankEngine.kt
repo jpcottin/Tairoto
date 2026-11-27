@@ -7,6 +7,7 @@ import com.jpcottin.tairoto.world.DecorKind
 import com.jpcottin.tairoto.world.DecorSpec
 import com.jpcottin.tairoto.world.EntityId
 import com.jpcottin.tairoto.world.QualityTier
+import com.jpcottin.tairoto.world.Daylight
 import com.jpcottin.tairoto.world.Skin
 import com.jpcottin.tairoto.world.Species
 import com.jpcottin.tairoto.world.TankSize
@@ -30,6 +31,8 @@ interface TankEngine : Closeable {
     fun setPaused(paused: Boolean)
     /** How loud the lagoon is, 0..1 (0: silent, no audio stream). */
     fun setSound(volume: Float) = Unit
+    /** The light over the lagoon: day, night, the gold of dawn and dusk. */
+    fun setDaylight(daylight: Daylight) = Unit
     /** At most this many frames a second; 0 for as many as the display shows. */
     fun setMaxFps(fps: Int) = Unit
     /** Adds a creature; a [ghost] is simulated by another device and only shown here. A drawn fish wears its [skin]. */

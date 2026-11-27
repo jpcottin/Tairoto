@@ -1,5 +1,6 @@
 package com.jpcottin.tairoto.ui.settings
 
+import com.jpcottin.tairoto.world.TimeOfDay
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.Arrangement
@@ -65,6 +66,7 @@ object SettingsTags {
     const val VOLUME = "settings_volume"
     const val WALLPAPER = "settings_wallpaper"
     const val SCREENSAVER = "settings_screensaver"
+    fun time(t: TimeOfDay) = "settings_time_" + t.name.lowercase()
     fun quality(mode: QualityMode) = "settings_quality_" + when (mode) {
         QualityMode.Auto -> "auto"
         is QualityMode.Fixed -> mode.tier.name.lowercase()
@@ -79,6 +81,7 @@ data class SettingsUi(
     val soundVolume: Float = 0.7f,
     /** The device has no way to play sound (no output, or it refused). */
     val soundUnavailable: Boolean = false,
+    val timeOfDay: TimeOfDay = TimeOfDay.LOCAL,
     val creatures: Int = 0,
     val gpu: String = "",
     val version: String = "",
@@ -92,6 +95,8 @@ interface SoundActions {
     fun preview(volume: Float) {}
     /** The slider is let go: kept. */
     fun setVolume(volume: Float) {}
+    /** Day and night: the local time, or always one of them. */
+    fun setTimeOfDay(time: TimeOfDay) {}
 
     object None : SoundActions
 }
@@ -175,6 +180,13 @@ fun SettingsContent(
                 }
                 Spacer(Modifier.width(16.dp))
                 Switch(checked = ui.showStats, onCheckedChange = null)
+            }
+        }
+        Section("Time of day") {
+            Column(Modifier.selectableGroup()) {
+                TimeRow(TimeOfDay.LOCAL, "Follow the local time", "Day, dusk and night as they come where you are. At night, the water glows where you touch it.", ui.timeOfDay, sound::setTimeOfDay)
+                TimeRow(TimeOfDay.DAY, "Always day", "The lagoon at noon, whatever the hour.", ui.timeOfDay, sound::setTimeOfDay)
+                TimeRow(TimeOfDay.NIGHT, "Always night", "Moonlight, and glowing plankton under your finger.", ui.timeOfDay, sound::setTimeOfDay)
             }
         }
         Section("Sound") {
@@ -287,6 +299,25 @@ private fun QualityRow(mode: QualityMode, title: String, detail: String, selecte
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         RadioButton(selected = mode == selected, onClick = null)
+        Column {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun TimeRow(time: TimeOfDay, title: String, detail: String, selected: TimeOfDay, onSelect: (TimeOfDay) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .selectable(selected = time == selected, role = Role.RadioButton, onClick = { onSelect(time) })
+            .testTag(SettingsTags.time(time))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        RadioButton(selected = time == selected, onClick = null)
         Column {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

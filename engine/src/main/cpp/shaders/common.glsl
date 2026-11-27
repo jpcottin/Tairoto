@@ -8,7 +8,7 @@ layout(std140, set = 0, binding = 0) uniform Frame {
     vec4 tank;      // width, height, depth (mm), motes per layer
     vec4 sun;       // direction toward the sun (xyz), intensity
     vec4 misc;      // tilt.xy, refraction strength (mm), exposure
-    vec4 view;      // cos, sin of the screen's turn on the table (clockwise), 0, 0
+    vec4 view;      // cos, sin of the screen's turn on the table (clockwise), daylight (0 night .. 1 day), warmth of a low sun
     vec4 ripples[8];// centre.xy (mm), start time (s), amplitude (0 = unused)
 } F;
 

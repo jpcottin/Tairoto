@@ -101,6 +101,8 @@ vec4 finish(vec3 color, float alpha) {
  *   8  Taape, bluestripe snapper: bright yellow, electric-blue lines along the sides.
  *   9  ʻOuma, yellowstripe goatfish: grey-olive back, white sides, a yellow stripe.
  *   10 Mamo, scissortail sergeant: silvery green-white, five broad black bars.
+ *   16 Paraharaha, raccoon butterflyfish: golden yellow, a black mask, a white band behind it.
+ *   17 Maʻo mauri, blacktip reef shark: grey-brown above, paler at the sides, fins tipped black.
  */
 struct FishLook {
     vec3 dorsum;    // along the back
@@ -119,6 +121,10 @@ FishLook fishLook() {
         f.dorsum = srgb(vec3(0.5, 0.52, 0.46)); f.flank = srgb(vec3(0.9, 0.9, 0.86)); f.iri = 0.1; f.scales = 1.0;
     } else if (vVisual == 10) {
         f.dorsum = srgb(vec3(0.62, 0.7, 0.55)); f.flank = srgb(vec3(0.88, 0.92, 0.86)); f.iri = 0.15; f.scales = 0.8;
+    } else if (vVisual == 16) {
+        f.dorsum = srgb(vec3(0.86, 0.62, 0.14)); f.flank = srgb(vec3(0.98, 0.82, 0.2)); f.iri = 0.03; f.scales = 0.6;
+    } else if (vVisual == 17) {
+        f.dorsum = srgb(vec3(0.42, 0.4, 0.34)); f.flank = srgb(vec3(0.64, 0.62, 0.54)); f.iri = 0.0; f.scales = 0.0;
     } else {
         f.dorsum = srgb(vec3(0.27, 0.55, 0.5)); f.flank = srgb(vec3(0.52, 0.86, 0.78)); f.iri = 1.0; f.scales = 1.0;
     }
@@ -139,6 +145,10 @@ float bars(float u, float v, int visual) {
         const float P[5] = float[5](0.22, 0.38, 0.54, 0.7, 0.86);
         for (int i = 0; i < 5; i++) d = min(d, abs(u - P[i] + 0.02 * v * v) / 0.05);
         return 1.0 - smoothstep(0.75, 1.0, d);
+    }
+    if (visual == 16) {
+        // Paraharaha: the black mask through the eye.
+        return 1.0 - smoothstep(0.035, 0.055, abs(u - 0.1));
     }
     return 0.0;
 }
@@ -175,6 +185,14 @@ vec4 fishBody(Lit l, float caustic) {
         base = mix(base, srgb(vec3(0.98, 0.82, 0.2)), stripe * smoothstep(0.05, 0.12, u) * 0.95);
     }
     base = mix(base, srgb(vec3(0.04, 0.05, 0.05)), bars(u, av, vVisual) * 0.92);
+    if (vVisual == 16) {
+        // The white band behind the mask, and a dusky saddle along the back.
+        base = mix(base, srgb(vec3(0.95, 0.95, 0.9)), 1.0 - smoothstep(0.025, 0.045, abs(u - 0.18)));
+        base = mix(base, f.dorsum * 0.45, (1.0 - smoothstep(0.15, 0.4, av)) * smoothstep(0.3, 0.45, u) * (1.0 - smoothstep(0.7, 0.85, u)) * 0.6);
+    } else if (vVisual == 17) {
+        // A shark's skin: matte, the light along its back.
+        base = mix(base, f.dorsum * 0.8, (1.0 - smoothstep(0.0, 0.3, av)) * 0.5);
+    }
 
     // Scales: overlapping rows that catch the light one by one.
     vec2 sc = vec2(u * 46.0, v * 4.6 + floor(u * 46.0) * 0.5);
@@ -210,6 +228,10 @@ vec4 fishFin(Lit l, float caustic) {
     if (vVisual == 8) tint = srgb(vec3(0.98, 0.82, 0.25));          // yellow fins
     else if (vVisual == 9) tint = srgb(vec3(0.95, 0.88, 0.55));     // pale yellow tail
     else if (vVisual == 7) tint = srgb(vec3(0.85, 0.88, 0.75));
+    else if (vVisual == 16) tint = srgb(vec3(0.98, 0.8, 0.22));
+    else if (vVisual == 17) tint = mix(f.dorsum, f.flank, 0.6);
+    // A shark's fins are solid, and tipped black.
+    float tip = vVisual == 17 ? smoothstep(0.55, 0.7, vUv.x) : 0.0;
     float alpha;
     float rays;
     if (vPart == 4) {
@@ -235,6 +257,10 @@ vec4 fishFin(Lit l, float caustic) {
         rays = 0.5 + 0.5 * cos(u * 60.0);
         tint = f.dorsum * 0.85;
         alpha = 0.75 * (0.65 + 0.35 * rays);
+    }
+    if (vVisual == 17) {
+        alpha = max(alpha, vPart == 3 ? 0.0 : 0.92 * (vPart == 1 ? (1.0 - smoothstep(0.9, 1.0, u)) : 1.0));
+        tint = mix(tint, srgb(vec3(0.03, 0.03, 0.03)), tip);
     }
     vec3 color = tint * (l.sun * 0.7 + l.ambient) * (0.85 + 0.6 * caustic);
     return finish(color, alpha * edgeAlpha(av));
