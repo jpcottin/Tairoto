@@ -51,8 +51,10 @@ sleep 8
 size() { adbs "$1" shell wm size | awk -F'[ x]' '/Override|Physical/ {w=$(NF-1); h=$NF} END {print w, h}'; }
 read -r gw gh <<< "$(size "$guest")"
 read -r hw hh <<< "$(size "$host")"
+# Half way down: a finger coming on over the left or right edge is Android's back gesture,
+# except in the middle band the app takes for itself while arranging (200 dp, Android's most).
 gy=$(( gh * 45 / 100 ))
-hy=$(( hh * 60 / 100 ))
+hy=$(( hh * 52 / 100 ))
 adbs "$host" exec-out screencap -p > "$out/before-$host.png" || true
 echo "Swiping off $guest's right edge (y=$gy) onto $host's left edge (y=$hy)"
 echo "{\"ev\":\"swiped\",\"guest_y\":$gy,\"host_y\":$hy}" > "$out/swipe.json"
