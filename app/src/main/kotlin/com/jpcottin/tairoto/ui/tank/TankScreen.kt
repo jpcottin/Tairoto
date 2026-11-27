@@ -1,5 +1,6 @@
 package com.jpcottin.tairoto.ui.tank
 
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.width
 import com.jpcottin.tairoto.ui.share.ArrangeOverlay
 import androidx.compose.foundation.systemGestureExclusion
@@ -101,6 +102,7 @@ fun TankScreen(
             override fun onRotate(radians: Float) = vm.rotateSelected(radians)
             override fun onGestureEnd() = vm.finishGesture()
             override fun onStrokeStart(start: Vec2, toward: Vec2) = vm.strokeStart(start, toward)
+            override fun onDown() = vm.touched()
             override fun onStrokeEnd(from: Vec2, end: Vec2) = vm.strokeEnd(from, end)
         }
     }
@@ -152,7 +154,10 @@ fun TankScreen(
                 Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(14.dp),
             )
         } else {
-            TankHud(
+            // Shared and left alone, the buttons fade: the picture runs on across the screens without them.
+            val hud by androidx.compose.animation.core.animateFloatAsState(if (state.hudHidden) 0f else 1f, androidx.compose.animation.core.tween(700), label = "hud")
+            if (hud > 0f) TankHud(
+                modifier = Modifier.graphicsLayer { alpha = hud },
                 state = state,
                 onAdd = onOpenSpecies,
                 onSettings = onOpenSettings,

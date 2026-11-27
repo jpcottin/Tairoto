@@ -104,6 +104,8 @@ data class TankUiState(
     val sound: Boolean = true,
     val soundVolume: Float = com.jpcottin.tairoto.data.AppSettings.DEFAULT_SOUND_VOLUME,
     val hintVisible: Boolean = true,
+    /** Shared and left alone a while: the buttons fade, so the picture runs on across the screens. */
+    val hudHidden: Boolean = false,
     val vulkanUnsupported: Boolean = false,
     val gpu: String = "",
     /** Thermal headroom as last read (1.0 = about to throttle), or null when the device does not say. */
@@ -793,6 +795,7 @@ class TankViewModel(
             }
         }
         if (options.arrange && r == ShareRole.HOST) viewModelScope.launch(job) { sh.setArranging(true) }
+        viewModelScope.launch(job) { watchIdle() }
         netLog(json("share", "role" to r.name.lowercase(), "self" to sh.self.slot, "name" to sh.self.name, "t" to sh.sharedNow()))
         // Who is in the lagoon as it starts here, so a log can account for every one of them.
         netLog(json("scene", "self" to sh.self.slot, "ids" to ns.scene.value.creatures.joinToString(",", "[", "]") { it.id.raw.toString() }))
@@ -817,6 +820,25 @@ class TankViewModel(
     // ------------------------------------------------------------ the table
 
     private fun arrangingTable() = shared != null && state.value.share.arranging
+
+    private var lastTouchS = 0.0
+
+    /** A finger on the glass: the buttons come back, for a while. */
+    fun touched() {
+        lastTouchS = clockS()
+        if (state.value.hudHidden) state.update { it.copy(hudHidden = false) }
+    }
+
+    /** Fades the buttons of a shared screen nobody has touched for [HUD_IDLE_S], until it is touched. */
+    private suspend fun watchIdle() {
+        lastTouchS = clockS()
+        while (true) {
+            delay(1_000)
+            val s = state.value
+            val idle = clockS() - lastTouchS > HUD_IDLE_S && !s.share.arranging && !s.share.arrangeHint && !s.edit.active
+            if (idle != s.hudHidden) state.update { it.copy(hudHidden = idle) }
+        }
+    }
 
     private var hintJob: Job? = null
 
@@ -960,6 +982,7 @@ class TankViewModel(
             if (screen != null) createSession(screen)
         }
         camera = null
+        state.update { it.copy(hudHidden = false) }
         setShare { ShareUi(relay = it.relay, message = message) }
         if (vp != null && screen != null) {
             val size = session?.scene?.value?.size
@@ -1218,6 +1241,7 @@ class TankViewModel(
     companion object {
         const val HINT_MS = 7_000L
         const val ARRANGE_HINT_MS = 10_000L
+        const val HUD_IDLE_S = 6.0
         const val STATS_PERIOD_MS = 500L
         const val GOVERNOR_PERIOD_MS = 2_000L
         /** A window this much larger than any before (unfolding) widens the lagoon. */

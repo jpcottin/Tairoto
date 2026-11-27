@@ -31,6 +31,8 @@ interface TankGestureHandler {
     fun onRotate(radians: Float) = Unit
     /** Every finger has left the glass. */
     fun onGestureEnd() = Unit
+    /** A finger touched the glass, whatever it goes on to do. */
+    fun onDown() = Unit
     /** One finger, put down at [start], began to move toward [toward] (it came on over an edge?). */
     fun onStrokeStart(start: Vec2, toward: Vec2) = Unit
     /** One finger, moving from [from] a moment before, was lifted at [end] (it went off over an edge?). */
@@ -55,6 +57,7 @@ fun Modifier.tankGestures(handler: TankGestureHandler): Modifier = this
     .pointerInput(handler) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
+            handler.onDown()
             val start = down.position
             val startTime = down.uptimeMillis
             val mouse = down.type == PointerType.Mouse

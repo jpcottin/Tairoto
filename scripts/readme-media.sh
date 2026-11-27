@@ -95,6 +95,9 @@ ffmpeg -loglevel error -y -i "$tmp/left.mp4" -i "$tmp/right.mp4" -filter_complex
 gif "$tmp/two.mp4" "$out/two-screens.gif" 480 2 9
 
 echo "The table"
+# Left alone, a shared screen fades its buttons: a touch brings them back.
+adbs "$b" shell input tap $(( w / 2 )) $(( h * 3 / 4 ))
+sleep 1
 adbs "$b" shell input tap $(centre "$b" "Shared on")
 sleep 3
 shot "$b" table

@@ -450,4 +450,33 @@ class TankViewModelShareTest {
         assertTrue(host.vm.ui.value.share.arranging && guest.vm.ui.value.share.arranging)
         assertTrue(!host.vm.ui.value.share.arrangeHint && !guest.vm.ui.value.share.arrangeHint)
     }
+
+    @Test fun `a shared screen left alone fades its buttons, and a touch brings them back`() = shareTest {
+        val (host, _) = pair(FakeShareConnector(network()))
+        host.vm.dismissArrangeHint()
+        host.vm.touched()
+        advanceTimeBy(3_000)
+        assertTrue(!host.vm.ui.value.hudHidden)
+        advanceTimeBy(5_000)
+        assertTrue(host.vm.ui.value.hudHidden)
+        host.vm.touched()
+        assertTrue(!host.vm.ui.value.hudHidden)
+        // Back on its own, the buttons stay.
+        advanceTimeBy(8_000)
+        assertTrue(host.vm.ui.value.hudHidden)
+        host.vm.stopSharing()
+        advanceTimeBy(2_000)
+        assertTrue(!host.vm.ui.value.hudHidden)
+        advanceTimeBy(10_000)
+        assertTrue(!host.vm.ui.value.hudHidden)
+    }
+
+    @Test fun `while arranging, or offering to, the buttons stay`() = shareTest {
+        val (host, _) = pair(FakeShareConnector(network()))
+        advanceTimeBy(8_000) // the offer is up for ten seconds
+        assertTrue(!host.vm.ui.value.hudHidden)
+        host.vm.setArranging(true)
+        advanceTimeBy(20_000)
+        assertTrue(!host.vm.ui.value.hudHidden)
+    }
 }
