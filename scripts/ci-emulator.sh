@@ -6,6 +6,7 @@
 #
 #   scripts/ci-emulator.sh                  # AVD Tairoto_CI on port 5712 (CI: PORT=5554, where adb looks)
 #   PORT=5714 AVD=Other scripts/ci-emulator.sh
+#   LCD_WIDTH=720 LCD_HEIGHT=1600 LCD_DENSITY=280 ...   # the same phone in mm, under half the pixels to draw
 #   ANDROID_SERIAL=emulator-5712 ./gradlew :app:connectedDebugAndroidTest
 set -euo pipefail
 AVD="${AVD:-Tairoto_CI}"
@@ -40,9 +41,9 @@ hw.cpu.ncore=2
 image.sysdir.1=$(echo "$IMAGE" | tr ';' '/')/
 tag.id=$(echo "$IMAGE" | cut -d';' -f3)
 PlayStore.enabled=false
-hw.lcd.width=1080
-hw.lcd.height=2400
-hw.lcd.density=420
+hw.lcd.width=${LCD_WIDTH:-1080}
+hw.lcd.height=${LCD_HEIGHT:-2400}
+hw.lcd.density=${LCD_DENSITY:-420}
 hw.ramSize=4096
 hw.keyboard=yes
 hw.gpu.enabled=yes

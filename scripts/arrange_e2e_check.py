@@ -44,9 +44,13 @@ def main(out_dir, host, guest):
         gr = gv["rect"]
         print(f"        guest {gr}, host {hr}")
         check(abs(hr[0] - (gr[0] + gr[2])) < 0.05, "the host's screen begins where the guest's ends (emulators: no frames)")
-        out_y = gr[1] + next(e["along"] for e in swipes[guest] if not e["entering"])
-        in_y = hr[1] + next(e["along"] for e in swipes[host] if e["entering"])
-        check(abs(out_y - in_y) < 0.5, f"the finger's path runs level across: left at {out_y:.2f} mm, came on at {in_y:.2f} mm")
+        out_a = next((e["along"] for e in swipes[guest] if not e["entering"]), None)
+        in_a = next((e["along"] for e in swipes[host] if e["entering"]), None)
+        if out_a is None or in_a is None:
+            check(False, "the finger's path runs level across (a side of the swipe was not seen)")
+        else:
+            out_y, in_y = gr[1] + out_a, hr[1] + in_a
+            check(abs(out_y - in_y) < 0.5, f"the finger's path runs level across: left at {out_y:.2f} mm, came on at {in_y:.2f} mm")
         same = lambda a, b: len(a) == len(b) and all(abs(x - y) < 0.01 for x, y in zip(a, b))
         check(same(hv["tank"], gv["tank"]) and same(hv["origin"], gv["origin"]), "both see the same tank around the same parallax point")
         check(hv["turns"] == 0 and gv["turns"] == 0, "neither turned")
