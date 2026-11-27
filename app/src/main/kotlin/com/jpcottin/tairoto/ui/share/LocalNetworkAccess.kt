@@ -49,9 +49,20 @@ object BluetoothAccess {
 }
 
 /**
+ * Finding and making Wi-Fi Direct groups (never to locate anyone): a runtime
+ * permission from Android 13, where Wi-Fi Direct lagoons start.
+ */
+object WifiDirectAccess {
+    const val SINCE_SDK = 33
+    const val PERMISSION = "android.permission.NEARBY_WIFI_DEVICES"
+
+    fun granted(context: Context): Boolean = Build.VERSION.SDK_INT < SINCE_SDK || LocalNetwork.has(context, PERMISSION)
+}
+
+/**
  * Runs actions that need to reach devices nearby, asking first for what is
  * missing: the local network (needed), and Bluetooth (welcome: without it a
- * lagoon is shared over Wi-Fi only).
+ * lagoon is shared over Wi-Fi only), and Wi-Fi Direct (welcome too).
  */
 @Stable
 class LocalNetworkAccess internal constructor(
@@ -68,6 +79,7 @@ class LocalNetworkAccess internal constructor(
     internal fun missing(): List<String> = buildList {
         if (!LocalNetwork.granted(context)) add(LocalNetwork.PERMISSION)
         if (!BluetoothAccess.granted(context)) addAll(BluetoothAccess.PERMISSIONS)
+        if (!WifiDirectAccess.granted(context)) add(WifiDirectAccess.PERMISSION)
     }
 
     /** Runs [action] now if the local network may be reached, or once the person allows it. */

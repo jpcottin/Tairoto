@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Wifi
+import androidx.compose.material.icons.outlined.WifiTethering
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -125,7 +126,11 @@ object ShareTags {
     const val ARRANGE = "share_arrange"
     fun screen(slot: Int) = "share_map_screen_$slot"
     fun nearby(name: String, via: NearbyLagoon.Via = NearbyLagoon.Via.WIFI) =
-        if (via == NearbyLagoon.Via.WIFI) "share_nearby_$name" else "share_nearby_bt_$name"
+        when (via) {
+            NearbyLagoon.Via.WIFI -> "share_nearby_$name"
+            NearbyLagoon.Via.WIFI_DIRECT -> "share_nearby_direct_$name"
+            NearbyLagoon.Via.BLUETOOTH -> "share_nearby_bt_$name"
+        }
 }
 
 /** What the share sheet can ask for. */
@@ -231,7 +236,7 @@ private fun Message(text: String, onDismiss: () -> Unit) {
 @Composable
 private fun Start(ui: ShareUi, actions: ShareActions) {
     // Start one.
-    Option(Icons.Outlined.Wifi, "Start a shared lagoon", "This lagoon, with everything in it. Devices on the same Wi-Fi, or close by over Bluetooth, join it.") {
+    Option(Icons.Outlined.Wifi, "Start a shared lagoon", "This lagoon, with everything in it. Devices on the same Wi-Fi, or close by over Wi-Fi Direct or Bluetooth, join it.") {
         Button(onClick = { actions.share(ShareRoute.Nearby) }, modifier = Modifier.testTag(ShareTags.SHARE_NEARBY)) { Text("Share nearby") }
     }
     // Join one nearby.
@@ -272,12 +277,31 @@ private fun Option(icon: androidx.compose.ui.graphics.vector.ImageVector, title:
 @Composable
 private fun NearbyRow(lagoon: NearbyLagoon, onJoin: () -> Unit) {
     val bluetooth = lagoon.via == NearbyLagoon.Via.BLUETOOTH
+    val direct = lagoon.via == NearbyLagoon.Via.WIFI_DIRECT
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth().testTag(ShareTags.nearby(lagoon.name, lagoon.via))) {
         Row(Modifier.padding(start = 16.dp, end = 10.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(if (bluetooth) Icons.Outlined.Bluetooth else Icons.Outlined.Wifi, if (bluetooth) "Over Bluetooth" else "On Wi-Fi", tint = Ocean.Sand)
+            Icon(
+                when {
+                    bluetooth -> Icons.Outlined.Bluetooth
+                    direct -> Icons.Outlined.WifiTethering
+                    else -> Icons.Outlined.Wifi
+                },
+                when {
+                    bluetooth -> "Over Bluetooth"
+                    direct -> "Over Wi-Fi Direct"
+                    else -> "On Wi-Fi"
+                },
+                tint = Ocean.Sand,
+            )
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text("${lagoon.name}'s lagoon", style = MaterialTheme.typography.titleSmall, color = Ocean.Foam, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(if (bluetooth) "Bluetooth, close by" else "Wi-Fi · ${lagoon.host}", style = MaterialTheme.typography.labelMedium, color = Ocean.Mist)
+                Text(
+                    when {
+                        bluetooth -> "Bluetooth, close by"
+                        direct -> "Wi-Fi Direct, no router needed"
+                        else -> "Wi-Fi · ${lagoon.host}"
+                    },
+                    style = MaterialTheme.typography.labelMedium, color = Ocean.Mist)
             }
             FilledTonalButton(onClick = onJoin) { Text("Join") }
         }
