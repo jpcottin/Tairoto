@@ -182,6 +182,9 @@ fun TairotoNavigation(vm: TankViewModel) {
                             override fun setVolume(volume: Float) = vm.setSoundVolume(volume)
                         }
                     },
+                    ambient = androidx.compose.ui.platform.LocalContext.current.let { context ->
+                        remember(context) { com.jpcottin.tairoto.ambient.AmbientIntents(context) }
+                    },
                 )
             }
         },

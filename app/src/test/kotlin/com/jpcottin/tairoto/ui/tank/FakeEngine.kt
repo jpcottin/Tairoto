@@ -43,7 +43,8 @@ class FakeEngine : TankEngine {
     override fun setSound(volume: Float) { soundVolume = volume }
     override fun setQuality(tier: QualityTier) { lastQuality = tier }
     override fun setDeterministic(on: Boolean, seed: Long) { deterministic = on to seed }
-    override fun setPaused(paused: Boolean) = Unit
+    var paused: Boolean? = null
+    override fun setPaused(paused: Boolean) { this.paused = paused }
     override fun spawn(creature: CreatureSpec, species: Species, ghost: Boolean) {
         creatures[creature.id] = creature
         if (ghost) ghosts += creature.id else ghosts -= creature.id

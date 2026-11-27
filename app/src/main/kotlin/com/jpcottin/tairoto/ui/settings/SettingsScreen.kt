@@ -63,6 +63,8 @@ object SettingsTags {
     const val RESET_CONFIRM = "settings_reset_confirm"
     const val SOUND = "settings_sound"
     const val VOLUME = "settings_volume"
+    const val WALLPAPER = "settings_wallpaper"
+    const val SCREENSAVER = "settings_screensaver"
     fun quality(mode: QualityMode) = "settings_quality_" + when (mode) {
         QualityMode.Auto -> "auto"
         is QualityMode.Fixed -> mode.tier.name.lowercase()
@@ -94,6 +96,14 @@ interface SoundActions {
     object None : SoundActions
 }
 
+/** The lagoon beyond the app: as the wallpaper, as the screensaver. Nothing by default (previews). */
+interface AmbientActions {
+    fun setWallpaper() {}
+    fun openScreensaver() {}
+
+    object None : AmbientActions
+}
+
 @Composable
 fun SettingsScreen(
     ui: SettingsUi,
@@ -104,6 +114,7 @@ fun SettingsScreen(
     /** Shown beside the lagoon on a wide window rather than on its own. */
     inPane: Boolean = false,
     sound: SoundActions = SoundActions.None,
+    ambient: AmbientActions = AmbientActions.None,
 ) {
     Scaffold(
         modifier = Modifier.testTag(SettingsTags.SCREEN),
@@ -123,7 +134,7 @@ fun SettingsScreen(
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
-            SettingsContent(ui, onQuality, onShowStats, onResetTank, Modifier.widthIn(max = 640.dp), sound)
+            SettingsContent(ui, onQuality, onShowStats, onResetTank, Modifier.widthIn(max = 640.dp), sound, ambient)
         }
     }
 }
@@ -136,6 +147,7 @@ fun SettingsContent(
     onResetTank: () -> Unit,
     modifier: Modifier = Modifier,
     sound: SoundActions = SoundActions.None,
+    ambient: AmbientActions = AmbientActions.None,
 ) {
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     Column(
@@ -202,6 +214,19 @@ fun SettingsContent(
                         .semantics { contentDescription = "Volume of the lagoon" },
                 )
                 Icon(Icons.AutoMirrored.Rounded.VolumeUp, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Section("Beyond the app") {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Your lagoon behind the home screens (swipe between them to look across it), or as the screensaver while the device charges. Drawn gently, silent, still when unseen.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = ambient::setWallpaper, modifier = Modifier.testTag(SettingsTags.WALLPAPER)) { Text("Set as wallpaper") }
+                    OutlinedButton(onClick = ambient::openScreensaver, modifier = Modifier.testTag(SettingsTags.SCREENSAVER)) { Text("Screensaver") }
+                }
             }
         }
         Section("Lagoon") {
