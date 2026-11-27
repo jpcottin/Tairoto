@@ -62,8 +62,11 @@ def main(out_dir, host, guest):
         h_ids = set(host_scene[-1]["ids"])
         brought = g_ids - h_ids
         check(len(brought) > 0, f"the guest brought {len(brought)} creatures of its own")
+    # The most it simulated at once: a guest out of touch for a moment (fenced) simulates nothing
+    # until the host answers again, so the last word alone may be a pause, on a slow machine.
     status = [e for e in logs[guest] if e["ev"] == "status"]
-    check(bool(status) and status[-1].get("owned", 0) > 0, f"the guest simulates creatures: {status[-1].get('owned') if status else '?'}")
+    most = max((e.get("owned", 0) for e in status), default=0)
+    check(most > 0, f"the guest simulates creatures (at most {most} at once)")
     print("PASS" if not failures else f"FAIL ({len(failures)})")
     sys.exit(1 if failures else 0)
 
