@@ -110,10 +110,16 @@ jobs:
         run: ./gradlew :app:assembleDebug :relay:installDist
       - name: Start two headless emulators drawing with lavapipe
         run: |
-          # Two emulators drawing in software share four CPUs: the same phones in mm, under half the pixels.
-          export LCD_WIDTH=720 LCD_HEIGHT=1600 LCD_DENSITY=280
+          # Two emulators drawing in software share four CPUs: the same phones in mm, a quarter of the pixels.
+          export LCD_WIDTH=540 LCD_HEIGHT=1200 LCD_DENSITY=210
           PORT=5554 LOG="$RUNNER_TEMP/emulator-a.log" scripts/ci-emulator.sh
           AVD=Tairoto_CI2 PORT=5556 LOG="$RUNNER_TEMP/emulator-b.log" scripts/ci-emulator.sh
+      # The logic under test is the same for a few fish as for a crowd: a smaller lagoon on each, so
+      # two emulators drawing in software on four CPUs keep up (a crowd starved them into timeouts).
+      - name: A small lagoon on each
+        run: |
+          echo "POPULATION=green_chromis:10,convict_surgeonfish:6,green_sea_turtle:1,hermit_crab:1" >> "$GITHUB_ENV"
+          echo "DECOR=coral_head:2,giant_clam:1,stone:2" >> "$GITHUB_ENV"
       - name: A finger swiped across both lays them side by side
         run: SERIALS="emulator-5554 emulator-5556" QUALITY=low FPS=10 scripts/arrange-e2e.sh
       - name: Fish change hands through the relay, never simulated twice, no food lost

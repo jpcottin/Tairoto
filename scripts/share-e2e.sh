@@ -52,7 +52,7 @@ done
 launch() {
     # -S stops the app first, in the same breath: an instance left running would take the intent without its extras.
     adbs "$1" shell am start -S -W -n "$pkg/.MainActivity" \
-        --ez tairoto.fresh true --ez tairoto.hints false ${QUALITY:+--es tairoto.quality $QUALITY} ${FPS:+--ei tairoto.fps $FPS} --ez tairoto.trace "${TRACE:-false}" \
+        --ez tairoto.fresh true --ez tairoto.hints false ${QUALITY:+--es tairoto.quality $QUALITY} ${FPS:+--ei tairoto.fps $FPS} ${POPULATION:+--es tairoto.population $POPULATION} ${DECOR:+--es tairoto.decor $DECOR} --ez tairoto.trace "${TRACE:-false}" \
         --es tairoto.share "$2" --es tairoto.relay "$route" --es tairoto.session "$session" > /dev/null
 }
 
