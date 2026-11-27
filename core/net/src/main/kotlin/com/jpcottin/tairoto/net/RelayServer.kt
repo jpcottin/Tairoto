@@ -8,7 +8,6 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
-import java.net.Socket
 import java.net.SocketException
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -21,32 +20,42 @@ import java.util.concurrent.atomic.AtomicBoolean
  * session ends and everyone is let go: the host is the referee of who owns
  * what, and nobody else can take that over.
  *
- * One thread per connection to read, one to write, so a slow device never
- * holds the others up. Meant for a handful of devices on a table.
+ * Devices come in over TCP on [port] (null: no TCP at all), or over any
+ * other byte stream handed to [serve], such as a Bluetooth channel; one
+ * session can mix both. One thread per connection to read, one to write, so
+ * a slow device never holds the others up. Meant for a handful of devices on
+ * a table.
  */
 class RelayServer(
-    port: Int = 0,
+    port: Int? = 0,
     bindTo: InetAddress? = null,
     private val log: (String) -> Unit = {},
 ) : AutoCloseable {
-    private val server = ServerSocket().apply {
-        reuseAddress = true
-        bind(InetSocketAddress(bindTo, port))
+    private val server: ServerSocket? = port?.let { p ->
+        ServerSocket().apply {
+            reuseAddress = true
+            bind(InetSocketAddress(bindTo, p))
+        }
     }
-    val port: Int get() = server.localPort
+    /** The TCP port it listens on; -1 without TCP. */
+    val port: Int get() = server?.localPort ?: -1
 
     private val running = AtomicBoolean(true)
     private val lock = Any()
     private val sessions = HashMap<String, Session>()
-    private val acceptor = Thread({ acceptLoop() }, "relay-accept").apply { isDaemon = true; start() }
+    private val acceptor = server?.let { Thread({ acceptLoop(it) }, "relay-accept").apply { isDaemon = true; start() } }
+    private val open = HashSet<Connection>()
 
     private class Session(val name: String) {
         val members = LinkedHashMap<Int, Connection>()
         var nextSlot = 1
     }
 
-    private inner class Connection(val socket: Socket) {
+    private inner class Connection(val raw: Pipe) {
         val out = LinkedBlockingQueue<Frame>()
+        /** Set by the reader from the first byte, before anything is written back. */
+        @Volatile var pipe: Pipe = raw
+        private val opened = java.util.concurrent.CountDownLatch(1)
         var slot = -1
         var name = ""
         var session: Session? = null
@@ -65,7 +74,9 @@ class RelayServer(
 
         private fun writeLoop() {
             try {
-                val stream = DataOutputStream(BufferedOutputStream(socket.getOutputStream()))
+                // Answers the way the device speaks: compressed or not, as its first byte says.
+                while (open && !opened.await(250, TimeUnit.MILLISECONDS)) Unit
+                val stream = DataOutputStream(BufferedOutputStream(pipe.output))
                 while (open) {
                     val f = out.poll(250, TimeUnit.MILLISECONDS) ?: continue
                     FrameIo.write(stream, f)
@@ -82,16 +93,24 @@ class RelayServer(
 
         private fun readLoop() {
             try {
-                socket.tcpNoDelay = true
-                val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
+                val first = java.io.PushbackInputStream(raw.input, 1)
+                val b = first.read()
+                if (b < 0) return
+                first.unread(b)
+                val plain = object : Pipe by raw {
+                    override val input: java.io.InputStream = first
+                }
+                pipe = if (b == CompressedPipe.ZLIB_FIRST_BYTE) CompressedPipe(plain) else plain
+                opened.countDown()
+                val input = DataInputStream(BufferedInputStream(pipe.input))
                 while (open) {
                     val f = FrameIo.read(input) ?: break
                     onFrame(this, f)
                 }
             } catch (e: IOException) {
-                log("connection ${socket.remoteSocketAddress}: ${e.message}")
+                log("connection ${pipe.label}: ${e.message}")
             } catch (e: IllegalArgumentException) {
-                log("connection ${socket.remoteSocketAddress}: ${e.message}")
+                log("connection ${pipe.label}: ${e.message}")
             } finally {
                 close()
                 left(this)
@@ -101,11 +120,9 @@ class RelayServer(
         fun close() {
             if (!open) return
             open = false
-            try {
-                socket.close()
-            } catch (e: IOException) {
-                // Closing anyway.
-            }
+            opened.countDown()
+            raw.close()
+            synchronized(lock) { this@RelayServer.open.remove(this) }
         }
 
         /** Lets it go after what is queued has gone out. */
@@ -118,7 +135,18 @@ class RelayServer(
         }
     }
 
-    private fun acceptLoop() {
+    /** Takes a device that came in some other way (Bluetooth): from now on it is like any other. */
+    fun serve(pipe: Pipe) {
+        if (!running.get()) {
+            pipe.close()
+            return
+        }
+        val c = Connection(pipe)
+        synchronized(lock) { open.add(c) }
+        c.start()
+    }
+
+    private fun acceptLoop(server: ServerSocket) {
         while (running.get()) {
             val s = try {
                 server.accept()
@@ -127,7 +155,7 @@ class RelayServer(
             } catch (e: IOException) {
                 continue
             }
-            Connection(s).start()
+            serve(SocketPipe(s))
         }
     }
 
@@ -200,12 +228,12 @@ class RelayServer(
     override fun close() {
         running.set(false)
         try {
-            server.close()
+            server?.close()
         } catch (e: IOException) {
             // Closing anyway.
         }
-        val all = synchronized(lock) { sessions.values.flatMap { it.members.values }.also { sessions.clear() } }
+        val all = synchronized(lock) { (sessions.values.flatMap { it.members.values } + open).toSet().also { sessions.clear() } }
         all.forEach { it.close() }
-        acceptor.join(1000)
+        acceptor?.join(1000)
     }
 }

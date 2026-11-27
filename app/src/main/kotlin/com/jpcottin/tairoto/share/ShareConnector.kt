@@ -26,10 +26,22 @@ data class RelayAddress(val host: String, val port: Int) {
     }
 }
 
-/** A shared lagoon found on the local network. */
-data class NearbyLagoon(val name: String, val host: String, val port: Int)
+/**
+ * A shared lagoon found nearby: on the local network ([host] an IP address,
+ * [port] a TCP port) or over Bluetooth ([host] the device's address, [port]
+ * its L2CAP channel).
+ */
+data class NearbyLagoon(val name: String, val host: String, val port: Int, val via: Via = Via.WIFI) {
+    enum class Via { WIFI, BLUETOOTH }
 
-/** How to share: through a relay, or on the local network with this device as the relay. */
+    companion object {
+        /** One entry a lagoon, the fastest way it was heard of (Wi-Fi before Bluetooth), in the order given. */
+        fun oneEach(lagoons: List<NearbyLagoon>): List<NearbyLagoon> =
+            lagoons.groupBy { it.name }.values.map { ways -> ways.minBy { it.via.ordinal } }
+    }
+}
+
+/** How to share: through a relay, or with devices nearby (Wi-Fi and Bluetooth) with this device as the relay. */
 sealed interface ShareRoute {
     data class Relay(val address: RelayAddress, val session: String = DEFAULT_SESSION) : ShareRoute
     data object Nearby : ShareRoute
@@ -50,12 +62,15 @@ interface ShareConnection {
     val link: Link
     /** Says why, once, if the connection ends on its own (the host left, the network went). */
     val ended: Flow<String>
+    /** Bytes received and sent so far, for logs (Bluetooth carries far less than Wi-Fi). */
+    val bytesIn: Long get() = 0
+    val bytesOut: Long get() = 0
     fun close()
 }
 
 /** Opens shared lagoons and finds them nearby. Real on a device, in memory in tests. */
 interface ShareConnector {
-    /** Lagoons shared on the local network, while [discover] runs. */
+    /** Lagoons shared nearby, on the local network or over Bluetooth, while [discover] runs. */
     val nearby: StateFlow<List<NearbyLagoon>>
 
     suspend fun host(name: String, route: ShareRoute): ShareConnection

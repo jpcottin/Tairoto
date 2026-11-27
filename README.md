@@ -6,8 +6,8 @@ coral sand, under moving caustic light. It is built to grow into one lagoon
 shared by several devices on a table, fish swimming from one screen to the next.
 
 > Work in progress, kept local for now. Milestones 1 (the solo lagoon),
-> 2 (food and feeding), 3 (the bottom dwellers), 4 (arranging the lagoon) and
-> 5 (one lagoon across several devices) of 10.
+> 2 (food and feeding), 3 (the bottom dwellers), 4 (arranging the lagoon),
+> 5 (one lagoon across several devices) and 5b (over Bluetooth too) of 10.
 
 Tahitian names are checked against a reference before they are used, and the
 source is noted next to each species in `Species.kt`.
@@ -136,22 +136,40 @@ way, a bite at food on another screen is decided by the device that owns the
 food, and the scent of food spreads to the other screens. Shared time is the
 host's, estimated NTP-style.
 
-From the share sheet: *Share on this network*, or join a lagoon found nearby
-(Android 17 asks for the local-network permission first). For emulators, run
-the relay on the computer and use *Through a computer*:
+From the share sheet: *Share nearby*, or join a lagoon found nearby. A host
+that shares nearby runs the relay itself and can be reached two ways at once:
+on the local network (announced with NSD as `_tairoto._tcp`) and over
+Bluetooth LE (Android 12 and up: a BLE advertisement carries the number of an
+L2CAP channel, no pairing). A lagoon heard of both ways is listed once, on
+Wi-Fi. Android asks first for the local-network permission (Android 17) and
+the Bluetooth ones; without Bluetooth, sharing works over Wi-Fi alone.
+
+The links are compressed (zlib, flushed at every frame: the messages are JSON
+and shrink about six times), which is what makes Bluetooth enough: in a
+feeding frenzy the busiest screen sends some 30–40 kB/s. A relay tells a
+compressed link from a plain one by its first byte. States wanted by several
+screens go out once, as a broadcast the relay fans out.
+
+For emulators, run the relay on the computer and use *Through a computer*:
 
 ```sh
 ./gradlew :relay:installDist && relay/build/install/relay/bin/relay --port 7171
 # emulators reach it at 10.0.2.2:7171; or launch them straight into it:
 adb shell am start -S -n com.jpcottin.tairoto/.MainActivity \
   --es tairoto.share host --es tairoto.relay 10.0.2.2:7171 --es tairoto.session demo   # then "join" on the others
+# or nearby, as from the share sheet: --es tairoto.relay bluetooth (or wifi)
 ```
 
 `scripts/share-e2e.sh` does that with three emulators, feeds a frenzy on the
 middle screen, and checks every device's log (`files/net-log.jsonl`, one JSON
 line per hand-over, in debug builds): no creature simulated twice at any
-moment, none left without an owner longer than a hand-over takes, and every
-milligram of food accounted for across the screens.
+moment, none left without an owner longer than a hand-over takes, every
+milligram of food accounted for across the screens, and every screen drawing
+the host's floor. `VIA=bluetooth` or `VIA=wifi` runs it nearby instead of
+through the computer: emulators share a simulated Bluetooth and Wi-Fi (netsim).
+
+Screens lie edge to edge: between two pictures lie both devices' frames (3 mm
+a phone, none for an emulator window, whose windows then join seamlessly).
 
 For now the screens lie side by side in the order they joined; the layout
 editor (milestone 6) will let you move them. A device that goes to the

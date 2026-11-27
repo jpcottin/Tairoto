@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -79,6 +80,20 @@ class ShareSheetTest {
         compose.onNodeWithText("Tablet's lagoon").assertIsDisplayed()
         compose.onNodeWithText("Join").performClick()
         assertEquals(listOf<JoinTarget>(JoinTarget.Nearby(tablet)), r.joined)
+    }
+
+    @Test fun lagoonsOverBluetoothAreListedAndOneHeardBothWaysOnlyOnce() {
+        val r = Recorder()
+        val tabletBt = NearbyLagoon("Tablet", "AA:BB:CC:DD:EE:01", 0x80, NearbyLagoon.Via.BLUETOOTH)
+        val phoneBt = NearbyLagoon("Phone", "AA:BB:CC:DD:EE:02", 0x81, NearbyLagoon.Via.BLUETOOTH)
+        compose.setContent { TairotoTheme { ShareSheet(ShareUi(nearby = listOf(tablet, tabletBt, phoneBt)), r, onClose = null) } }
+        compose.onNodeWithTag(ShareTags.nearby("Tablet")).assertIsDisplayed()
+        compose.onNodeWithTag(ShareTags.nearby("Tablet", NearbyLagoon.Via.BLUETOOTH)).assertDoesNotExist()
+        compose.onNodeWithTag(ShareTags.nearby("Phone", NearbyLagoon.Via.BLUETOOTH)).assertIsDisplayed()
+        compose.onNodeWithText("Bluetooth, close by").assertIsDisplayed()
+        compose.onNodeWithText("Wi-Fi · 192.168.1.20").assertIsDisplayed()
+        compose.onAllNodesWithText("Join")[1].performClick()
+        assertEquals(listOf<JoinTarget>(JoinTarget.Nearby(phoneBt)), r.joined)
     }
 
     @Test fun throughAComputerTheRelayCanBeTypedAndAWrongAddressCannotBeUsed() {

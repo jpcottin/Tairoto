@@ -563,9 +563,21 @@ class SharedTank(
         val lay = layoutState.value
         val far = ticks % config.farEveryTicks == 0L
         val scentTick = ticks % config.scentEveryTicks == 0L
-        for (p in members()) {
-            val creatures = out.owned.filter { far || lay.near(p, it.at, it.z, config.interestMm) }.map { it.compact() }
-            if (creatures.isNotEmpty() || far) send(Msg.States(t, creatures), p)
+        val peers = members()
+        // Creatures each screen should hear about. Said once to everyone when more than one screen
+        // wants news: this device's own link is the narrow part (Bluetooth), the relay fans it out.
+        val wanted = peers.associateWith { p -> out.owned.filter { far || lay.near(p, it.at, it.z, config.interestMm) } }
+        val askers = wanted.filterValues { it.isNotEmpty() }.keys
+        if (askers.size > 1 || (far && peers.size > 1)) {
+            val union = out.owned.filter { c -> wanted.values.any { c in it } }
+            broadcast(Msg.States(t, union.map { it.compact() }))
+        } else {
+            for (p in peers) {
+                val creatures = wanted.getValue(p)
+                if (creatures.isNotEmpty() || far) send(Msg.States(t, creatures.map { it.compact() }), p)
+            }
+        }
+        for (p in peers) {
             val food = out.food.filter { lay.near(p, it.at, it.z, config.interestMm) }.take(config.maxFoodPerMessage).map { it.compact() }
             if (food.isNotEmpty()) send(Msg.Foods(t, food), p)
             if (scentTick) {

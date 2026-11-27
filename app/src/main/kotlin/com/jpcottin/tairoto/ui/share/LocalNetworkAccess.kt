@@ -25,26 +25,61 @@ object LocalNetwork {
     const val SINCE_SDK = 37
 
     fun granted(context: Context): Boolean =
-        Build.VERSION.SDK_INT < SINCE_SDK ||
-            ContextCompat.checkSelfPermission(context, PERMISSION) == PackageManager.PERMISSION_GRANTED
+        Build.VERSION.SDK_INT < SINCE_SDK || has(context, PERMISSION)
+
+    internal fun has(context: Context, permission: String) =
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 }
 
-/** Runs actions that need the local network, asking for it first when needed. */
+/**
+ * Finding and reaching lagoons over Bluetooth: scanning (never to locate
+ * anyone), advertising a lagoon, and connecting. Runtime permissions from
+ * Android 12; before that the install-time ones are enough.
+ */
+object BluetoothAccess {
+    const val SINCE_SDK = 31
+    val PERMISSIONS = listOf(
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_ADVERTISE",
+        "android.permission.BLUETOOTH_CONNECT",
+    )
+
+    fun granted(context: Context): Boolean =
+        Build.VERSION.SDK_INT < SINCE_SDK || PERMISSIONS.all { LocalNetwork.has(context, it) }
+}
+
+/**
+ * Runs actions that need to reach devices nearby, asking first for what is
+ * missing: the local network (needed), and Bluetooth (welcome: without it a
+ * lagoon is shared over Wi-Fi only).
+ */
 @Stable
 class LocalNetworkAccess internal constructor(
     private val context: Context,
-    private val ask: (() -> Unit) -> Unit,
+    private val ask: (List<String>, () -> Unit) -> Unit,
 ) {
     var granted by mutableStateOf(LocalNetwork.granted(context))
         internal set
+    var bluetooth by mutableStateOf(BluetoothAccess.granted(context))
+        internal set
+    private var asked = false
+
+    /** What would be asked for now. */
+    internal fun missing(): List<String> = buildList {
+        if (!LocalNetwork.granted(context)) add(LocalNetwork.PERMISSION)
+        if (!BluetoothAccess.granted(context)) addAll(BluetoothAccess.PERMISSIONS)
+    }
 
     /** Runs [action] now if the local network may be reached, or once the person allows it. */
     fun then(action: () -> Unit) {
-        if (LocalNetwork.granted(context)) {
+        val missing = missing()
+        // Bluetooth refused once is not asked again each time: Wi-Fi works without it.
+        if (LocalNetwork.granted(context) && (missing.isEmpty() || asked)) {
             granted = true
             action()
         } else {
-            ask(action)
+            asked = true
+            ask(missing, action)
         }
     }
 }
@@ -56,8 +91,10 @@ fun rememberLocalNetworkAccess(onGranted: () -> Unit, onRefused: () -> Unit): Lo
     val refused by rememberUpdatedState(onRefused)
     var pending by remember { mutableStateOf<(() -> Unit)?>(null) }
     lateinit var access: LocalNetworkAccess
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        val ok = LocalNetwork.granted(context)
         access.granted = ok
+        access.bluetooth = BluetoothAccess.granted(context)
         if (ok) {
             granted()
             pending?.invoke()
@@ -67,9 +104,9 @@ fun rememberLocalNetworkAccess(onGranted: () -> Unit, onRefused: () -> Unit): Lo
         pending = null
     }
     access = remember(context) {
-        LocalNetworkAccess(context) { action ->
+        LocalNetworkAccess(context) { missing, action ->
             pending = action
-            launcher.launch(LocalNetwork.PERMISSION)
+            launcher.launch(missing.toTypedArray())
         }
     }
     return access

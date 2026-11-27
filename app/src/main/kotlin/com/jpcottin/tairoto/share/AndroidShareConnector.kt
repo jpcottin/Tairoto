@@ -22,17 +22,26 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 
 /**
- * Shared lagoons on a device. Through a relay it is one connection. On the
- * local network the host runs the relay itself and announces it with NSD
- * (mDNS) as a `_tairoto._tcp` service; the others find it and connect to it,
- * the host included (to itself), so both ways run the same code.
+ * Shared lagoons on a device. Through a relay it is one connection. Nearby
+ * the host runs the relay itself, reachable two ways at once: on the local
+ * network, announced with NSD (mDNS) as a `_tairoto._tcp` service, and over
+ * Bluetooth ([BluetoothLagoons]). The others find it either way and connect,
+ * the host included (to itself), so every way runs the same code.
  */
 class AndroidShareConnector(context: Context) : ShareConnector {
     private val app = context.applicationContext
     private val nsd = app.getSystemService(NsdManager::class.java)
     private val wifi = app.getSystemService(WifiManager::class.java)
+    private val bluetooth = BluetoothLagoons(app)
     private val found = MutableStateFlow<List<NearbyLagoon>>(emptyList())
     override val nearby: StateFlow<List<NearbyLagoon>> = found.asStateFlow()
+    private val onWifi = MutableStateFlow<List<NearbyLagoon>>(emptyList())
+    private val onBluetooth = MutableStateFlow<List<NearbyLagoon>>(emptyList())
+
+    /** Both lists in one, Wi-Fi first (a lagoon heard of both ways is in both). */
+    private fun publish() {
+        found.value = onWifi.value.sortedBy { it.name } + onBluetooth.value.sortedBy { it.name }
+    }
 
     private var discovery: NsdManager.DiscoveryListener? = null
     private var multicast: WifiManager.MulticastLock? = null
@@ -47,8 +56,10 @@ class AndroidShareConnector(context: Context) : ShareConnector {
             try {
                 val link = RelayLink.connect("127.0.0.1", server.port, ShareRoute.DEFAULT_SESSION, name, asHost = true)
                 val registration = advertise(name, server.port)
+                val overBluetooth = bluetooth.host(server, name)
                 relayConnection(link) {
                     registration?.let { runCatching { nsd?.unregisterService(it) } }
+                    runCatching { overBluetooth?.close() }
                     server.close()
                 }
             } catch (e: Exception) {
@@ -62,14 +73,24 @@ class AndroidShareConnector(context: Context) : ShareConnector {
         is JoinTarget.Relay -> relayConnection(
             RelayLink.connect(target.address.host, target.address.port, target.session, name, asHost = false),
         )
-        is JoinTarget.Nearby -> relayConnection(
-            RelayLink.connect(target.lagoon.host, target.lagoon.port, ShareRoute.DEFAULT_SESSION, name, asHost = false),
-        )
+        is JoinTarget.Nearby -> when (target.lagoon.via) {
+            NearbyLagoon.Via.WIFI -> relayConnection(
+                RelayLink.connect(target.lagoon.host, target.lagoon.port, ShareRoute.DEFAULT_SESSION, name, asHost = false),
+            )
+            NearbyLagoon.Via.BLUETOOTH -> relayConnection(
+                RelayLink.over(
+                    withContext(Dispatchers.IO) { bluetooth.connect(target.lagoon) },
+                    ShareRoute.DEFAULT_SESSION, name, asHost = false, timeoutMs = BLUETOOTH_TIMEOUT_MS,
+                ),
+            )
+        }
     }
 
     private fun relayConnection(link: RelayLink, onClose: () -> Unit = {}) = object : ShareConnection {
         override val link: Link = link
         override val ended: Flow<String> = link.state.filterIsInstance<LinkState.Closed>().map { it.reason }.take(1)
+        override val bytesIn: Long get() = link.bytesIn
+        override val bytesOut: Long get() = link.bytesOut
         override fun close() {
             link.close()
             onClose()
@@ -98,6 +119,10 @@ class AndroidShareConnector(context: Context) : ShareConnector {
     }
 
     override fun discover() {
+        bluetooth.scan { lagoons ->
+            onBluetooth.value = lagoons
+            publish()
+        }
         val manager = nsd ?: return
         if (discovery != null) return
         multicast = wifi?.createMulticastLock("tairoto")?.apply { setReferenceCounted(false); acquire() }
@@ -110,7 +135,8 @@ class AndroidShareConnector(context: Context) : ShareConnector {
             override fun onStopDiscoveryFailed(type: String, code: Int) = Unit
             override fun onServiceFound(info: NsdServiceInfo) = resolve(manager, info)
             override fun onServiceLost(info: NsdServiceInfo) {
-                found.value = found.value.filterNot { it.name == displayName(info.serviceName) }
+                onWifi.value = onWifi.value.filterNot { it.name == displayName(info.serviceName) }
+                publish()
             }
         }
         discovery = listener
@@ -123,7 +149,8 @@ class AndroidShareConnector(context: Context) : ShareConnector {
             val host = if (Build.VERSION.SDK_INT >= 34) resolved.hostAddresses.firstOrNull() else resolved.host
             val address = host?.hostAddress ?: return
             val lagoon = NearbyLagoon(displayName(resolved.serviceName), address, resolved.port)
-            found.value = (found.value.filterNot { it.name == lagoon.name } + lagoon).sortedBy { it.name }
+            onWifi.value = onWifi.value.filterNot { it.name == lagoon.name } + lagoon
+            publish()
         }
         if (Build.VERSION.SDK_INT >= 34) {
             manager.registerServiceInfoCallback(info, resolver, object : NsdManager.ServiceInfoCallback {
@@ -144,17 +171,22 @@ class AndroidShareConnector(context: Context) : ShareConnector {
     }
 
     override fun stopDiscovery() {
+        bluetooth.stopScan()
         discovery?.let { runCatching { nsd?.stopServiceDiscovery(it) } }
         discovery = null
         multicast?.release()
         multicast = null
-        found.value = emptyList()
+        onWifi.value = emptyList()
+        onBluetooth.value = emptyList()
+        publish()
     }
 
     private fun displayName(service: String) = service.removePrefix("Tairoto · ")
 
     companion object {
         const val SERVICE_TYPE = "_tairoto._tcp"
+        /** A Bluetooth channel takes longer to open and to answer than a socket. */
+        private const val BLUETOOTH_TIMEOUT_MS = 10_000
         private const val TAG = "TairotoShare"
     }
 }

@@ -8,12 +8,14 @@
 #
 #   scripts/share-e2e.sh                       # emulator-5700, -5704, -5708
 #   SERIALS="emulator-5554 emulator-5556 emulator-5558" scripts/share-e2e.sh
+#   VIA=bluetooth scripts/share-e2e.sh         # the host shares over Bluetooth, no relay here
 #
 # The emulators must be up; the first hosts, the others join in order (left to right).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 serials=(${SERIALS:-emulator-5700 emulator-5704 emulator-5708})
+via=${VIA:-relay}  # relay (this computer), or bluetooth / wifi (nearby: the host is the relay)
 port=${PORT:-7171}
 settle=${SETTLE:-20}
 frenzy=${FRENZY:-45}
@@ -39,6 +41,9 @@ for s in "${serials[@]}"; do
     adbs "$s" install -r -t "$apk" > /dev/null
     # Android 17: reaching 10.0.2.2 is local network access, a runtime permission.
     adbs "$s" shell pm grant "$pkg" android.permission.ACCESS_LOCAL_NETWORK 2>/dev/null || true
+    for p in BLUETOOTH_SCAN BLUETOOTH_ADVERTISE BLUETOOTH_CONNECT; do
+        adbs "$s" shell pm grant "$pkg" "android.permission.$p" 2>/dev/null || true
+    done
     adbs "$s" shell am force-stop "$pkg"
     for _ in $(seq 20); do [ -z "$(adbs "$s" shell pidof "$pkg" 2>/dev/null)" ] && break; sleep 0.25; done
     adbs "$s" logcat -c
@@ -48,16 +53,17 @@ launch() {
     # -S stops the app first, in the same breath: an instance left running would take the intent without its extras.
     adbs "$1" shell am start -S -W -n "$pkg/.MainActivity" \
         --ez tairoto.fresh true --ez tairoto.hints false --ez tairoto.trace "${TRACE:-false}" \
-        --es tairoto.share "$2" --es tairoto.relay "10.0.2.2:$port" --es tairoto.session "$session" > /dev/null
+        --es tairoto.share "$2" --es tairoto.relay "$route" --es tairoto.session "$session" > /dev/null
 }
 
-echo "Hosting on ${serials[0]}"
+if [ "$via" = relay ]; then route="10.0.2.2:$port"; gap=2; else route="$via"; gap=${JOIN_GAP:-6}; fi
+echo "Hosting on ${serials[0]} (via $via)"
 launch "${serials[0]}" host
 sleep 4
 for s in "${serials[@]:1}"; do
     echo "Joining from $s"
     launch "$s" join
-    sleep 2
+    sleep "$gap"
 done
 echo "Letting the lagoon settle (${settle}s)"
 sleep "$settle"

@@ -281,6 +281,25 @@ class TankViewModelShareTest {
         assertTrue(guest.log.any { it.startsWith("{\"ev\":\"status\"") })
     }
 
+    @Test fun `launched to join over Bluetooth, the guest takes the lagoon heard of over Bluetooth`() = shareTest {
+        val connector = FakeShareConnector(network())
+        val host = device(connector, "Tablet", 1, LaunchOptions(seed = 7, hints = false, share = ShareLaunch(true, "bluetooth", "ci")))
+        advanceTimeBy(500)
+        assertEquals(ShareRoute.Nearby, connector.routes.single())
+        val wifi = NearbyLagoon("Tablet", "192.168.1.20", 41234)
+        val bt = NearbyLagoon("Tablet", "AA:BB:CC:DD:EE:01", 0x80, NearbyLagoon.Via.BLUETOOTH)
+        val guest = device(connector, "Phone", 2, LaunchOptions(seed = 8, hints = false, share = ShareLaunch(false, "bluetooth", "ci")))
+        assertTrue(connector.discovering)
+        // Nothing heard yet: it waits rather than going anywhere.
+        advanceTimeBy(3_000)
+        assertTrue(connector.targets.isEmpty())
+        connector.announce(wifi, bt)
+        advanceTimeBy(4_000)
+        assertEquals(JoinTarget.Nearby(bt), connector.targets.single())
+        assertEquals(SharePhase.SHARED, guest.vm.ui.value.share.phase)
+        assertEquals(SharePhase.SHARED, host.vm.ui.value.share.phase)
+    }
+
     @Test fun `a guest that goes to the background leaves, handing its fish to the host`() = shareTest {
         val connector = FakeShareConnector(network())
         val host = device(connector, "Tablet", 1)

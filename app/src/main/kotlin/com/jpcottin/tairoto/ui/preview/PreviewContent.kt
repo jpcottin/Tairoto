@@ -120,7 +120,11 @@ object PreviewData {
 
     /** Nothing shared yet; two lagoons found on the network. */
     val shareStart = ShareUi(
-        nearby = listOf(NearbyLagoon("Tablet", "192.168.1.20", 41234), NearbyLagoon("Living room TV", "192.168.1.31", 39001)),
+        nearby = listOf(
+            NearbyLagoon("Tablet", "192.168.1.20", 41234),
+            NearbyLagoon("Living room TV", "192.168.1.31", 39001),
+            NearbyLagoon("Moana's phone", "AA:BB:CC:DD:EE:02", 0x81, NearbyLagoon.Via.BLUETOOTH),
+        ),
     )
 
     val sharedGuest = ShareUi(

@@ -913,16 +913,30 @@ class TankViewModel(
         val launch = options.share ?: return
         if (autoShared) return
         autoShared = true
-        val relay = RelayAddress.parse(launch.relay) ?: RelayAddress.EMULATOR_HOST
-        setShare { it.copy(relay = relay.toString()) }
+        // "wifi" or "bluetooth" instead of an address: nearby, as from the share sheet.
+        val nearbyVia = when (launch.relay?.lowercase()) {
+            "wifi" -> NearbyLagoon.Via.WIFI
+            "bluetooth" -> NearbyLagoon.Via.BLUETOOTH
+            else -> null
+        }
+        val relay = (if (nearbyVia == null) RelayAddress.parse(launch.relay) else null) ?: RelayAddress.EMULATOR_HOST
+        if (nearbyVia == null) setShare { it.copy(relay = relay.toString()) }
         if (launch.host) {
-            shareLagoon(ShareRoute.Relay(relay, launch.session))
+            shareLagoon(if (nearbyVia != null) ShareRoute.Nearby else ShareRoute.Relay(relay, launch.session))
         } else {
+            if (nearbyVia != null) lookForLagoons(true)
             // The host may not be up yet: try for a while.
             viewModelScope.launch {
                 val until = clockS() + AUTO_JOIN_S
                 while (shared == null && clockS() < until) {
-                    if (state.value.share.phase == SharePhase.OFF) joinLagoon(JoinTarget.Relay(relay, launch.session))
+                    if (state.value.share.phase == SharePhase.OFF) {
+                        val target = if (nearbyVia == null) {
+                            JoinTarget.Relay(relay, launch.session)
+                        } else {
+                            connector?.nearby?.value?.firstOrNull { it.via == nearbyVia }?.let { JoinTarget.Nearby(it) }
+                        }
+                        if (target != null) joinLagoon(target)
+                    }
                     delay(AUTO_JOIN_RETRY_MS)
                 }
             }
@@ -956,6 +970,7 @@ class TankViewModel(
             json(
                 "status", "t" to sh.sharedNow(), "self" to sh.self.slot, "devices" to st.devices, "owned" to st.owned,
                 "creatures" to sh.session.scene.value.creatures.size,
+                "bytesIn" to (connection?.bytesIn ?: 0L), "bytesOut" to (connection?.bytesOut ?: 0L),
                 "in" to st.handoffsIn, "out" to st.handoffsOut, "connected" to st.connected,
                 "rtt" to (st.rttMs ?: -1f), "dropped" to l.dropped, "eaten" to l.eaten, "decomposed" to l.decomposed,
                 "sent" to l.sent, "received" to l.received, "water" to l.inWater,

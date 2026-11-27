@@ -37,11 +37,12 @@ sealed interface LinkState {
 
 /**
  * A device's link through a relay: to emulators on a computer, or to the host
- * device on a local network (which runs the relay itself). Make one with
- * [connect]; it is ready when it returns.
+ * device nearby (which runs the relay itself), over the network or over
+ * Bluetooth. Make one with [connect] or [over]; it is ready when it returns.
  */
 class RelayLink private constructor(
-    private val socket: Socket,
+    private val pipe: Pipe,
+    private val wire: CountingPipe,
     override val self: DeviceId,
     members: List<Member>,
     private val input: DataInputStream,
@@ -59,10 +60,9 @@ class RelayLink private constructor(
     override val incoming: Flow<Envelope> = inbox.receiveAsFlow()
     val state: StateFlow<LinkState> = linkState.asStateFlow()
 
-    @Volatile var bytesIn = 0L
-        private set
-    @Volatile var bytesOut = 0L
-        private set
+    /** Bytes received and sent on the wire (after compression). */
+    val bytesIn: Long get() = wire.bytesIn
+    val bytesOut: Long get() = wire.bytesOut
 
     init {
         scope.launch { readLoop() }
@@ -83,12 +83,10 @@ class RelayLink private constructor(
             // Until closed, and then what was queued before closing (a goodbye) still goes out.
             for (f in outbox) {
                 FrameIo.write(output, f)
-                bytesOut += f.payload.size + Frame.HEADER + 4
                 // What is queued behind it goes in the same flush.
                 while (true) {
                     val next = outbox.tryReceive().getOrNull() ?: break
                     FrameIo.write(output, next)
-                    bytesOut += next.payload.size + Frame.HEADER + 4
                 }
                 output.flush()
             }
@@ -102,7 +100,6 @@ class RelayLink private constructor(
         try {
             while (true) {
                 val f = FrameIo.read(input) ?: break
-                bytesIn += f.payload.size + Frame.HEADER + 4
                 when (f.type) {
                     Frame.DATA -> {
                         val msg = try {
@@ -136,11 +133,7 @@ class RelayLink private constructor(
         if (linkState.value is LinkState.Closed) return
         linkState.value = LinkState.Closed(reason)
         peerState.value = listOf(self)
-        try {
-            socket.close()
-        } catch (e: IOException) {
-            // Closing anyway.
-        }
+        pipe.close()
     }
 
     /** Closes the link once what was already sent has gone out (or after a second, whatever is left). */
@@ -171,33 +164,67 @@ class RelayLink private constructor(
             asHost: Boolean,
             timeoutMs: Int = 5_000,
             io: CoroutineDispatcher = Dispatchers.IO,
+            compress: Boolean = true,
         ): RelayLink = withContext(io) {
             val socket = Socket()
             try {
                 socket.connect(InetSocketAddress(host, port), timeoutMs)
-                socket.tcpNoDelay = true
-                socket.soTimeout = timeoutMs
-                val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
-                val output = DataOutputStream(BufferedOutputStream(socket.getOutputStream()))
-                FrameIo.write(output, Frame.control(Frame.JOIN, JoinRequest(session, name, asHost), JoinRequest.serializer()))
-                output.flush()
-                val answer = FrameIo.read(input) ?: throw IOException("the relay hung up")
-                when (answer.type) {
-                    Frame.WELCOME -> {
-                        val w = Frame.json.decodeFromString(Welcome.serializer(), answer.text)
-                        // From now on a quiet connection is fine: the session has its own heartbeat.
-                        socket.soTimeout = 0
-                        val self = DeviceId(w.slot, name)
-                        RelayLink(socket, self, w.members, input, output, io)
-                    }
-                    Frame.REFUSED -> throw RelayRefused(Frame.json.decodeFromString(Refused.serializer(), answer.text).reason)
-                    else -> throw IOException("unexpected answer ${answer.type}")
-                }
             } catch (e: Exception) {
                 try {
                     socket.close()
                 } catch (_: IOException) {
                 }
+                throw e
+            }
+            over(SocketPipe(socket), session, name, asHost, timeoutMs, io, compress)
+        }
+
+        /**
+         * Asks into [session] over a byte stream already open to a relay
+         * (a Bluetooth channel to the host). Closes [pipe] and throws if the
+         * relay says no or does not answer within [timeoutMs]. With
+         * [compress] the frames go squeezed (see [CompressedPipe]); a relay
+         * notices and answers the same way.
+         */
+        suspend fun over(
+            raw: Pipe,
+            session: String,
+            name: String,
+            asHost: Boolean,
+            timeoutMs: Int = 5_000,
+            io: CoroutineDispatcher = Dispatchers.IO,
+            compress: Boolean = true,
+        ): RelayLink = withContext(io) {
+            val wire = CountingPipe(raw)
+            val pipe: Pipe = if (compress) CompressedPipe(wire) else wire
+            // A stream has no timeout of its own: closing it ends a read that waits too long.
+            val done = java.util.concurrent.CountDownLatch(1)
+            val watchdog = Thread({
+                if (!done.await(timeoutMs.toLong(), java.util.concurrent.TimeUnit.MILLISECONDS)) pipe.close()
+            }, "relay-handshake").apply { isDaemon = true; start() }
+            try {
+                val input = DataInputStream(BufferedInputStream(pipe.input))
+                val output = DataOutputStream(BufferedOutputStream(pipe.output))
+                FrameIo.write(output, Frame.control(Frame.JOIN, JoinRequest(session, name, asHost), JoinRequest.serializer()))
+                output.flush()
+                val answer = try {
+                    FrameIo.read(input)
+                } catch (e: IOException) {
+                    if (done.count > 0 && !watchdog.isAlive) throw IOException("the relay did not answer in ${timeoutMs}ms")
+                    throw e
+                } ?: throw IOException("the relay hung up")
+                done.countDown()
+                when (answer.type) {
+                    Frame.WELCOME -> {
+                        val w = Frame.json.decodeFromString(Welcome.serializer(), answer.text)
+                        RelayLink(pipe, wire, DeviceId(w.slot, name), w.members, input, output, io)
+                    }
+                    Frame.REFUSED -> throw RelayRefused(Frame.json.decodeFromString(Refused.serializer(), answer.text).reason)
+                    else -> throw IOException("unexpected answer ${answer.type}")
+                }
+            } catch (e: Exception) {
+                done.countDown()
+                pipe.close()
                 throw e
             }
         }
